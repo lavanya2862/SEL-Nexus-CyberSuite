@@ -1,0 +1,17 @@
+id: persistence_schtask
+label: Persistence via scheduled task
+description: A new scheduled task created from the command line - a common way to keep a foothold.
+match:
+  any_title: ["scheduled task", "persistence"]
+  any_technique: ["T1053"]
+queries:
+  - Q08_scheduled_tasks
+  - Q01_process_tree
+  - Q09_other_alerts_same_device
+ti: {}
+history: {same: [playbook, device], days: 90}
+watchlists: [approved_admin_tools, service_accounts]
+guardrails: [credential_access, privileged_account, injection_marker, high_no_close]
+allowed_verdicts: [likely_true_positive, likely_false_positive, benign_positive, needs_investigation]
+containment_options: [isolate_device, collect_investigation_package]
+notes: Software installers create tasks too; the task command and the creating process decide.

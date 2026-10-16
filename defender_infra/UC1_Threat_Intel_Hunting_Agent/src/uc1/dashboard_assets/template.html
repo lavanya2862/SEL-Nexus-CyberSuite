@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UC1 Threat Command Centre</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f3f4f7; --surface: #ffffff; --surface-2: #f7f8fa; --border: #e2e4ea; --grid: #eceef2;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #77766f;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+  --critical: #d03b3b; --serious: #ec835a; --warning: #fab219; --good: #0ca30c; --neutral: #9a998f;
+  --test: #4a3aa7; --chip: #eef0f4; --link: #1c5cab;
+  --seq-0: #cde2fb; --seq-1: #86b6ef; --seq-2: #3987e5; --seq-3: #1c5cab; --seq-4: #0d366b;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 24px rgba(16, 24, 40, .06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --bg: #0e1015; --surface: #171a21; --surface-2: #1c2029; --border: #2a2f3a; --grid: #252a34;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #9a998f;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+    --neutral: #6f6e68; --test: #9085e9; --chip: #232833; --link: #86b6ef;
+    --seq-0: #1a2a44; --seq-1: #184f95; --seq-2: #2a78d6; --seq-3: #5598e7; --seq-4: #9ec5f4;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .25);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e1015; --surface: #171a21; --surface-2: #1c2029; --border: #2a2f3a; --grid: #252a34;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #9a998f;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  --neutral: #6f6e68; --test: #9085e9; --chip: #232833; --link: #86b6ef;
+  --seq-0: #1a2a44; --seq-1: #184f95; --seq-2: #2a78d6; --seq-3: #5598e7; --seq-4: #9ec5f4;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .25);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+body { margin: 0; background: var(--bg); color: var(--text-primary);
+       font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.wrap { max-width: 1320px; margin: 0 auto; padding: 0 16px; }
+
+/* ---------- hero ---------- */
+.hero { position: relative; overflow: hidden; color: #fff;
+        background: radial-gradient(900px 400px at 85% -10%, rgba(144, 133, 233, .55), transparent 60%),
+                    radial-gradient(700px 380px at 10% 120%, rgba(57, 135, 229, .45), transparent 60%),
+                    linear-gradient(120deg, #0a1631 0%, #13235a 50%, #2e2477 100%); }
+.hero::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .18;
+               background-image: linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px),
+                                 linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px);
+               background-size: 28px 28px; }
+.hero .wrap { position: relative; z-index: 1; display: grid; grid-template-columns: 1.6fr 1fr; gap: 24px;
+              padding-top: 30px; padding-bottom: 30px; align-items: center; }
+.eyebrow { text-transform: uppercase; letter-spacing: .14em; font-size: 11.5px; opacity: .8; font-weight: 600; }
+.hero h1 { font-size: 34px; line-height: 1.15; margin: 6px 0 8px; font-weight: 700; letter-spacing: -.01em; }
+.hero .lead { margin: 0 0 14px; opacity: .88; max-width: 720px; }
+.hchips { display: flex; flex-wrap: wrap; gap: 8px; }
+.hchip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px;
+         background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); font-size: 12.5px; }
+.posture { border-radius: 16px; padding: 18px 20px; background: rgba(255,255,255,.08);
+           border: 1px solid rgba(255,255,255,.18); backdrop-filter: blur(6px); }
+.posture .label { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; opacity: .8; }
+.posture .value { display: flex; align-items: center; gap: 10px; font-size: 30px; font-weight: 800; margin: 4px 0 2px; }
+.posture .note { opacity: .9; font-size: 13.5px; }
+.pulse { width: 14px; height: 14px; border-radius: 50%; flex: none; animation: pulse 1.8s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,255,255,.55); } 70% { box-shadow: 0 0 0 14px rgba(255,255,255,0); } 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); } }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } html { scroll-behavior: auto; } }
+.posture .mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.posture .mini div { background: rgba(0,0,0,.2); border-radius: 10px; padding: 8px 10px; }
+.posture .mini b { display: block; font-size: 20px; }
+.posture .mini span { font-size: 11.5px; opacity: .85; }
+.theme-btn { margin-left: auto; flex: none; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-secondary);
+             border-radius: 999px; padding: 5px 12px; cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 600; }
+
+/* ---------- nav ---------- */
+nav.tabs { position: sticky; top: 0; z-index: 10; background: var(--bg); border-bottom: 1px solid var(--border); }
+nav.tabs .wrap { display: flex; gap: 4px; overflow-x: auto; padding-top: 8px; padding-bottom: 8px; }
+nav.tabs a { white-space: nowrap; padding: 6px 12px; border-radius: 999px; color: var(--text-secondary); font-weight: 600; font-size: 13px; }
+nav.tabs a:hover { background: var(--chip); text-decoration: none; color: var(--text-primary); }
+
+/* ---------- layout ---------- */
+section { margin-top: 26px; }
+.sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.sec-head h2 { margin: 0; font-size: 19px; font-weight: 700; }
+.sec-head p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.grid { display: grid; gap: 14px; }
+.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.g-3-2 { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+@media (max-width: 900px) { .g2, .g3, .g-3-2, .hero .wrap { grid-template-columns: 1fr; } .hero h1 { font-size: 27px; } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow); min-width: 0; }
+.card h3 { margin: 0 0 2px; font-size: 14.5px; font-weight: 700; }
+.card .hint { margin: 0 0 8px; color: var(--text-muted); font-size: 12.5px; }
+.chart { width: 100%; height: 300px; }
+.chart.tall { height: 370px; }
+
+/* ---------- KPI tiles ---------- */
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+@media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 14px 12px; box-shadow: var(--shadow);
+       border-top: 3px solid var(--accent, var(--series-1)); }
+.kpi .top { display: flex; align-items: center; justify-content: space-between; color: var(--text-secondary); font-size: 12.5px; font-weight: 600; gap: 8px; }
+.kpi svg { width: 18px; height: 18px; color: var(--accent, var(--series-1)); flex: none; }
+.kpi .value { font-size: 30px; font-weight: 750; margin-top: 4px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.kpi .note { color: var(--text-muted); font-size: 12px; }
+
+/* ---------- funnel ---------- */
+.funnel { display: grid; gap: 10px; }
+.fstage { display: grid; grid-template-columns: 210px 1fr 64px; gap: 10px; align-items: center; }
+.fstage .name { font-weight: 600; font-size: 13.5px; }
+.fstage .name small { display: block; color: var(--text-muted); font-weight: 400; font-size: 12px; }
+.fbar { height: 26px; background: var(--chip); border-radius: 8px; overflow: hidden; }
+.fbar div { height: 100%; border-radius: 8px; background: var(--fc); }
+.takeaway { margin-top: 16px; padding: 12px 14px; border-radius: 12px; font-size: 14px; background: color-mix(in srgb, var(--series-1) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--series-1) 30%, var(--border)); }
+.fstage .num { text-align: right; font-size: 20px; font-weight: 750; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .fstage { grid-template-columns: 1fr 60px; } .fstage .fbar { grid-column: 1 / -1; grid-row: 2; } }
+
+/* ---------- pills, chips, tables ---------- */
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.chip { display: inline-block; background: var(--chip); border-radius: 999px; padding: 2px 9px; font-size: 11.5px; margin: 2px 4px 2px 0; color: var(--text-secondary); font-weight: 600; }
+.chip.hot { background: color-mix(in srgb, var(--critical) 18%, var(--chip)); color: var(--text-primary); }
+.badge { display: inline-block; border-radius: 6px; padding: 1px 7px; font-size: 11px; font-weight: 700; border: 1px solid var(--border); color: var(--text-secondary); white-space: nowrap; }
+.badge.ai { border-color: color-mix(in srgb, var(--test) 55%, var(--border)); color: var(--test); }
+.test { color: var(--test); font-weight: 700; }
+.muted { color: var(--text-muted); }
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--text-secondary); font-weight: 600; border-bottom: 1px solid var(--border); padding: 7px 8px; white-space: nowrap; }
+td { border-bottom: 1px solid var(--grid); padding: 8px; vertical-align: top; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+details summary { cursor: pointer; color: var(--text-secondary); font-size: 12.5px; }
+
+/* ---------- alerts ---------- */
+.alerts { display: grid; gap: 8px; }
+.alert { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--surface-2);
+         border: 1px solid var(--border); border-left: 4px solid var(--ac, var(--critical)); }
+.alert .t { font-weight: 600; line-height: 1.35; }
+.alert .m { color: var(--text-muted); font-size: 12px; }
+.alert > div:last-child { min-width: 0; overflow-wrap: anywhere; }
+.decoded { margin-top: 6px; padding: 6px 8px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); font: 12px/1.4 Consolas, monospace; overflow-wrap: anywhere; }
+
+/* ---------- risk cards ---------- */
+.risk { display: flex; flex-direction: column; gap: 8px; }
+.risk .head { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.risk .title { font-weight: 650; line-height: 1.35; }
+.score { display: flex; align-items: center; gap: 8px; }
+.score .bar { flex: 1; height: 8px; background: var(--chip); border-radius: 99px; overflow: hidden; }
+.score .bar div { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--warning), var(--serious), var(--critical)); }
+.score b { font-variant-numeric: tabular-nums; font-size: 13px; }
+.risk .fix { background: var(--surface-2); border: 1px dashed var(--border); border-radius: 10px; padding: 8px 10px; font-size: 13px; margin-top: auto; }
+.risk .fix b { color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; display: block; }
+
+/* ---------- ioc sweep ---------- */
+.iocgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; }
+.ioc { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.ioc b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.ioc span { color: var(--text-secondary); font-size: 12px; }
+.allclear { display: flex; gap: 14px; align-items: center; padding: 14px; border-radius: 12px; margin-top: 12px;
+            background: color-mix(in srgb, var(--good) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 35%, var(--border)); }
+.allclear svg { width: 34px; height: 34px; color: var(--good); flex: none; }
+.timeline { border-left: 2px solid var(--border); margin: 8px 0 0 6px; padding-left: 12px; }
+.timeline div { position: relative; font-size: 12.5px; margin-bottom: 6px; overflow-wrap: anywhere; }
+.timeline div::before { content: ""; position: absolute; left: -18px; top: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--series-1); }
+
+/* ---------- explorer ---------- */
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.controls input[type=search], .controls select { font: inherit; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--border);
+          background: var(--surface-2); color: var(--text-primary); min-width: 0; }
+.controls input[type=search] { flex: 1 1 240px; }
+.fbtn { font: inherit; font-size: 12.5px; font-weight: 600; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border);
+        background: var(--surface-2); color: var(--text-secondary); cursor: pointer; }
+.fbtn.on { background: var(--text-primary); color: var(--surface); border-color: var(--text-primary); }
+.more { margin-top: 10px; }
+
+/* ---------- feeds ---------- */
+.feeds { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.feed { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; font-size: 12.5px; }
+.feed .n { font-weight: 700; font-size: 13.5px; display: flex; align-items: center; gap: 6px; }
+footer { margin: 34px 0 30px; color: var(--text-muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <div class="eyebrow">UC1 · AI threat intelligence &amp; threat hunting</div>
+      <h1>Threat Command Centre</h1>
+      <p class="lead">Real public threat feeds, read by AI, checked against our Microsoft Defender lab, hunted for, and turned into actions.</p>
+      <div class="hchips" id="heroChips"></div>
+    </div>
+    <div class="posture" id="posture"></div>
+  </div>
+</header>
+<nav class="tabs"><div class="wrap">
+  <a href="#overview">Overview</a><a href="#exposure">Our exposure</a><a href="#risks">Top risks</a>
+  <a href="#intel">Threat landscape</a><a href="#hunting">Hunting</a><a href="#explorer">Threat explorer</a><a href="#health">Health &amp; metrics</a>
+  <button class="theme-btn" id="themeBtn" type="button" aria-label="Switch between light and dark theme">◐ Light / dark</button>
+</div></nav>
+
+<main class="wrap">
+  <section id="overview" style="margin-top:0">
+    <div class="kpis" id="kpis"></div>
+    <div class="grid g-3-2" style="margin-top:14px">
+      <div class="card">
+        <h3>From noise to action</h3>
+        <p class="hint">How the agent narrows hundreds of public threats down to the few updates we actually need.</p>
+        <div class="funnel" id="funnel"></div>
+        <div class="takeaway" id="takeaway"></div>
+      </div>
+      <div class="card">
+        <h3>Latest alerts</h3>
+        <p class="hint">Critical/High threats that affect our devices. [TEST] = harmless lab test.</p>
+        <div class="alerts" id="alerts"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="exposure">
+    <div class="sec-head"><h2>Our exposure</h2><p>What Microsoft Defender sees on our computers, and what to fix first.</p></div>
+    <div class="grid g2">
+      <div class="card"><h3>Known flaws per app and computer</h3>
+        <p class="hint">Number of known flaws (CVEs) Defender found. ★ = how many are known exploited (CISA KEV).</p>
+        <div class="chart tall" id="c-heat" role="img" aria-label="Heatmap of flaws per app and device"></div></div>
+      <div class="card"><h3>Fix these first</h3>
+        <p class="hint">One update per app removes all its known flaws. Red bars include known exploited flaws (label says how many).</p>
+        <div class="chart tall" id="c-fixes" role="img" aria-label="Bars of flaws removed per app update"></div></div>
+    </div>
+    <div class="grid g2" style="margin-top:14px">
+      <div class="card"><h3>Priority quadrant: how bad × how likely</h3>
+        <p class="hint">Every flaw on our computers: severity (CVSS) against the chance of attack in 30 days (EPSS, log scale). Top-right = fix first.</p>
+        <div class="chart tall" id="c-scatter" role="img" aria-label="Scatter of CVSS versus EPSS for flaws on our devices"></div></div>
+      <div class="card"><h3>Our computers</h3>
+        <p class="hint">Exposure and hunt results per device and business unit (OpCo).</p>
+        <div class="tbl-wrap" id="t-devices"></div></div>
+    </div>
+  </section>
+
+  <section id="risks">
+    <div class="sec-head"><h2>Top risks on our devices</h2><p>Rated by fixed rules, never by the AI. Every card shows why.</p></div>
+    <div class="grid g3" id="riskCards"></div>
+  </section>
+
+  <section id="intel">
+    <div class="sec-head"><h2>Threat landscape</h2><p>What the world published, and which attacker techniques it involves.</p></div>
+    <div class="grid g2">
+      <div class="card"><h3>Threats by publication date and source type</h3>
+        <p class="hint">Last 14 days. <a href="#" id="daysTableLink">Show as table</a></p>
+        <div class="chart" id="c-days" role="img" aria-label="Stacked bars of threats per day"></div>
+        <div class="tbl-wrap" id="t-days" hidden></div></div>
+      <div class="card"><h3>Risk ratings</h3>
+        <p class="hint">Last 7 days plus everything that affects us.</p>
+        <div class="chart" id="c-ratings" role="img" aria-label="Donut of threats per risk rating"></div></div>
+    </div>
+    <div class="grid g2" style="margin-top:14px">
+      <div class="card"><h3>Attacker techniques (MITRE ATT&amp;CK tactics)</h3>
+        <p class="hint">Threats per stage of an attack, in attack order: how attackers get in, what they do, what they're after.</p>
+        <div class="chart tall" id="c-tactics" role="img" aria-label="Bars of threats per ATT&CK tactic"></div></div>
+      <div class="card"><h3>Sources</h3>
+        <p class="hint">Where this month's threats came from, and how many of them affect us.</p>
+        <div class="tbl-wrap" id="t-sources"></div></div>
+    </div>
+  </section>
+
+  <section id="hunting">
+    <div class="sec-head"><h2>Hunting</h2><p>Searching 30 days of activity on our computers for fresh attack clues and attacker behaviour.</p></div>
+    <div class="grid g2">
+      <div class="card"><h3>Clue sweep</h3>
+        <p class="hint">Fresh indicators of compromise (last 7 days), searched on every run.</p>
+        <div class="iocgrid" id="iocs"></div>
+        <div id="hitState"></div></div>
+      <div class="card"><h3>Hunts in the latest run</h3>
+        <p class="hint">Template = written by us · AI = drafted by Gemini, checked by the validator before running.</p>
+        <div class="tbl-wrap" id="t-hunts"></div></div>
+    </div>
+  </section>
+
+  <section id="explorer">
+    <div class="sec-head"><h2>Threat explorer</h2><p id="explorerHint">Every threat of the last 30 days: search, filter, open the source.</p></div>
+    <div class="card">
+      <div class="controls">
+        <input type="search" id="q" placeholder="Search title, CVE, app, source…" aria-label="Search threats">
+        <span id="rfilters"></span>
+        <select id="src" aria-label="Filter by source"></select>
+        <button class="fbtn" id="onlyUs" type="button">Only affecting us</button>
+      </div>
+      <div class="tbl-wrap" id="t-explorer"></div>
+      <div class="more"><button class="fbtn" id="moreBtn" type="button">Show more</button> <span class="muted" id="count"></span></div>
+    </div>
+  </section>
+
+  <section id="health">
+    <div class="sec-head"><h2>Health &amp; metrics</h2><p>Is every feed working, and how does the agent score on the client's key metrics?</p></div>
+    <div class="grid g2">
+      <div class="card"><h3>Feed health</h3><p class="hint">Status of each source at its last run.</p><div class="feeds" id="feeds"></div></div>
+      <div class="card"><h3>Key metrics</h3><p class="hint">Measured from the agent's own timestamps; manual effort is a stated assumption.</p><div class="tbl-wrap" id="t-metrics"></div></div>
+    </div>
+  </section>
+
+  <footer>
+    UC1 PoC · public threat feeds (CISA KEV, NVD, FIRST EPSS, MITRE ATT&amp;CK, NCSC-NL, CERT-EU, Microsoft MSRC, abuse.ch) +
+    our own Microsoft Defender lab (no client data) · AI: Google Gemini, every claim checked against the source ·
+    risk ratings from fixed rules (config/risk_policy.csv) · times in UTC · charts: Apache ECharts.
+  </footer>
+</main>
+
+<script src="echarts.min.js"></script>
+<script>
+const D = /*__DATA__*/null;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = v => v === null || v === undefined || v === "" ? "–" : (typeof v === "number" ? v.toLocaleString("en-GB") : v);
+const RATING = {Critical: "--critical", High: "--serious", Medium: "--warning", Low: "--neutral"};
+const pill = r => `<span class="pill"><span class="dot" style="background:var(${RATING[r] || "--neutral"})"></span>${esc(r)}</span>`;
+const ICON = {
+  radar: '<path d="M12 12 19 5"/><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>',
+  flame: '<path d="M12 3c3 4 6 6 6 11a6 6 0 0 1-12 0c0-3 2-5 3-7 0 3 2 4 3 4 0-3-1-5 0-8z"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
+  shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
+};
+const icon = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
+const table = (id, heads, rows, numCols = []) => {
+  document.getElementById(id).innerHTML = rows.length
+    ? `<table><thead><tr>${heads.map((h, i) => `<th style="${numCols.includes(i) ? "text-align:right" : ""}">${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map(r =>
+        `<tr>${r.map((c, i) => `<td class="${numCols.includes(i) ? "num" : ""}">${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`
+    : `<p class="muted">Nothing yet.</p>`;
+};
+const m = D.metrics;
+const LIVE = !!window.UC1_LIVE;
+const tlink = (id, url, title) => LIVE && id
+  ? `<a href="/threat/${encodeURIComponent(id)}">${esc(title)}</a>`
+  : (url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(title)}</a>` : esc(title));
+if (LIVE) document.querySelector("nav.tabs .wrap").insertAdjacentHTML("beforeend", '<a href="/reports">Reports ↗</a>');
+const clean = t => String(t || "").replace(/^\[TEST\] /, "").replace(/^TEST: /, "");
+const mins = v => v == null ? "–" : (Math.round(v * 10) / 10) + " min";
+
+// ---------- theme toggle (a per-viewer preference) ----------
+try { const saved = localStorage.getItem("uc1-theme"); if (saved) document.documentElement.dataset.theme = saved; } catch (e) {}
+document.getElementById("themeBtn").addEventListener("click", () => {
+  const cur = document.documentElement.dataset.theme;
+  const dark = cur ? cur === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("uc1-theme", document.documentElement.dataset.theme); } catch (e) {}
+  draw();
+});
+
+// ---------- hero ----------
+const feedsOk = D.feeds.filter(f => f.last_status === "ok").length, run = D.last_run;
+document.getElementById("heroChips").innerHTML = [
+  `🕒 Generated ${esc(D.generated.replace("T", " ").slice(0, 16))} UTC`,
+  run ? `⚙️ Last run ${esc(String(run.started_at).slice(5, 16))} UTC · ${esc(run.status === "running" ? "this run" : run.status)}` : "",
+  `📡 ${feedsOk}/${D.feeds.length} feeds healthy`,
+  `🖥️ ${D.devices.length} devices in Defender`,
+  D.model ? `✨ AI: ${esc(D.model)}` : "",
+].filter(Boolean).map(t => `<span class="hchip">${t}</span>`).join("");
+const P = D.posture;
+const pColor = {Critical: "#d03b3b", High: "#ec835a", Medium: "#fab219", Low: "#9a998f", Clear: "#0ca30c"}[P.rating] || "#9a998f";
+const realHits = D.hits.filter(h => !h.is_test).length, testHits = D.hits.length - realHits;
+document.getElementById("posture").innerHTML = `
+  <div class="label">Our risk right now</div>
+  <div class="value"><span class="pulse" style="background:${pColor}"></span>${esc(P.rating.toUpperCase())}</div>
+  <div class="note">${P.kev ? `${P.kev} known exploited flaw${P.kev === 1 ? "" : "s"} on our devices` : "No known exploited flaws on our devices"}</div>
+  <div class="mini">
+    <div><b>${fmt(P.affecting)}</b><span>threats affect us</span></div>
+    <div><b>${fmt(P.urgent)}</b><span>Critical / High</span></div>
+    <div><b>${fmt(realHits)}</b><span>hunt hits</span></div>
+  </div>`;
+
+// ---------- KPIs ----------
+const iocTotal = Object.values(D.ioc_types).reduce((a, b) => a + b, 0);
+const spot = m.ai_accuracy_spotcheck_pct;
+const kpis = [
+  ["radar", "--series-1", "Threats collected", fmt(m.new_threats), `last ${m.window_days} days`],
+  ["check", "--good", "Assessed", m.pct_assessed == null ? "–" : m.pct_assessed + "%", "AI summary + fact checks"],
+  ["target", "--serious", "Affect our devices", fmt(m.proactive_threats_identified), "proactive threats identified"],
+  ["flame", "--critical", "Known exploited", fmt(m.exposed_actively_exploited), "on our devices (CISA KEV)"],
+  ["search", "--series-3", "Clues swept", fmt(iocTotal), `${fmt(m.hunts_per_run)} hunts per run`],
+  ["shield", realHits ? "--critical" : "--good", "Hunt hits", fmt(realHits), `${testHits} lab test hit(s)`],
+  ["clock", "--series-4", "Time to assess", mins(m.median_minutes_to_assess), "median, from first seen"],
+  ["spark", "--test", "AI accuracy", spot == null ? "—" : spot + "%", spot == null ? "spot-check not done yet" : "your spot-check"],
+];
+document.getElementById("kpis").innerHTML = kpis.map(([ic, color, label, value, note]) =>
+  `<div class="kpi" style="--accent:var(${color})"><div class="top">${esc(label)}${icon(ic)}</div>
+   <div class="value">${esc(value)}</div><div class="note">${esc(note)}</div></div>`).join("");
+
+// ---------- funnel ----------
+const fmax = Math.max(1, ...D.funnel.map(f => f.value));
+const fcolors = ["--seq-1", "--seq-2", "--seq-3", "--serious", "--critical"];
+document.getElementById("funnel").innerHTML = D.funnel.map((f, i) => `
+  <div class="fstage"><div class="name">${esc(f.stage)}<small>${esc(f.note)}</small></div>
+  <div class="fbar"><div style="width:${Math.max(2.5, 100 * f.value / fmax)}%;--fc:var(${fcolors[i]})"></div></div>
+  <div class="num">${fmt(f.value)}</div></div>`).join("");
+
+const fv = D.funnel.map(f => f.value);
+document.getElementById("takeaway").innerHTML = fv[3]
+  ? `💡 <b>In short:</b> of <b>${fmt(fv[0])}</b> public threats, <b>${fmt(fv[2])}</b> affect our computers and <b>${fmt(fv[3])}</b> are urgent. Installing <b>${fmt(fv[4])}</b> updates clears the urgent list.`
+  : `💡 <b>In short:</b> of <b>${fmt(fv[0])}</b> public threats, <b>${fmt(fv[2])}</b> affect our computers and none are urgent.`;
+
+// ---------- alerts ----------
+document.getElementById("alerts").innerHTML = D.alerts.length ? D.alerts.slice(0, 6).map(a => `
+  <div class="alert" style="--ac:var(${RATING[a.rating] || "--critical"})">
+    <div>${pill(a.rating)}</div>
+    <div><div class="t">${a.is_test ? '<span class="test">[TEST]</span> ' : ""}${tlink(a.threat_id, "", clean(a.title))}</div>
+    <div class="m">${esc(String(a.created_at).slice(0, 16))} UTC</div></div></div>`).join("")
+  + (D.alerts.length > 6 ? `<p class="muted">+ ${D.alerts.length - 6} more in the report and data/alerts.jsonl</p>` : "")
+  : `<p class="muted">No alerts: nothing Critical/High affects our devices.</p>`;
+
+// ---------- tables ----------
+table("t-devices", ["Device", "OpCo", "Flaws", "Exposed to", "Hunt hits", "Lab tests"],
+  D.devices.map(d => [`<b style="white-space:nowrap">${esc(d.device_name)}</b><div class="muted">${esc(d.os_platform || "")}</div>`, `<span style="white-space:nowrap">${esc(d.opco)}</span>`,
+    fmt(d.vulns), fmt(d.exposed), d.hits ? `<b style="color:var(--critical)">${d.hits}</b>` : "0", fmt(d.test_hits)]), [2, 3, 4, 5]);
+table("t-hunts", ["Hunt", "Made by", "Status", "Rows"], D.hunts.map(h => [
+  esc(h.name) + (h.technique ? ` <span class="muted">${esc(h.technique)}</span>` : ""),
+  h.origin === "ai" ? '<span class="badge ai">AI · validated</span>' : '<span class="badge">template</span>',
+  h.status === "ok" ? `<span class="pill"><span class="dot" style="background:var(--good)"></span>ok</span>`
+    : `<span class="pill" title="${esc(h.error)}"><span class="dot" style="background:var(--critical)"></span>${esc(h.status)}</span>`,
+  fmt(h.row_count)]), [3]);
+const srcCounts = {}, srcAffect = {};
+D.explorer.filter(e => !e.test).forEach(e => {
+  srcCounts[e.source] = (srcCounts[e.source] || 0) + 1;
+  if (e.devices || e.hits) srcAffect[e.source] = (srcAffect[e.source] || 0) + 1;
+});
+table("t-sources", ["Source", "Threats", "Affect us"], Object.entries(srcCounts).sort((a, b) => b[1] - a[1])
+  .map(([s, n]) => [esc(s), fmt(n), srcAffect[s] ? `<b>${fmt(srcAffect[s])}</b>` : "0"]), [1, 2]);
+table("t-days", ["Day", ...Object.keys(D.series)], D.days.map((d, i) => [d, ...Object.keys(D.series).map(g => D.series[g][i])]), [1, 2, 3, 4]);
+document.getElementById("daysTableLink").addEventListener("click", e => {
+  e.preventDefault(); const t = document.getElementById("t-days"); t.hidden = !t.hidden;
+  e.target.textContent = t.hidden ? "Show as table" : "Hide table";
+});
+
+// ---------- risk cards ----------
+document.getElementById("riskCards").innerHTML = D.top.length ? D.top.map(t => `
+  <div class="card risk">
+    <div class="head">${pill(t.rating)}${t.test ? '<span class="test">[TEST]</span>' : `<span class="muted">${esc(t.source)}</span>`}</div>
+    <div class="title">${tlink(t.id, t.url, clean(t.title))}</div>
+    <div class="score"><div class="bar"><div style="width:${t.score}%"></div></div><b>${t.score}/100</b></div>
+    <div>${t.chips.map(c => `<span class="chip ${/KEV|Ransomware|exploit|Hunt/.test(c) ? "hot" : ""}">${esc(c)}</span>`).join("")}</div>
+    <div class="muted">🖥️ ${esc(t.devices || "–")}</div>
+    <details><summary>Why this rating, and the AI summary</summary><div class="muted" style="margin-top:6px">${esc(t.why)}</div>
+      ${t.summary ? `<div style="margin-top:6px">${esc(t.summary)}</div>` : ""}</details>
+    ${t.action ? `<div class="fix"><b>Do this</b>${esc(t.action)}</div>` : ""}
+  </div>`).join("") : `<div class="card"><p class="muted">No Critical/High threats affect our devices.</p></div>`;
+
+// ---------- clue sweep + hits ----------
+const IOCN = {ip: "IP addresses", domain: "Domains", url: "Web links", sha256: "Files (SHA-256)", sha1: "Files (SHA-1)", md5: "Files (MD5)"};
+document.getElementById("iocs").innerHTML = Object.entries(D.ioc_types).sort((a, b) => b[1] - a[1])
+  .map(([k, n]) => `<div class="ioc"><b>${fmt(n)}</b><span>${esc(IOCN[k] || k)}</span></div>`).join("");
+document.getElementById("hitState").innerHTML = D.hits.length ? D.hits.map(h => `
+  <div class="alert" style="--ac:var(${h.is_test ? "--test" : "--critical"});margin-top:10px">
+    <div>${h.is_test ? '<span class="test">TEST</span>' : pill("Critical")}</div>
+    <div><div class="t">${tlink(h.threat_id, "", clean(h.title))}</div>
+    <div class="m">${esc(h.device_name)} · ${esc(h.opco)} · ${esc(h.detail)} · first seen ${esc(String(h.first_hit || "").slice(0, 16))} UTC</div>
+    ${h.users.length ? `<div class="m">👤 ${esc(h.users.join(", "))}</div>` : ""}
+    ${h.alerts.length ? `<div class="m">🚨 ${esc(h.alerts.join("; "))}</div>` : ""}
+    ${h.timeline.map(ev => String(ev.what).split(" | decoded command: ")[1]).filter(Boolean).slice(0, 1).map(d => `<div class="decoded">🔓 Decoded hidden command: ${esc(d)}</div>`).join("")}
+    ${h.timeline.length ? `<div class="timeline">${h.timeline.map(ev => `<div><span class="muted">${esc(String(ev.time).slice(5, 16))}</span> ${esc(String(ev.what).split(" | decoded command: ")[0].slice(0, 200))}</div>`).join("")}</div>` : ""}
+    </div></div>`).join("")
+  : `<div class="allclear">${icon("shield")}<div><b>All clear: ${fmt(iocTotal)} clues swept, ${fmt(D.ioc_hits)} found.</b>
+     <div class="muted">No sign of these attacks on our computers in the last 30 days. Run the 3 harmless lab tests (scripts\\lab) to see a positive find.</div></div></div>`;
+
+// ---------- threat explorer ----------
+const filt = {r: "All", src: "All", q: "", us: false};
+let shown = 40;
+document.getElementById("rfilters").innerHTML = ["All", "Critical", "High", "Medium", "Low"]
+  .map(r => `<button class="fbtn ${r === "All" ? "on" : ""}" data-r="${r}" type="button">${r}</button>`).join(" ");
+document.getElementById("src").innerHTML = ["All sources", ...Object.keys(srcCounts).sort()].map(s => `<option>${esc(s)}</option>`).join("");
+function renderExplorer() {
+  const q = filt.q.toLowerCase();
+  const rows = D.explorer.filter(e => (filt.r === "All" || e.rating === filt.r) && (filt.src === "All" || e.source === filt.src)
+    && (!filt.us || e.devices || e.hits) && (!q || `${e.title} ${e.source} ${e.summary} ${e.devices} ${e.id}`.toLowerCase().includes(q)));
+  table("t-explorer", ["Rating", "Score", "Threat", "On our devices", "Published", "First action"], rows.slice(0, shown).map(e => [
+    pill(e.rating),
+    `<div class="score" style="min-width:90px"><div class="bar"><div style="width:${e.score}%"></div></div><b>${e.score}</b></div>`,
+    `${e.test ? '<span class="test">[TEST]</span> ' : ""}${tlink(e.id, e.url, clean(e.title))}
+     <div class="muted">${esc(e.source)}</div>
+     ${e.chips.length ? `<div>${e.chips.map(c => `<span class="chip">${esc(c)}</span>`).join("")}</div>` : ""}
+     ${e.summary ? `<details><summary>AI summary</summary><div style="margin-top:4px">${esc(e.summary)}</div></details>` : ""}`,
+    e.devices ? esc(e.devices) : '<span class="muted">not found</span>', esc(e.published), esc(e.action)]));
+  document.getElementById("count").textContent = `${Math.min(shown, rows.length)} of ${rows.length} shown`;
+  document.getElementById("moreBtn").hidden = rows.length <= shown;
+}
+document.getElementById("rfilters").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  filt.r = b.dataset.r; shown = 40;
+  document.querySelectorAll("#rfilters .fbtn").forEach(x => x.classList.toggle("on", x === b)); renderExplorer();
+});
+document.getElementById("src").addEventListener("change", e => { filt.src = e.target.selectedIndex ? e.target.value : "All"; shown = 40; renderExplorer(); });
+document.getElementById("q").addEventListener("input", e => { filt.q = e.target.value; shown = 40; renderExplorer(); });
+document.getElementById("onlyUs").addEventListener("click", e => { filt.us = !filt.us; e.currentTarget.classList.toggle("on", filt.us); shown = 40; renderExplorer(); });
+document.getElementById("moreBtn").addEventListener("click", () => { shown += 60; renderExplorer(); });
+renderExplorer();
+if (LIVE) document.getElementById("explorerHint").textContent = "Every threat of the last 30 days: search, filter, click a title for its full detail page.";
+
+// ---------- feeds + metrics ----------
+const FEEDN = {attack: "MITRE ATT&CK", kev: "CISA KEV", nvd: "NVD", epss: "FIRST EPSS", ncsc_nl: "NCSC-NL", cert_eu: "CERT-EU",
+  msrc: "Microsoft MSRC", threatfox: "ThreatFox", urlhaus: "URLhaus", malwarebazaar: "MalwareBazaar", otx: "AlienVault OTX",
+  abusech: "abuse.ch", lab_test: "Lab tests"};
+document.getElementById("feeds").innerHTML = D.feeds.map(f => {
+  const color = f.last_status === "ok" ? "--good" : f.last_status === "skipped" ? "--neutral" : "--critical";
+  return `<div class="feed"><div class="n"><span class="dot" style="background:var(${color})"></span>${esc(FEEDN[f.feed] || f.feed)}</div>
+    <div class="muted">${esc(f.last_status)} · ${esc(String(f.last_success_at || "never").slice(5, 16))}</div>
+    <div class="muted">${fmt(f.last_count)} new</div>${f.last_error && f.last_status !== "ok" ? `<div class="muted" title="${esc(f.last_error)}">${esc(f.last_error.slice(0, 60))}</div>` : ""}</div>`;
+}).join("");
+const mrows = [
+  ["Time to assess exploitability", mins(m.median_minutes_to_assess), "median, first seen → analysed"],
+  ["Time to publish report", mins(m.median_minutes_to_report), "median, first seen → report"],
+  ["% of new threats assessed", fmt(m.pct_assessed) + "%", "analysed ÷ collected"],
+  ["Threat hunts completed", `${fmt(m.hunts_completed)} (≈${fmt(m.hunts_per_month_projected)}/month)`, `${m.hunts_per_run} per run × 6 runs/day × 30`],
+  ["Proactive threats identified", fmt(m.proactive_threats_identified), "threats with a finding on our devices"],
+  ["Manual effort equivalent", fmt(m["manual_hours_equivalent (assumption)"]) + " h", "assumption: config/metrics_assumptions.csv"],
+  ["AI calls / corrected by checks", `${fmt(m.ai_calls)} / ${m.ai_items_corrected_by_guard}`, "automatic fact checks"],
+  ["AI accuracy (your spot-check)", spot == null ? "not checked yet" : spot + "%", "python -m uc1 spotcheck"],
+];
+table("t-metrics", ["Metric", "Value", "How it's measured"], mrows.map(r => [esc(r[0]), `<b>${esc(r[1])}</b>`, `<span class="muted">${esc(r[2])}</span>`]));
+
+// ---------- charts ----------
+const base = () => ({
+  textStyle: {color: css("--text-secondary"), fontFamily: "Segoe UI, system-ui, sans-serif"},
+  grid: {left: 8, right: 22, top: 34, bottom: 8, containLabel: true},
+  tooltip: {backgroundColor: css("--surface"), borderColor: css("--border"), textStyle: {color: css("--text-primary")}, confine: true},
+  animationDuration: 900, animationEasing: "cubicOut",
+});
+const axis = () => ({axisLine: {lineStyle: {color: css("--border")}}, axisLabel: {color: css("--text-secondary")},
+  splitLine: {lineStyle: {color: css("--grid")}}, axisTick: {show: false}});
+const charts = [];
+const mk = id => { const c = echarts.init(document.getElementById(id)); charts.push(c); return c; };
+const pretty = a => a.replace(/_/g, " ");
+function draw() {
+  charts.forEach(c => c.dispose()); charts.length = 0;
+
+  // heatmap: flaws per app x device
+  const apps = D.apps, devs = [...new Set(D.matrix.map(r => r.device_name))].sort();
+  const cells = D.matrix.map(r => [apps.indexOf(r.app), devs.indexOf(r.device_name), r.cves, r.kev]);
+  mk("c-heat").setOption({...base(), grid: {left: 8, right: 16, top: 10, bottom: 58, containLabel: true},
+    tooltip: {...base().tooltip, formatter: p => `<b>${esc(pretty(apps[p.data[0]]))}</b> on ${esc(devs[p.data[1]])}<br>${p.data[2]} known flaws<br>${p.data[3]} known exploited`},
+    xAxis: {type: "category", data: apps.map(pretty), ...axis(), splitLine: {show: false}, axisLabel: {color: css("--text-secondary"), rotate: 35, fontSize: 11}},
+    yAxis: {type: "category", data: devs, ...axis(), splitLine: {show: false}},
+    visualMap: {type: "piecewise", dimension: 2, orient: "horizontal", left: "center", bottom: 0, itemWidth: 14, itemHeight: 10,
+      textStyle: {color: css("--text-secondary")},
+      pieces: [{min: 1, max: 19, label: "1–19", color: css("--seq-0")}, {min: 20, max: 49, label: "20–49", color: css("--seq-1")},
+               {min: 50, max: 99, label: "50–99", color: css("--seq-2")}, {min: 100, max: 299, label: "100–299", color: css("--seq-3")},
+               {min: 300, label: "300+", color: css("--seq-4")}]},
+    series: [{type: "heatmap", data: cells, itemStyle: {borderColor: css("--surface"), borderWidth: 2, borderRadius: 4},
+      label: {show: true, color: css("--text-primary"), textBorderColor: css("--surface"), textBorderWidth: 3, fontWeight: 700, fontSize: 11,
+              formatter: p => p.data[2] + (p.data[3] ? `\n★${p.data[3]}` : "")},
+      emphasis: {itemStyle: {borderColor: css("--text-primary"), borderWidth: 2}}}]});
+
+  // fix these first
+  const fx = [...D.fixes].reverse();
+  mk("c-fixes").setOption({...base(), grid: {left: 8, right: 124, top: 10, bottom: 8, containLabel: true},
+    tooltip: {...base().tooltip, trigger: "item", formatter: p => { const f = fx[p.dataIndex];
+      return `<b>Update ${esc(pretty(f.app))}</b><br>installed: ${esc(f.versions)}<br>${f.cves} known flaws on ${f.devices} device(s)<br>${f.kev} known exploited · max CVSS ${f.max_cvss ?? "–"}`; }},
+    xAxis: {type: "value", ...axis()},
+    yAxis: {type: "category", data: fx.map(f => pretty(f.app)), ...axis(), splitLine: {show: false}},
+    series: [{type: "bar", barMaxWidth: 20, data: fx.map(f => ({value: f.cves,
+      itemStyle: {color: css(f.kev ? "--critical" : "--series-1"), borderRadius: [0, 4, 4, 0]}})),
+      label: {show: true, position: "right", color: css("--text-primary"),
+              formatter: p => { const f = fx[p.dataIndex]; return `${f.cves}${f.kev ? ` · ${f.kev} exploited` : ""}`; }}}]});
+
+  // priority quadrant
+  const kev = D.scatter.filter(p => p[4]), other = D.scatter.filter(p => !p[4]);
+  mk("c-scatter").setOption({...base(), grid: {left: 8, right: 22, top: 40, bottom: 26, containLabel: true},
+    legend: {top: 0, textStyle: {color: css("--text-secondary")}, itemWidth: 10, itemHeight: 10},
+    tooltip: {...base().tooltip, trigger: "item", formatter: p => `<b>${esc(p.data[2])}</b>${p.data[4] ? " · known exploited" : ""}<br>${esc(p.data[3])}<br>CVSS ${p.data[0]} · EPSS ${(p.data[1] * 100).toFixed(p.data[1] < .01 ? 2 : 1)}%`},
+    xAxis: {type: "value", name: "CVSS: how bad", nameLocation: "middle", nameGap: 24, min: 0, max: 10, ...axis()},
+    yAxis: {type: "log", min: 0.0001, max: 1, ...axis(),
+            axisLabel: {color: css("--text-secondary"), formatter: v => (v >= .01 ? (v * 100).toFixed(0) : (v * 100).toFixed(2)) + "%"}},
+    series: [
+      {name: "Other flaws on our devices", type: "scatter", data: other, symbolSize: 8,
+       itemStyle: {color: css("--series-1"), opacity: .45},
+       markArea: {silent: true, itemStyle: {color: "rgba(208,59,59,.08)"}, label: {color: css("--critical"), fontWeight: 700, position: "insideBottomRight", backgroundColor: css("--surface"), padding: [2, 6], borderRadius: 4},
+                  data: [[{name: "Fix first", coord: [7, 0.1]}, {coord: [10, 1]}]]},
+       markLine: {silent: true, symbol: "none", lineStyle: {type: "dashed", color: css("--neutral")}, label: {show: false},
+                  data: [{xAxis: 7}, {yAxis: 0.1}]}},
+      {name: "Known exploited (CISA KEV)", type: "scatter", data: kev, symbolSize: 14,
+       itemStyle: {color: css("--critical"), borderColor: css("--surface"), borderWidth: 2}}]});
+
+  // publication date stacked bars
+  const groups = Object.keys(D.series), cols = ["--series-1", "--series-2", "--series-3", "--series-4"];
+  mk("c-days").setOption({...base(), tooltip: {...base().tooltip, trigger: "axis", axisPointer: {type: "shadow"}},
+    legend: {top: 0, textStyle: {color: css("--text-secondary")}, itemWidth: 10, itemHeight: 10},
+    xAxis: {type: "category", data: D.days.map(d => d.slice(5)), ...axis()},
+    yAxis: {type: "value", minInterval: 1, ...axis()},
+    series: groups.map((g, i) => ({name: g, type: "bar", stack: "t", data: D.series[g], barMaxWidth: 22,
+      itemStyle: {color: css(cols[i]), borderColor: css("--surface"), borderWidth: 1, borderRadius: i === groups.length - 1 ? [4, 4, 0, 0] : 0}}))});
+
+  // ratings donut
+  const order = ["Critical", "High", "Medium", "Low"], total = order.reduce((a, r) => a + (D.ratings[r] || 0), 0);
+  mk("c-ratings").setOption({...base(), tooltip: {...base().tooltip, trigger: "item", formatter: p => `${p.name}: ${p.value} (${p.percent}%)`},
+    graphic: [{type: "text", left: "center", top: "center", style: {text: `${total}\nthreats`, align: "center", fill: css("--text-primary"), fontSize: 20, fontWeight: 700, lineHeight: 24}}],
+    series: [{type: "pie", radius: ["54%", "76%"], center: ["50%", "50%"], avoidLabelOverlap: true, minAngle: 4,
+      itemStyle: {borderColor: css("--surface"), borderWidth: 2, borderRadius: 4},
+      label: {color: css("--text-primary"), formatter: "{b}\n{c}"}, labelLine: {lineStyle: {color: css("--border")}},
+      data: order.map(r => ({name: r, value: D.ratings[r] || 0, itemStyle: {color: css(RATING[r])}}))}]});
+
+  // ATT&CK tactics
+  mk("c-tactics").setOption({...base(), grid: {left: 8, right: 36, top: 8, bottom: 8, containLabel: true},
+    tooltip: {...base().tooltip, trigger: "item", formatter: p => `${esc(p.name)}: ${p.value} threat(s)`},
+    xAxis: {type: "value", minInterval: 1, ...axis()},
+    yAxis: {type: "category", inverse: true, data: D.tactics.map(t => t.tactic), ...axis(), splitLine: {show: false}},
+    series: [{type: "bar", barMaxWidth: 16, data: D.tactics.map(t => t.threats),
+      itemStyle: {color: css("--series-1"), borderRadius: [0, 4, 4, 0]},
+      label: {show: true, position: "right", color: css("--text-primary")}}]});
+}
+draw();
+window.addEventListener("resize", () => charts.forEach(c => c.resize()));
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (!document.documentElement.dataset.theme) draw(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+// Q01 process_tree: processes on the device around the alert, with parent and account.
+DeviceProcessEvents
+| where Timestamp between (datetime({{START}}) .. datetime({{END}}))
+| where DeviceId in ({{DEVICE_IDS}}) or DeviceName in ({{DEVICE_NAMES}})
+| project Timestamp, DeviceName, AccountName, FileName, ProcessCommandLine, FolderPath,
+          InitiatingProcessFileName, InitiatingProcessCommandLine, SHA256
+| order by Timestamp asc
+| take {{LIMIT}}

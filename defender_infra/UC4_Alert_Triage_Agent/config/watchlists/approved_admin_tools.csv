@@ -1,0 +1,3 @@
+kind,account,path,note
+approved,labadmin,C:\IT\Scripts\,Approved IT admin account running approved scripts (lab)
+approved,uc4svc,C:\IT\Scripts\,Service account for approved automation (lab)

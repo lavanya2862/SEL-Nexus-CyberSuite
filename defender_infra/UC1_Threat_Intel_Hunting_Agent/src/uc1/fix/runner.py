@@ -1,0 +1,261 @@
+"""Runs approved fixes (one computer at a time per VM, both VMs in parallel) and judges what the computer reports.
+
+Judging uses the installed versions the script reads from Windows before and after (the "Apps & features" list):
+  upgrade  ok when the old version is gone and a version is installed
+  remove   ok when nothing matching the old version is left
+  replace  ok when the old version is gone (a failed install of the new one is reported but doesn't undo the fix)
+  setting  ok when the value the script reads back afterwards is the value the catalogue asks for
+"done" means fixed on the computer; it becomes "verified" when Defender's next inventory no longer lists it.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import threading
+from collections import defaultdict
+from collections.abc import Callable
+from contextlib import contextmanager
+
+from uc1.config import Settings
+from uc1.fix.executors import FixError, make_executor
+from uc1.fix.plan import load_catalog, probe_spec, read_plan
+from uc1.fix.state import FixState, event
+from uc1.store import utcnow
+
+log = logging.getLogger("uc1.fix")
+OK_CODES = {0, 1641, 3010, -1978334967, -1978334966}
+
+
+class FixBusy(RuntimeError):
+    pass
+
+
+LOCK_MAX_AGE_S = 8 * 3600     # a fix run never takes this long; an older lock is left over (and its PID may be reused)
+
+
+def fix_active(settings: Settings) -> bool:
+    """Is a fix run (website or command line) in progress? PID check like the pipeline's run lock, plus an age limit."""
+    import time
+
+    from uc1.pipeline import _pid_alive
+    lock = settings.fix_dir / ".fix.lock"
+    try:
+        if time.time() - lock.stat().st_mtime > LOCK_MAX_AGE_S:
+            return False
+        return _pid_alive(int(lock.read_text().strip() or 0))
+    except (OSError, ValueError):
+        return False
+
+
+@contextmanager
+def fix_lock(settings: Settings):
+    lock = settings.fix_dir / ".fix.lock"
+    if fix_active(settings):
+        raise FixBusy("Fixes are already running (website or command line). Wait for them to finish.")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text(str(os.getpid()))
+    try:
+        yield
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+def parse_result(output: str) -> dict | None:
+    for line in reversed((output or "").splitlines()):
+        line = line.strip()
+        if line.startswith("UC1RESULT "):
+            try:
+                return json.loads(line[len("UC1RESULT "):])
+            except ValueError:
+                return None
+    return None
+
+
+def _versions(entries) -> set[str]:
+    return {str(e.get("version", "")) for e in (entries or []) if isinstance(e, dict)}
+
+
+def _fmt(entries) -> str:
+    return ", ".join(f"{e.get('name')} {e.get('version')}".strip() for e in (entries or []) if isinstance(e, dict)) or "nothing"
+
+
+def judge(action: str, result: dict | None) -> tuple[str, str]:
+    """(status, plain-English message)."""
+    if not result:
+        return "failed", "The computer did not report a result (see the output)."
+    if action == "setting":
+        return judge_setting(result)
+    before, after = result.get("before") or [], result.get("after") or []
+    if isinstance(before, dict):
+        before = [before]
+    if isinstance(after, dict):
+        after = [after]
+    code = result.get("exit")
+    reboot = " A restart is needed to finish." if result.get("reboot") else ""
+    if result.get("not_found") or (action == "upgrade" and not before):
+        # Never "done": nothing was found, so nothing was changed (and nothing new was installed).
+        # A failed fix still becomes "verified" later if Defender stops listing it.
+        return "failed", ("UC1 could not find this app on the computer, so it changed nothing. Either it is already "
+                          "gone (Defender will clear it on its next scan), it is installed for one user only, or the "
+                          "name pattern in config/fix_catalog.csv does not match it.")
+    if action == "upgrade":
+        old, new = _versions(before), _versions(after)
+        if after and not (old & new):
+            return "done", f"Updated: {_fmt(before)} -> {_fmt(after)}." + reboot
+        if not after:
+            return "failed", f"The app disappeared during the update (exit {code}). Before: {_fmt(before)}."
+        return "failed", f"Still the old version after the update (exit {code}): {_fmt(after)}."
+    if action in ("remove", "replace"):
+        if int(result.get("left_count") or 0) > 0:
+            return "failed", f"Could not remove everything: {_fmt(result.get('left'))} is still installed."
+        if action == "remove":
+            return "done", f"Removed: {_fmt(before)}." + reboot
+        if code in OK_CODES:
+            return "done", f"Old version removed ({_fmt(before)}); now installed: {_fmt(after)}." + reboot
+        return "done", f"Old version removed ({_fmt(before)}), but installing the current one failed (exit {code}). " \
+                       "The hole is closed; install the new version later if it's needed." + reboot
+    return "failed", f"Unknown action {action}"
+
+
+def _shown(value) -> str:
+    return "not set" if value in (None, "") else str(value)
+
+
+def judge_setting(result: dict) -> tuple[str, str]:
+    """A setting is fixed when the computer reads back the wanted value after the change."""
+    before, after, wanted = result.get("before"), result.get("after"), result.get("wanted")
+    if result.get("error"):
+        return "failed", f"The setting could not be changed: {result['error']}"
+    if str(after) != str(wanted):
+        return "failed", (f"The setting is still {_shown(after)} (wanted {wanted}). A company policy (Group Policy or "
+                          "Intune) or Defender's tamper protection may be setting it back.")
+    if str(before) == str(wanted):
+        return "done", (f"Already set correctly on the computer ({wanted}); Defender's data was older and its next "
+                        "check will clear it.")
+    return "done", f"Changed from {_shown(before)} to {after}."
+
+
+class FixRunner:
+    def __init__(self, settings: Settings, executor_factory: Callable = make_executor, on_step: Callable[[str], None] | None = None):
+        self.settings = settings
+        self.state = FixState(settings.fix_dir / "state.json")
+        self.factory = executor_factory
+        self.on_step = on_step or (lambda text: None)
+        self._executors: dict[str, object] = {}
+        self._lock = threading.Lock()
+
+    def executor(self, method: str):
+        with self._lock:
+            if method not in self._executors:
+                self._executors[method] = self.factory(method, self.settings)
+            return self._executors[method]
+
+    def _say(self, text: str, fix_id: str | None = None) -> None:
+        log.info(text)
+        self.on_step(text)
+        with self.state.edit() as data:
+            event(data, text, fix_id)
+
+    # ---------------------------------------------------------- fixes
+    def run_approved(self, ids: list[str] | None = None) -> dict:
+        with fix_lock(self.settings):
+            return self._run_approved(ids)
+
+    def _run_approved(self, ids: list[str] | None) -> dict:
+        with self.state.edit() as data:
+            for fid, f in data["fixes"].items():            # left over from a run that was killed
+                if f.get("status") in ("queued", "running"):
+                    f.update(status="failed", message="Interrupted (UC1 stopped while this fix was running). "
+                                                      "Approve it again to retry.", finished_at=utcnow().isoformat())
+            todo = [(fid, f) for fid, f in data["fixes"].items()
+                    if f.get("status") == "approved" and (ids is None or fid in ids)]
+            for fid, f in todo:
+                f["status"] = "queued"
+        if not todo:
+            return {"ran": 0, "done": 0, "failed": 0}
+        by_device: dict[str, list] = defaultdict(list)
+        for fid, f in todo:
+            by_device[f["item"]["device_name"]].append((fid, f))
+        for items in by_device.values():                 # urgent first on each computer
+            items.sort(key=lambda x: (x[1]["item"].get("stage", 3), -x[1]["item"].get("findings", 0)))
+        results: dict[str, str] = {}
+        threads = [threading.Thread(target=self._device_worker, args=(dev, items, results), daemon=True)
+                   for dev, items in by_device.items()]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        summary = {"ran": len(results), "done": sum(1 for s in results.values() if s == "done"),
+                   "failed": sum(1 for s in results.values() if s == "failed")}
+        self._say(f"Fix run finished: {summary['done']} fixed, {summary['failed']} failed. "
+                  "Defender confirms within a few hours (next UC1 run).")
+        started = sorted({vm for ex in self._executors.values() for vm in getattr(ex, "started", set())})
+        if started:
+            self._say(f"UC1 switched on {', '.join(started)} for these fixes. Leave it on for about 6 hours so Defender "
+                      "can scan it and confirm the fixes, then stop it in the Azure portal to save credit.")
+        return summary
+
+    def _device_worker(self, device: str, items: list, results: dict) -> None:
+        for fid, f in items:
+            item, method = f["item"], f.get("method") or self.settings.fix_method
+            # today's settings win over the ones frozen at approval time (e.g. Chocolatey switched off since)
+            spec = {**f["spec"], "allow_choco": self.settings.fix_allow_choco}
+            with self.state.edit() as data:
+                data["fixes"][fid].update(status="running", started_at=utcnow().isoformat())
+            what = f"change setting '{item['app']}'" if item["action"] == "setting" else \
+                f"{item['action']} {item['app']} {item['version']}"
+            self._say(f"{device}: {what} via {method}", fid)
+            output, result = "", None
+            try:
+                ex = self.executor(method)
+                output = ex.run(device, item["device_id"], spec, say=lambda t: self._say(t, fid))
+                result = parse_result(output)
+                status, message = judge(item["action"], result)
+            except FixError as exc:
+                status, message = "failed", str(exc)
+            except Exception as exc:  # noqa: BLE001 - one failed fix must not stop the others
+                log.exception("Fix %s crashed", fid)
+                status, message = "failed", f"{exc.__class__.__name__}: {exc}"
+            with self.state.edit() as data:
+                data["fixes"][fid].update(status=status, message=message[:600], finished_at=utcnow().isoformat(),
+                                          result=result, output=(output or "")[-3000:])
+            self._say(f"{device}: {' '.join(p for p in (item['app'], item.get('version')) if p)} -> {status}: {message}", fid)
+            results[fid] = status
+
+    # ---------------------------------------------------------- probe (read-only check)
+    def probe(self, method: str | None = None, devices: list[str] | None = None) -> dict:
+        with fix_lock(self.settings):
+            return self._probe(method or self.settings.fix_method, devices)
+
+    def _probe(self, method: str, devices: list[str] | None) -> dict:
+        plan_items = read_plan(self.settings).get("items", [])
+        targets = {i["device_name"]: i["device_id"] for i in plan_items}
+        if devices:
+            targets = {d: i for d, i in targets.items() if d in devices}
+        spec = probe_spec(load_catalog())
+        out: dict[str, dict] = {}
+
+        def one(device: str, device_id: str) -> None:
+            self._say(f"{device}: checking the computer (read-only) via {method}")
+            try:
+                ex = self.executor(method)
+                # read-only means read-only: the check never switches a VM on (fix runs may, see FIX_START_VMS)
+                kwargs = {"allow_start": False} if getattr(ex, "can_start_vms", False) else {}
+                text = ex.run(device, device_id, spec, say=self._say, **kwargs)
+                result = parse_result(text) or {"error": "no result", "output": text[-1500:]}
+            except Exception as exc:  # noqa: BLE001
+                result = {"error": str(exc)}
+            result.update(method=method, checked_at=utcnow().isoformat())
+            out[device] = result
+            with self.state.edit() as data:
+                data.setdefault("probes", {})[device] = result
+            self._say(f"{device}: check {'failed: ' + result['error'] if result.get('error') else 'ok'}")
+
+        threads = [threading.Thread(target=one, args=(d, i), daemon=True) for d, i in targets.items()]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        return out

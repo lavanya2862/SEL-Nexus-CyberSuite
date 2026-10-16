@@ -1,0 +1,62 @@
+"""`python -m uc3 live-test`: check the connection to Defender step by step, in plain language.
+
+The first thing to run after filling in .env. Secrets are never printed.
+"""
+
+from __future__ import annotations
+
+import tempfile
+from pathlib import Path
+
+from uc3.api_client import ApiError, RetryPolicy
+from uc3.auth import AuthError, EntraTokenProvider
+from uc3.config import ConfigError, load_settings
+from uc3.extract import EXPORT, MACHINES, make_client
+
+
+def _mask(value: str | None) -> str:
+    return f"...{value[-4:]}" if value else "(not set)"
+
+
+def run() -> int:
+    steps = 5
+
+    def say(n: int, name: str, status: str, detail: str = "") -> None:
+        print(f"[{n}/{steps}] {name:<22} {status}  {detail}".rstrip())
+
+    try:
+        settings = load_settings()
+    except ConfigError as exc:
+        say(1, "Settings", "FAIL", str(exc))
+        return 1
+    say(1, "Settings", "OK", f"{settings.api_base} (tenant {_mask(settings.tenant_id)}, app {_mask(settings.client_id)})")
+
+    try:
+        EntraTokenProvider(settings).token()
+        say(2, "Login", "OK", "access token received")
+    except AuthError as exc:
+        say(2, "Login", "FAIL", str(exc))
+        return 1
+
+    client = make_client(settings, retry=RetryPolicy(max_attempts=4, max_delay=10))
+    try:
+        devices = client.get_json(MACHINES, {"$top": 5}).get("value", [])
+        say(3, "Device list", "OK", f"{len(devices)} device(s) returned (first 5 max)"
+            + (" - none onboarded yet" if not devices else ""))
+        export = client.get_json(EXPORT)
+        files = export.get("exportFiles", [])
+        say(4, "Vulnerability export", "OK", f"{len(files)} file(s), generated {export.get('generatedTime')}")
+        if not files:
+            say(5, "Download", "SKIP", "no files yet (no assessed devices)")
+        else:
+            with tempfile.TemporaryDirectory() as tmp:
+                size, rows = client.download(files[0], Path(tmp) / "part.json.gz")
+            say(5, "Download", "OK", f"first file: {rows:,} rows, {size / 1e6:.1f} MB")
+    except ApiError as exc:
+        say(3, "API call", "FAIL", str(exc))
+        return 1
+    except Exception as exc:  # connection problems etc.: explain instead of a traceback
+        say(3, "API call", "FAIL", f"{exc.__class__.__name__}: {exc}")
+        return 1
+    print("\nRESULT: OK - the pipeline can talk to your Defender.")
+    return 0

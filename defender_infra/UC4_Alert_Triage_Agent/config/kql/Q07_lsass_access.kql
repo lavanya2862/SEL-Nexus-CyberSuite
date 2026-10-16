@@ -1,0 +1,11 @@
+// Q07 lsass_access: processes that opened a handle to LSASS (credential-theft signal), excluding OS components.
+DeviceEvents
+| where Timestamp between (datetime({{START}}) .. datetime({{END}}))
+| where DeviceId in ({{DEVICE_IDS}}) or DeviceName in ({{DEVICE_NAMES}})
+| where ActionType == "OpenProcessApiCall" and FileName =~ "lsass.exe"
+| where InitiatingProcessFileName !in~ ("MsMpEng.exe", "MsSense.exe", "SenseNdr.exe", "svchost.exe", "csrss.exe",
+                                        "wininit.exe", "services.exe", "WmiPrvSE.exe", "lsass.exe", "taskmgr.exe")
+| project Timestamp, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName,
+          InitiatingProcessCommandLine
+| order by Timestamp asc
+| take {{LIMIT}}

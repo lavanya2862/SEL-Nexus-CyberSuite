@@ -1,0 +1,4 @@
+vendor,product,opco,notes
+Citrix,NetScaler ADC,example,EXAMPLE ONLY - replace with the client's real list of products Defender can't see (appliances)
+Fortinet,FortiGate,example,EXAMPLE ONLY
+Palo Alto Networks,PAN-OS,example,EXAMPLE ONLY

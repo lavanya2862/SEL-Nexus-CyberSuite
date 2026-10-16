@@ -1,0 +1,153 @@
+import type { ReactNode } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { AlertTriangle, ArrowLeft, ExternalLink, Zap } from 'lucide-react'
+import { Card, DTable, Empty, HopLink, Panel, SevTag, Tag } from '@/components/kit'
+import { num, shortDate } from '@/lib/format'
+import { statusColor } from '@/lib/theme'
+import { useKevThreatHref } from '@/lib/uc1'
+import { EXPL, addDays, daysBetween, findingHref, findingKey, pretty, useUc3Data, useUc3View, type Finding } from '@/lib/uc3'
+import { Uc3Loading } from './common'
+
+const PRIORITY: Record<string, string> = {
+  P1: 'Fix first: Critical, or High with a known exploit', P2: 'Fix soon', P3: 'Fix in the normal update cycle', P4: 'Low',
+}
+
+/** Weak spots › one vulnerability: one CVE in one app version on one computer, with everything we know about it. */
+export function VulnDetail() {
+  const { key = '' } = useParams()
+  const navigate = useNavigate()
+  const kevHref = useKevThreatHref()
+  const { data, error, isLoading } = useUc3Data()
+  const view = useUc3View(data)
+  if (isLoading || error || !data) return <Uc3Loading error={error} />
+
+  const f = view.all.find((x) => findingKey(x) === key)
+  const back = (
+    <Link to="/uc3/all" className="inline-flex w-fit items-center gap-2 text-sm font-medium text-ink-2 hover:text-ink">
+      <ArrowLeft className="size-4" /> All vulnerabilities
+    </Link>
+  )
+  if (!f) return <div className="flex flex-col gap-5">{back}<Empty text="This vulnerability is not in the latest data. It may have been fixed since." /></div>
+
+  const kev = data.kev.find((k) => k.cve === f.cve)
+  const slaDays = data.meta.sla[f.sev]
+  const due = slaDays != null && f.fs ? addDays(f.fs, slaDays) : null
+  const snap = String(data.meta.snapshot)
+  const elsewhere = view.all.filter((x) => x.cve === f.cve && findingKey(x) !== key)
+  const sameApp = view.all.filter((x) => x.d === f.d && x.sw === f.sw && x.ver === f.ver)
+  const app = `${pretty(f.sw)} ${f.ver}`
+  // Defender's own "recommended update" often just repeats the CVE or holds an internal ID; prefer the Fix Centre's checked action
+  const action = data.fixes?.apps.find((a) => a.key.split(':').pop() === f.sw)?.fix.action
+    || (f.upd && f.upd.includes(' ') ? f.upd : `Update ${pretty(f.sw)} to the latest version`)
+
+  return (
+    <div className="flex flex-col gap-5">
+      {back}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-medium text-ink-3"><span className="size-2 rounded-full bg-sky" /> Weak spots · vulnerability</div>
+          <h1 className="tabular mt-1 text-2xl font-semibold tracking-tight">{f.cve}</h1>
+          <p className="mt-1 text-sm text-ink-3">In <b className="font-medium text-ink-2">{app}</b> on <b className="font-medium text-ink-2">{f.dev?.name}</b> · {f.o}</p>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <SevTag sev={f.sev} />
+            <Tag>{f.pr}</Tag>
+            {f.kev ? <Tag tone="warn">used by attackers</Tag> : null}
+            {kev?.rw && <Tag tone="bad">used in ransomware</Tag>}
+            {f.br ? <Tag tone="bad">overdue</Tag> : null}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link to={`/fixes?sw=${encodeURIComponent(f.sw)}`} className="inline-flex items-center gap-2 btn-blue rounded-lg px-4 py-2 text-sm font-semibold">
+            <Zap className="size-4" /> Fix this app
+          </Link>
+          <a href={`https://nvd.nist.gov/vuln/detail/${encodeURIComponent(f.cve)}`} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-hairline bg-panel px-3 py-2 text-sm font-medium hover:bg-well">
+            Public description (NVD) <ExternalLink className="size-3.5" />
+          </a>
+        </div>
+      </div>
+
+      <Panel className="flex items-start gap-3 p-5 text-sm leading-relaxed text-ink-2">
+        {f.kev ? <AlertTriangle className="mt-0.5 size-4 shrink-0" style={{ color: statusColor.critical }} /> : null}
+        <p>
+          {kev ? <><b className="text-ink">{kev.name}.</b> Attackers are known to use this hole (CISA list, since {shortDate(kev.added)}). </> : null}
+          This weakness is in <b className="text-ink">{app}</b>. The fix: <b className="text-ink">{action}</b>.{' '}
+          {sameApp.length > 1 && <>That also fixes the other {num(sameApp.length - 1)} vulnerabilities in this app on this computer.</>}
+        </p>
+      </Panel>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <Card title="The problem">
+          <Facts rows={[
+            ['Severity', <SevTag sev={f.sev} />],
+            ['Severity score (CVSS)', f.cvss != null ? `${f.cvss.toFixed(1)} of 10` : 'Not rated yet'],
+            ['Known attack code', EXPL[f.ex] ?? f.ex],
+            ['Used by attackers (CISA list)', f.kev ? `Yes${kev?.added ? `, listed ${shortDate(kev.added)}` : ''}` : 'No'],
+            ['Priority', `${f.pr} · ${PRIORITY[f.pr] ?? ''}`],
+          ]} />
+        </Card>
+        <Card title="Where it is and the deadline">
+          <Facts rows={[
+            ['Computer', <>{f.dev?.name} <span className="text-ink-3">· {f.o}</span></>],
+            ['Operating system', [f.dev?.os, f.dev?.osv].filter(Boolean).join(' ') || '–'],
+            ['App and version', app],
+            ['First seen', f.fs ? `${shortDate(f.fs)} (${num(f.age)} days ago)` : '–'],
+            ['Fix-by deadline', due
+              ? <span style={{ color: f.br ? statusColor.critical : undefined }}>{shortDate(due)} · {f.br ? `overdue by ${num(-daysBetween(snap, due))} days` : `${num(daysBetween(snap, due))} days left`} ({slaDays}-day rule)</span>
+              : 'No deadline until it is rated'],
+            ['How to fix', action],
+          ]} />
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <Card title="Same vulnerability on other computers" description={elsewhere.length ? `${num(elsewhere.length)} more` : undefined}>
+          {elsewhere.length ? <FindingTable rows={elsewhere} show="computer" onOpen={(x) => navigate(findingHref(x))} /> : <Empty text="Only on this computer." />}
+        </Card>
+        <Card title={`Everything ${app} has on ${f.dev?.name}`} description={`${num(sameApp.length)} vulnerabilities · one update fixes them all`}>
+          <FindingTable rows={sameApp} show="cve" current={key} onOpen={(x) => navigate(findingHref(x))} />
+        </Card>
+      </div>
+
+      {kevHref(f.cve) && (
+        <div className="flex items-center gap-2 text-sm text-ink-3">
+          What the outside world says about it, and whether anyone used it on us: <HopLink to={kevHref(f.cve)!}>Threat news</HopLink>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Facts({ rows }: { rows: [string, ReactNode][] }) {
+  return (
+    <dl className="grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm">
+      {rows.map(([k, v]) => (
+        <div key={k} className="contents">
+          <dt className="text-ink-3">{k}</dt>
+          <dd className="text-ink">{v}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function FindingTable({ rows, show, current, onOpen }: { rows: Finding[]; show: 'computer' | 'cve'; current?: string; onOpen: (f: Finding) => void }) {
+  return (
+    <DTable head={[[show === 'computer' ? 'Computer' : 'Vulnerability'], ['Severity'], ['Days open', 'right'], ['Deadline']]} minWidth={420} maxHeight={320}>
+      {rows.map((x) => {
+        const here = findingKey(x) === current
+        return (
+          <tr key={findingKey(x)} onClick={() => !here && onOpen(x)} className={here ? 'bg-well' : 'cursor-pointer hover:bg-well/60'}>
+            <td className="tabular whitespace-nowrap font-medium">
+              {show === 'computer' ? <>{x.dev?.name} <span className="text-xs font-normal text-ink-3">· {x.o}</span></> : x.cve}
+              {here && <span className="ml-1.5 text-xs font-normal text-ink-3">(this one)</span>}
+            </td>
+            <td><SevTag sev={x.sev} /></td>
+            <td className="tabular text-right">{x.age}</td>
+            <td>{x.br ? <Tag tone="bad">overdue</Tag> : <span className="text-ink-3">on time</span>}</td>
+          </tr>
+        )
+      })}
+    </DTable>
+  )
+}

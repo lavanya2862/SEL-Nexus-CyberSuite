@@ -1,0 +1,12 @@
+// Q24 dns_lookups (Sentinel): DNS look-ups of the incident's domains or by its IP addresses (Cisco Umbrella logs,
+// Training Lab sample). Shows which internal machines asked, how often, and whether the lookup was allowed.
+Cisco_Umbrella_dns_CL
+| where TimeGenerated between (datetime({{START}}) .. datetime({{END}}))
+| extend Domain = tostring(column_ifexists("Domain_s", "")), InternalIp = tostring(column_ifexists("InternalIp_s", "")),
+         ExternalIp = tostring(column_ifexists("ExternalIp_s", "")), Action = tostring(column_ifexists("Action_s", "")),
+         Identity = tostring(column_ifexists("Identities_0_s", ""))
+| where (isnotempty(Domain) and Domain in~ ({{DOMAINS}})) or (isnotempty(InternalIp) and InternalIp in ({{IPS}}))
+| summarize Lookups = count(), FirstSeen = min(TimeGenerated), LastSeen = max(TimeGenerated)
+          by Domain, InternalIp, ExternalIp, Identity, Action
+| order by Lookups desc
+| take {{LIMIT}}

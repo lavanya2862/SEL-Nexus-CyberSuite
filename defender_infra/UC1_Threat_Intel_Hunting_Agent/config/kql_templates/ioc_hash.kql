@@ -1,0 +1,11 @@
+// name: IOC sweep - file hashes
+// kind: ioc
+// ioc_type: sha256,sha1,md5
+// technique: T1204.002
+let hashes = dynamic([{{VALUES}}]);
+union DeviceFileEvents, DeviceProcessEvents, DeviceImageLoadEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where SHA256 in (hashes) or SHA1 in (hashes) or MD5 in (hashes)
+| project Timestamp, DeviceId, DeviceName, ActionType, FileName, FolderPath, SHA256, SHA1, MD5,
+          InitiatingProcessFileName, InitiatingProcessAccountName
+| take 1000

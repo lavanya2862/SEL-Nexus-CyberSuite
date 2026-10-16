@@ -1,0 +1,7 @@
+// Q09 other_alerts_same_device: other alerts raised on the same device in the last 7 days (context).
+AlertInfo
+| where Timestamp > ago(7d)
+| join kind=inner (AlertEvidence | where DeviceId in ({{DEVICE_IDS}}) | distinct AlertId, DeviceId) on AlertId
+| project Timestamp, AlertId, Title, Severity, Category, ServiceSource, DetectionSource
+| order by Timestamp desc
+| take {{LIMIT}}

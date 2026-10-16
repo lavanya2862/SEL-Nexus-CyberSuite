@@ -1,0 +1,23 @@
+id: sentinel_network_beacon
+label: Sentinel network beacon / command-and-control incident
+description: A machine looked up or contacted a known attacker domain (e.g. the Solorigate / SUNBURST domains).
+scope: sentinel
+match:
+  any_title: ["beacon", "command and control", "c2 ", "solorigate", "sunburst", "malicious domain"]
+  any_category: ["commandandcontrol"]
+  any_technique: ["T1071", "T1568", "T1573"]
+queries:
+  - Q24_dns_lookups
+  - Q20_signin_summary
+ti:
+  domains_from: [evidence]
+  ips_from: [evidence]
+history: {same: [playbook], days: 90}
+watchlists: [approved_scanners]
+guardrails: [high_ti_match, injection_marker, high_no_close]
+allowed_verdicts: [likely_true_positive, likely_false_positive, benign_positive, needs_investigation]
+containment_options: [block_indicator, isolate_device, collect_investigation_package]
+notes: >-
+  A lookup of a known attacker domain that was allowed = escalate (find and isolate the machine that asked).
+  A lookup by a security scanner or sinkholed domain = benign positive. Here there is no Defender device, so isolating
+  is a recommendation for a person.

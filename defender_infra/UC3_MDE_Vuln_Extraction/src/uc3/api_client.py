@@ -1,0 +1,149 @@
+"""HTTP client for the Defender API: retries with back-off, paging and streamed downloads.
+
+Retry rules: 429 -> wait `Retry-After`; 500/502/503/504 and network errors -> exponential back-off with
+jitter; 401 -> fetch a fresh token once. Download links are pre-signed storage URLs, so no bearer token is
+sent to them; an expired link (403 from storage) raises LinkExpired so the caller can request a new export.
+"""
+
+from __future__ import annotations
+
+import gzip
+import json
+import logging
+import random
+import time
+import zlib
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
+from pathlib import Path
+from urllib.parse import urljoin
+
+import requests
+
+from uc3.auth import TokenProvider
+
+log = logging.getLogger("uc3.api")
+
+RETRYABLE_STATUS = {500, 502, 503, 504}
+HINTS = {
+    401: "The token was rejected. Check the app registration and that the tenant ID matches your Defender tenant.",
+    403: "Access denied. In Entra ID, add the WindowsDefenderATP application permissions "
+         "(Vulnerability.Read.All, Machine.Read.All) and click 'Grant admin consent'.",
+    404: "Endpoint not found. Check UC3_API_BASE.",
+}
+
+
+class ApiError(RuntimeError):
+    def __init__(self, status: int | None, message: str):
+        hint = HINTS.get(status or 0)
+        super().__init__(f"HTTP {status}: {message}" + (f"\nHint: {hint}" if hint else ""))
+        self.status = status
+
+
+class LinkExpired(ApiError):
+    pass
+
+
+@dataclass(frozen=True)
+class RetryPolicy:
+    max_attempts: int = 6
+    base_delay: float = 1.0
+    max_delay: float = 60.0
+    timeout: float = 120.0
+
+
+class DefenderClient:
+    def __init__(self, base_url: str, tokens: TokenProvider, retry: RetryPolicy = RetryPolicy(),
+                 session: requests.Session | None = None, sleep: Callable[[float], None] = time.sleep):
+        self.base_url = base_url.rstrip("/") + "/"
+        self.tokens = tokens
+        self.retry = retry
+        self.session = session or requests.Session()
+        self.sleep = sleep
+        self.retries = 0            # total retries performed, reported in the run manifest
+
+    # ---------- core ----------
+    def _url(self, path_or_url: str) -> str:
+        return urljoin(self.base_url, path_or_url.lstrip("/")) if "://" not in path_or_url else path_or_url
+
+    def _backoff(self, attempt: int) -> float:
+        return min(self.retry.max_delay, self.retry.base_delay * 2 ** (attempt - 1)) * random.uniform(0.8, 1.2)
+
+    def request(self, method: str, path_or_url: str, *, auth: bool = True, stream: bool = False,
+                params: dict | None = None, json: dict | None = None) -> requests.Response:
+        url = self._url(path_or_url)
+        refreshed = False
+        for attempt in range(1, self.retry.max_attempts + 1):
+            headers = {"Authorization": f"Bearer {self.tokens.token()}"} if auth else {}
+            try:
+                response = self.session.request(method, url, headers=headers, params=params, json=json,
+                                                stream=stream, timeout=self.retry.timeout)
+            except (requests.ConnectionError, requests.Timeout) as exc:
+                wait, reason = self._backoff(attempt), f"network error ({exc.__class__.__name__})"
+            else:
+                status = response.status_code
+                if status < 400:
+                    return response
+                body = response.text[:500]
+                response.close()
+                if status == 401 and auth and not refreshed:
+                    refreshed, wait, reason = True, 0.0, "token rejected, getting a new one"
+                elif status == 403 and not auth and "AuthenticationFailed" in body:
+                    raise LinkExpired(status, "Download link expired or invalid")
+                elif status == 429:
+                    wait = min(self.retry.max_delay, float(response.headers.get("Retry-After") or self._backoff(attempt)))
+                    reason = "rate limited (429)"
+                elif status in RETRYABLE_STATUS:
+                    wait, reason = self._backoff(attempt), f"server error ({status})"
+                else:
+                    raise ApiError(status, _error_message(body))
+            if attempt == self.retry.max_attempts:
+                raise ApiError(None, f"Gave up after {attempt} attempts: {reason} on {method} {url.split('?')[0]}")
+            self.retries += 1
+            log.info("Retry %d/%d in %.1fs: %s", attempt, self.retry.max_attempts - 1, wait, reason)
+            self.sleep(wait)
+        raise AssertionError("unreachable")
+
+    # ---------- helpers ----------
+    def get_json(self, path: str, params: dict | None = None) -> dict:
+        return self.request("GET", path, params=params).json()
+
+    def post_json(self, path: str, body: dict) -> dict:
+        return self.request("POST", path, json=body).json()
+
+    def iter_pages(self, path: str, params: dict | None = None) -> Iterator[list[dict]]:
+        """Yield the `value` list of each page, following @odata.nextLink."""
+        body = self.get_json(path, params)
+        while True:
+            yield body.get("value", [])
+            next_link = body.get("@odata.nextLink")
+            if not next_link:
+                return
+            body = self.get_json(next_link)
+
+    def download(self, url: str, dest: Path) -> tuple[int, int]:
+        """Stream a GZIP JSON-lines file to `dest`; verify it and return (bytes, rows)."""
+        tmp = dest.with_name(dest.name + ".part")
+        with self.request("GET", url, auth=False, stream=True) as response, tmp.open("wb") as fh:
+            for chunk in response.iter_content(chunk_size=1 << 20):
+                fh.write(chunk)
+        try:
+            rows = count_gzip_lines(tmp)
+        except (OSError, EOFError, zlib.error) as exc:
+            tmp.unlink(missing_ok=True)
+            raise ApiError(None, f"Downloaded file is corrupt ({exc})") from exc
+        tmp.replace(dest)
+        return dest.stat().st_size, rows
+
+
+def count_gzip_lines(path: Path) -> int:
+    with gzip.open(path, "rb") as fh:
+        return sum(1 for line in fh if line.strip())
+
+
+def _error_message(body: str) -> str:
+    try:
+        error = json.loads(body).get("error", {})
+        return f"{error.get('code', '')}: {error.get('message', '')}".strip(": ") or body
+    except ValueError:
+        return body

@@ -1,0 +1,7 @@
+// Q13 account_devices: which devices the account signed in to recently (spread of a compromised account).
+DeviceLogonEvents
+| where Timestamp > ago(7d)
+| where AccountName in ({{ACCOUNTS}})
+| summarize Logons = count(), LastTime = max(Timestamp) by AccountName, DeviceName, ActionType
+| order by LastTime desc
+| take {{LIMIT}}

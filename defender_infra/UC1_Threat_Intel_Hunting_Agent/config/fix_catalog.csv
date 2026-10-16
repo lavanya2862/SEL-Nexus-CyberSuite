@@ -1,0 +1,23 @@
+software_name,app,action,winget_id,choco_id,match,processes,stage,note
+firefox,Mozilla Firefox,upgrade,Mozilla.Firefox,firefox,Mozilla Firefox*,firefox,1,Known exploited holes (KEV); biggest single source of findings
+acrobat_reader_dc,Adobe Acrobat Reader,upgrade,Adobe.Acrobat.Reader.32-bit,adobereader,Adobe Acrobat*,AcroRd32;Acrobat;AdobeCollabSync;RdrCEF,1,Lab has the 32-bit Reader DC; large download (several minutes)
+thunderbird,Mozilla Thunderbird,upgrade,Mozilla.Thunderbird,thunderbird,Mozilla Thunderbird*,thunderbird,1,Known exploited hole (KEV)
+winrar,WinRAR,upgrade,RARLab.WinRAR,winrar,WinRAR*,WinRAR;Rar;UnRAR,1,Holes used by ransomware gangs (CVE-2025-8088)
+7-zip,7-Zip,upgrade,7zip.7zip,7zip,7-Zip*,7zFM;7zG;7z,1,Known exploited hole (KEV)
+notepad++,Notepad++,upgrade,Notepad++.Notepad++,notepadplusplus,Notepad++*,notepad++,1,Known exploited hole (KEV)
+python,Python (old version),remove,,,Python {ver2}.*,python;pythonw,2,End-of-life: no fix will ever come - removed (nothing in the lab uses it)
+nodejs,Node.js 16,remove,,,Node.js*,node,2,End-of-life: removed (nothing in the lab uses it)
+powershell,PowerShell 7,upgrade,Microsoft.PowerShell,powershell-core,PowerShell 7*,pwsh,2,7.0 / 7.1 are end-of-life; updated to the current 7.x
+visual_studio_code,Visual Studio Code,upgrade,Microsoft.VisualStudioCode,vscode,Microsoft Visual Studio Code*,Code,3,
+meetings,Zoom Workplace,upgrade,Zoom.Zoom,zoom,Zoom*,Zoom,3,Also replaces the OpenSSL copy inside Zoom
+wireshark,Wireshark,upgrade,WiresharkFoundation.Wireshark,wireshark,Wireshark*,Wireshark;dumpcap,3,
+gimp,GIMP,replace,GIMP.GIMP.3,gimp,GIMP 2*,gimp-2.10;gimp,3,Old GIMP 2.10 removed and the current GIMP installed
+git,Git for Windows,upgrade,Git.Git,git,Git*,git;bash,3,Also replaces the OpenSSL copy inside Git
+vlc_media_player,VLC media player,upgrade,VideoLAN.VLC,vlc,VLC media player*,vlc,3,
+libreoffice,LibreOffice,upgrade,TheDocumentFoundation.LibreOffice,libreoffice-fresh,LibreOffice*,soffice;soffice.bin,3,Also replaces the Python and OpenSSL copies inside LibreOffice
+putty,PuTTY,upgrade,PuTTY.PuTTY,putty,PuTTY*,putty;pageant,3,
+openssl,OpenSSL (built into other apps),none,,,,,4,Not an app but a part inside other apps: Acrobat / GIMP / Git / LibreOffice / Python / Zoom (fixed by their own rows); Paint / Photos / OneDrive (update themselves); Azure Monitor agent (updated by Azure)
+edge_chromium-based,Microsoft Edge,upgrade,Microsoft.Edge,microsoft-edge,Microsoft Edge,msedge,3,Edge normally updates itself when the PC is on; this updates it now (the browser closes)
+.net,.NET (old version),remove,,,Microsoft * Runtime - {ver2}.*,dotnet,2,End-of-life: no fix will ever come - removed (nothing in the lab uses it); install .NET 8 only if a program needs it
+.net_core,.NET Core (old version),remove,,,Microsoft * Runtime - {ver2}.*,dotnet,2,End-of-life: no fix will ever come - removed (nothing in the lab uses it); install .NET 8 only if a program needs it
+asp.net_core,ASP.NET Core (old version),remove,,,Microsoft ASP.NET Core {ver2}.*,dotnet,2,End-of-life: no fix will ever come - removed (nothing in the lab uses it); install ASP.NET Core 8 only if a website needs it

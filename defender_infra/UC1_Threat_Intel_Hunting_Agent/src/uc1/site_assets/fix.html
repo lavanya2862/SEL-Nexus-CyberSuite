@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fix Centre · UC1</title>
+<script>try { const t = localStorage.getItem("uc1-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="stylesheet" href="/assets/live.css">
+<style>
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
+  @media (max-width: 860px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .kpi .v { font-size: 30px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--text-secondary); font-size: 12.5px; font-weight: 600; }
+  .kpi .s { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+  .bar2 { height: 8px; border-radius: 99px; background: var(--chip); overflow: hidden; margin-top: 8px; }
+  .bar2 div { height: 100%; background: var(--good); border-radius: 99px; transition: width .4s; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .btn { font: 600 13px/1 "Segoe UI", system-ui, sans-serif; border: 1px solid var(--border); background: var(--surface-2);
+         color: var(--text-primary); border-radius: 10px; padding: 9px 13px; cursor: pointer; }
+  .btn:hover:not(:disabled) { border-color: var(--series-1); }
+  .btn.primary { background: linear-gradient(120deg, #2a78d6, #4a3aa7); color: #fff; border-color: transparent; }
+  .btn.danger { color: var(--critical); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  select.btn { padding: 8px 10px; }
+  .worker { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border);
+            font-size: 13px; display: flex; gap: 10px; align-items: center; }
+  .worker .ldot { width: 9px; height: 9px; border-radius: 50%; background: var(--good); flex: none; }
+  .worker.busy .ldot { background: var(--warning); animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { .worker.busy .ldot { animation: none; } }
+  .st { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .st .dot { width: 9px; height: 9px; }
+  tr.stage td { background: var(--surface-2); font-weight: 700; color: var(--text-secondary); font-size: 12px;
+                text-transform: uppercase; letter-spacing: .06em; }
+  td.msg { max-width: 360px; color: var(--text-secondary); font-size: 12.5px; }
+  td.cb, th.cb { width: 28px; }
+  .probe { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 860px) { .probe { grid-template-columns: 1fr; } }
+  .probe .card { box-shadow: none; }
+  .ev { font-size: 12.5px; border-bottom: 1px solid var(--grid); padding: 6px 0; }
+  .ev time { color: var(--text-muted); font-variant-numeric: tabular-nums; margin-right: 8px; }
+  .steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 6px; }
+  @media (max-width: 860px) { .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .steps div { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px; font-size: 12.5px; }
+  .steps b { display: block; font-size: 13px; margin-bottom: 2px; }
+  .toast { position: fixed; left: 50%; top: 16px; transform: translateX(-50%); background: rgba(15, 20, 40, .95); color: #fff;
+           padding: 10px 16px; border-radius: 10px; font-size: 13px; z-index: 60; display: none; max-width: calc(100vw - 32px); }
+</style>
+</head>
+<body>
+<header class="hero"><div class="wrap">
+  <div class="crumbs"><a href="/">← Threat Command Centre</a><span>·</span><a href="/reports">Reports</a></div>
+  <h1>Fix Centre</h1>
+  <div class="meta" id="meta"></div>
+</div></header>
+<main class="wrap">
+  <div class="card" style="margin-top:16px">
+    <h2>How it works</h2>
+    <div class="steps">
+      <div><b>1 · Plan</b>Every run turns Defender's list into fixes: update, remove (end-of-life) or replace, from the fixed list <code>config/fix_catalog.csv</code>. The AI never chooses commands.</div>
+      <div><b>2 · You approve</b>Tick fixes and press Approve. Nothing runs without this.</div>
+      <div><b>3 · UC1 fixes</b>"Run approved fixes" sends a script to the lab VM through Azure Run Command or Defender Live Response. It closes the app, then updates or removes it.</div>
+      <div><b>4 · Defender confirms</b>Defender notices the change within 2–6 hours. The next UC1 run marks the fix <b>Verified ✓</b>.</div>
+    </div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Approve and run</h2>
+    <p class="hint">Select rows in the table below, or use the shortcuts. Run Command handles big installers (up to 90 min). Live Response stops after 10 min, so big apps like Adobe Reader can time out.</p>
+    <div class="actions">
+      <label class="muted" for="method" style="font-size:12.5px">Method</label>
+      <select class="btn" id="method">
+        <option value="runcommand">Azure Run Command</option>
+        <option value="liveresponse">Defender Live Response</option>
+      </select>
+      <button class="btn" id="approveSel" disabled>Approve selected</button>
+      <button class="btn" id="approveUrgent">Approve all urgent</button>
+      <button class="btn" id="approveAll">Approve everything</button>
+      <button class="btn danger" id="withdraw" disabled>Withdraw selected</button>
+      <span style="flex:1"></span>
+      <button class="btn" id="probe">Check computers (read-only)</button>
+      <button class="btn primary" id="run" disabled>▶ Run approved fixes</button>
+    </div>
+    <div class="worker" id="worker"><span class="ldot"></span><span id="workerText">Idle</span></div>
+  </div>
+
+  <div class="card" style="margin-top:16px" id="probeCard" hidden>
+    <h2>Computer check</h2>
+    <p class="hint">What the read-only check found on each lab VM: installer tools and installed versions of the apps in the catalogue.</p>
+    <div class="probe" id="probes"></div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Fix plan</h2>
+    <p class="hint" id="planHint"></p>
+    <div class="tbl-wrap"><table id="plan"></table></div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Activity</h2>
+    <p class="hint">Newest first: approvals, every fix, Defender's confirmation. Times are UTC.</p>
+    <div id="events"></div>
+  </div>
+</main>
+<div class="toast" id="toast" role="status"></div>
+<script>
+let V = /*__DATA__*/null;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const t16 = s => s ? String(s).replace("T", " ").slice(0, 16) : "";
+const STATUS = {
+  proposed: ["Proposed", "var(--neutral)"], approved: ["Approved", "var(--series-1)"], queued: ["Queued", "var(--warning)"],
+  running: ["Running…", "var(--warning)"], done: ["Fixed · waiting for Defender", "var(--serious)"],
+  verified: ["Verified ✓", "var(--good)"], failed: ["Failed", "var(--critical)"], still_there: ["Still listed by Defender", "var(--critical)"],
+  gone: ["Cleared before fix", "var(--neutral)"], info: ["No action", "var(--neutral)"]};
+const ACTION = {upgrade: "Update", remove: "Remove", replace: "Replace", none: "—"};
+const METHOD = {runcommand: "Run Command", liveresponse: "Live Response"};
+const selected = new Set();
+let methodTouched = false;
+
+function toast(text) { const t = $("toast"); t.textContent = text; t.style.display = "block"; clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = "none", 4000); }
+
+function render() {
+  const rows = V.rows || [], imp = V.impact || {}, tot = V.totals || {};
+  if (!methodTouched) $("method").value = V.default_method || "runcommand";
+  $("meta").innerHTML = `<span class="hchip">Plan from Defender inventory ${esc(t16(V.inventory_at)) || "—"} UTC</span>
+    <span class="hchip">Lab VMs only · every fix needs your approval</span>`;
+  const startFindings = (imp.findings_open || 0) + (imp.findings_cleared || 0), startKev = (imp.kev_open || 0) + (imp.kev_cleared || 0);
+  const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
+  const k = (l, v, s, p) => `<div class="card kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div>${p === undefined ? "" : `<div class="bar2"><div style="width:${p}%"></div></div>`}</div>`;
+  $("kpis").innerHTML =
+    k("Findings cleared", (imp.findings_cleared || 0).toLocaleString(), `${pct(imp.findings_cleared, startFindings)}% of ${startFindings.toLocaleString()} · confirmed by Defender`, pct(imp.findings_cleared, startFindings)) +
+    k("Known exploited (KEV) cleared", imp.kev_cleared || 0, `${imp.kev_open || 0} still open (counted per computer)`, pct(imp.kev_cleared, startKev)) +
+    k("Fixed, waiting for Defender", (tot.done || 0), `${tot.verified || 0} verified · ${tot.failed || 0} failed`) +
+    k("Waiting for you", (tot.proposed || 0), `${tot.approved || 0} approved, not run yet`);
+
+  const w = V.worker || {}, busy = w.running || w.elsewhere;
+  $("worker").classList.toggle("busy", !!busy);
+  $("workerText").textContent = w.running ? `${w.task === "probe" ? "Checking computers" : "Fixing"} · ${w.step || "…"}`
+    : w.elsewhere ? "Fixes are running from the command line…" : (w.message || "Idle: nothing running");
+  const approved = rows.filter(r => r.status === "approved").length;
+  $("run").textContent = `▶ Run approved fixes (${approved})`;
+  $("run").disabled = busy || !approved;
+  $("probe").disabled = busy;
+  ["approveUrgent", "approveAll"].forEach(id => $(id).disabled = busy);
+  for (const id of [...selected]) if (!rows.some(r => r.fix_id === id && canSelect(r))) selected.delete(id);
+  $("approveSel").disabled = busy || ![...selected].some(id => rows.find(r => r.fix_id === id && ["proposed", "failed", "still_there", "done"].includes(r.status)));
+  $("withdraw").disabled = busy || ![...selected].some(id => rows.find(r => r.fix_id === id && ["approved", "failed", "still_there"].includes(r.status)));
+
+  $("planHint").textContent = `${rows.length} rows · ${rows.filter(r => r.action !== "none").length} fixable · grouped by urgency. "Findings" = Defender vulnerability rows that the fix clears.`;
+  let html = `<thead><tr><th class="cb"><input type="checkbox" id="all" aria-label="Select all"></th><th>Computer</th><th>App · version</th><th>Do</th>
+    <th style="text-align:right">Findings</th><th>Exploited (KEV)</th><th>Status</th><th>Result</th></tr></thead><tbody>`;
+  const stages = V.stages || {};
+  for (const st of [1, 2, 3, 4]) {
+    const group = rows.filter(r => Number(r.stage) === st);
+    if (!group.length) continue;
+    html += `<tr class="stage"><td colspan="8">${esc(stages[st] || stages[String(st)] || "Stage " + st)} · ${group.length}</td></tr>`;
+    for (const r of group) {
+      const [label, color] = STATUS[r.status] || [r.status, "var(--neutral)"];
+      const kev = (r.kev_cves || []).map(c => `<span class="chip hot">${esc(c)}</span>`).join("") + (r.ransomware ? `<span class="chip hot">ransomware</span>` : "");
+      const who = r.approved_by ? `<div class="muted">${r.status === "approved" ? "approved" : "by"} ${esc(r.approved_by)} · ${esc(METHOD[r.method] || "")}</div>` : "";
+      const res = r.result || {};
+      const out = res.log && res.log.length ? `<details><summary>details</summary><pre>${esc(res.log.join("\n"))}</pre></details>` : "";
+      html += `<tr><td class="cb">${canSelect(r) ? `<input type="checkbox" data-id="${esc(r.fix_id)}" ${selected.has(r.fix_id) ? "checked" : ""} aria-label="Select ${esc(r.app)} on ${esc(r.device_name)}">` : ""}</td>
+        <td class="nw">${esc(r.device_name)}<div class="muted">${esc(r.opco || "")}</div></td>
+        <td><b>${esc(r.app)}</b> <span class="muted">${esc(r.version)}</span>${r.winget_id ? `<div class="muted"><code>${esc(r.winget_id)}</code></div>` : ""}</td>
+        <td class="nw">${ACTION[r.action] || esc(r.action)}</td>
+        <td class="num">${Number(r.findings || 0).toLocaleString()}</td>
+        <td>${kev || '<span class="muted">—</span>'}</td>
+        <td><span class="st"><span class="dot" style="background:${color}"></span>${label}</span>${who}</td>
+        <td class="msg">${esc(r.message || r.note || "")}${out}</td></tr>`;
+    }
+  }
+  $("plan").innerHTML = html + "</tbody>";
+  $("all").addEventListener("change", e => { rows.filter(canSelect).forEach(r => e.target.checked ? selected.add(r.fix_id) : selected.delete(r.fix_id)); render(); });
+  $("plan").querySelectorAll("input[data-id]").forEach(cb => cb.addEventListener("change", () => {
+    cb.checked ? selected.add(cb.dataset.id) : selected.delete(cb.dataset.id); render(); }));
+
+  const probes = Object.entries(V.probes || {});
+  $("probeCard").hidden = !probes.length;
+  $("probes").innerHTML = probes.map(([dev, p]) => `<div class="card"><h2>${esc(dev)}</h2>
+    <p class="hint">${esc(t16(p.checked_at))} UTC · ${esc(METHOD[p.method] || p.method || "")}</p>
+    ${p.error ? `<p style="color:var(--critical)">${esc(p.error)}</p>` : `
+    <div>winget: <b>${esc(p.winget || "not available")}</b> · Chocolatey: <b>${p.choco ? "installed" : "not installed"}</b> · PowerShell ${esc(p.ps || "")}${p.reboot_pending ? ' · <b style="color:var(--serious)">restart pending</b>' : ""}</div>
+    <details style="margin-top:6px"><summary>${(p.apps || []).length} catalogue apps installed</summary><ul class="clean">${(p.apps || []).map(a => `<li>${esc(String(a).replace("|", " · "))}</li>`).join("")}</ul></details>`}</div>`).join("");
+
+  $("events").innerHTML = (V.events || []).map(e => `<div class="ev"><time>${esc(t16(e.at))}</time>${esc(e.text)}</div>`).join("") || '<p class="empty">Nothing yet.</p>';
+}
+const canSelect = r => r.action !== "none" && !["verified", "queued", "running", "gone"].includes(r.status);
+
+async function post(path, body) {
+  try {
+    const r = await fetch(path, {method: "POST", headers: {"X-UC1": "fix", "Content-Type": "application/json"}, body: JSON.stringify(body || {})});
+    const j = await r.json();
+    if (!r.ok) { toast(j.error || "Something went wrong"); return null; }
+    if (j.view) { V = j.view; render(); }
+    return j;
+  } catch (e) { toast("The website is not answering"); return null; }
+}
+const method = () => $("method").value;
+$("method").addEventListener("change", () => methodTouched = true);
+$("approveSel").addEventListener("click", async () => {
+  const j = await post("/api/fix/approve", {ids: [...selected], method: method()});
+  if (j) { toast(`${j.approved.length} fix(es) approved`); selected.clear(); render(); }
+});
+$("approveUrgent").addEventListener("click", async () => {
+  const ids = V.rows.filter(r => Number(r.stage) === 1 && r.action !== "none" && ["proposed", "failed", "still_there"].includes(r.status)).map(r => r.fix_id);
+  if (!ids.length) return toast("No urgent fixes waiting");
+  const j = await post("/api/fix/approve", {ids, method: method()}); if (j) toast(`${j.approved.length} urgent fix(es) approved`);
+});
+$("approveAll").addEventListener("click", async () => {
+  const ids = V.rows.filter(r => r.action !== "none" && ["proposed", "failed", "still_there"].includes(r.status)).map(r => r.fix_id);
+  if (!ids.length) return toast("Nothing waiting for approval");
+  if (!confirm(`Approve all ${ids.length} fixes on the lab VMs?`)) return;
+  const j = await post("/api/fix/approve", {ids, method: method()}); if (j) toast(`${j.approved.length} fix(es) approved`);
+});
+$("withdraw").addEventListener("click", async () => {
+  const j = await post("/api/fix/unapprove", {ids: [...selected]}); if (j) { toast(`${j.withdrawn.length} withdrawn`); selected.clear(); render(); }
+});
+$("run").addEventListener("click", async () => {
+  const n = V.rows.filter(r => r.status === "approved").length;
+  if (!confirm(`Run ${n} approved fix(es) on the lab VMs now? Apps will be closed, then updated or removed.`)) return;
+  const j = await post("/api/fix/run", {}); if (j) toast(j.message);
+});
+$("probe").addEventListener("click", async () => { const j = await post("/api/fix/probe", {method: method()}); if (j) toast(j.started ? "Checking both computers…" : j.message); });
+
+async function poll() {
+  if (document.querySelector("details[open]")) return;      // don't collapse what the user is reading
+  try { V = await (await fetch("/api/fix", {cache: "no-store"})).json(); render(); } catch (e) { /* live.js shows the stopped state */ }
+}
+render();
+setInterval(poll, 5000);
+</script>
+<script src="/assets/live.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+id: discovery_burst
+label: Discovery / reconnaissance commands
+description: A burst of enumeration commands (whoami, net group, systeminfo...). Benign when run by an approved admin tool.
+match:
+  any_title: ["discovery", "reconnaissance", "enumeration"]
+  any_technique: ["T1087", "T1069", "T1082", "T1057", "T1016", "T1049"]
+queries:
+  - Q01_process_tree
+  - Q05_logon_summary
+  - Q09_other_alerts_same_device
+ti: {}
+history: {same: [playbook, device], days: 90}
+watchlists: [approved_admin_tools, service_accounts, vip_users]
+guardrails: [credential_access, privileged_account, injection_marker, high_no_close]
+allowed_verdicts: [likely_true_positive, likely_false_positive, benign_positive, needs_investigation]
+containment_options: [isolate_device, collect_investigation_package]
+notes: The context test. Approved admin account from an approved path = benign positive; a normal user from Downloads = needs investigation.

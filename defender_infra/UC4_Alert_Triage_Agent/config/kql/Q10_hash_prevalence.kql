@@ -1,0 +1,6 @@
+// Q10 hash_prevalence: how many devices have seen each suspect file hash (rare = more suspicious).
+DeviceFileEvents
+| where Timestamp > ago(30d)
+| where SHA256 in ({{HASHES}})
+| summarize Devices = dcount(DeviceId), FileNames = make_set(FileName, 5), LastSeen = max(Timestamp) by SHA256
+| take {{LIMIT}}

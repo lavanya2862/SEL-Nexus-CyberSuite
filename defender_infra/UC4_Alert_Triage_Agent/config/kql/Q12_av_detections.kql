@@ -1,0 +1,9 @@
+// Q12 av_detections: antivirus detections on the device around the alert.
+DeviceEvents
+| where Timestamp between (datetime({{START}}) .. datetime({{END}}))
+| where DeviceId in ({{DEVICE_IDS}}) or DeviceName in ({{DEVICE_NAMES}})
+| where ActionType startswith "Antivirus"
+| project Timestamp, DeviceName, ActionType, FileName, FolderPath, SHA256,
+          InitiatingProcessFileName, InitiatingProcessAccountName, AdditionalFields
+| order by Timestamp asc
+| take {{LIMIT}}

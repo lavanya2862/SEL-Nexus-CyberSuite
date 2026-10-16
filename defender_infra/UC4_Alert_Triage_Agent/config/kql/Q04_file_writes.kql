@@ -1,0 +1,9 @@
+// Q04 file_writes: files created or modified on the device around the alert.
+DeviceFileEvents
+| where Timestamp between (datetime({{START}}) .. datetime({{END}}))
+| where DeviceId in ({{DEVICE_IDS}}) or DeviceName in ({{DEVICE_NAMES}})
+| where ActionType in ("FileCreated", "FileModified")
+| project Timestamp, DeviceName, ActionType, FileName, FolderPath, SHA256,
+          InitiatingProcessFileName, InitiatingProcessAccountName
+| order by Timestamp asc
+| take {{LIMIT}}

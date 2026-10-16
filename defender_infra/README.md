@@ -1,0 +1,22 @@
+# Defender & Infrastructure: a SEL Nexus CyberSuite module
+
+Three AI-assisted security tools built on Microsoft Defender for Endpoint, plus one portal that brings them together.
+This is the **Defender & Infrastructure** module of SEL Nexus CyberSuite. People sign in on the suite's shared sign-in
+page (`../login`, http://127.0.0.1:8000), which also leads to the other module, Code Vulnerabilities.
+
+| Folder | What it does |
+|---|---|
+| [Unified_Cyber_Portal](Unified_Cyber_Portal/README.md) | **Defender & Infrastructure** website (overview, notifications, help chat) for the three tools below |
+| [UC1_Threat_Intel_Hunting_Agent](UC1_Threat_Intel_Hunting_Agent/README.md) | Collects public threat intelligence, checks it against our devices, hunts in Defender, rates risk, and fixes vulnerable apps after approval |
+| [UC3_MDE_Vuln_Extraction](UC3_MDE_Vuln_Extraction/README.md) | Exports 100% of Defender vulnerability data (beyond the KQL row limit) into a data lake, dashboard and Excel summary |
+| [UC4_Alert_Triage_Agent](UC4_Alert_Triage_Agent/README.md) | Triages Defender / Sentinel incidents and recommends close, escalate or contain, with the evidence |
+
+## Getting started
+
+1. Set up UC1, UC3 and UC4 (each has its own `.venv` and `.env`; copy `config/settings.example.env` to `.env` and fill it in).
+2. Set up the portal (see its README). `Unified_Cyber_Portal/config/portal.env` points it at the shared sign-in page
+   (`PORTAL_LOGIN_URL`) and its accounts (`PORTAL_AUTH_DIR`).
+3. Double-click **../Start_All.cmd** to start the whole suite and open the sign-in page. **Start_Defender_Infra.cmd**
+   starts only this module (and the sign-in page if it isn't running). **Stop_Defender_Infra.cmd** stops this module.
+
+Secrets (`.env`), data, logs and local accounts are never committed. Without a filled-in `.env`, a tool has nothing to show.

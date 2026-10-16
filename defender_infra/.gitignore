@@ -1,0 +1,31 @@
+# What is NOT pushed to GitHub.
+
+# ---- Passwords and keys (Defender client secret, Gemini key, portal sign-in key)
+.env
+*.env
+!*.example.env
+*.key
+*.pem
+*.pfx
+*.cer
+*.crt
+
+# ---- Company data, databases, sign-in accounts and logs
+data/
+logs/
+*.log
+*.duckdb
+*.parquet
+
+# ---- Rebuilt on each computer
+.venv/
+node_modules/
+dist/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# ---- Local tool and editor state (Claude preview config, design-review screenshots)
+.claude/
+.impeccable/

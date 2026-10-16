@@ -1,0 +1,17 @@
+// name: IOC sweep - URLs
+// kind: ioc
+// ioc_type: url
+// technique: T1105
+let urls = dynamic([{{VALUES}}]);
+union
+  (DeviceNetworkEvents
+   | where Timestamp > ago({{LOOKBACK}}d)
+   | where RemoteUrl in~ (urls)
+   | project Timestamp, DeviceId, DeviceName, ActionType, Url = RemoteUrl, RemoteIP,
+             InitiatingProcessFileName, InitiatingProcessAccountName),
+  (DeviceFileEvents
+   | where Timestamp > ago({{LOOKBACK}}d)
+   | where FileOriginUrl in~ (urls)
+   | project Timestamp, DeviceId, DeviceName, ActionType, Url = FileOriginUrl, FileName, SHA256,
+             InitiatingProcessFileName, InitiatingProcessAccountName)
+| take 1000

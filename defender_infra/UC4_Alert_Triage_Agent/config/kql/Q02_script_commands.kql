@@ -1,0 +1,9 @@
+// Q02 script_commands: script-host command lines on the device (PowerShell, cmd, wscript, cscript).
+DeviceProcessEvents
+| where Timestamp between (datetime({{START}}) .. datetime({{END}}))
+| where DeviceId in ({{DEVICE_IDS}}) or DeviceName in ({{DEVICE_NAMES}})
+| where FileName in~ ("powershell.exe", "pwsh.exe", "cmd.exe", "wscript.exe", "cscript.exe")
+| project Timestamp, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| order by Timestamp asc
+| take {{LIMIT}}

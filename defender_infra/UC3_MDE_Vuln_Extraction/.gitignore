@@ -1,0 +1,21 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# Secrets and credentials - never commit
+.env
+*.pem
+*.pfx
+*.key
+*.cer
+*.crt
+
+# Data and logs (can contain real vulnerability data)
+data/
+logs/
+
+# Power BI files embed data - commit only the .pbit template
+*.pbix

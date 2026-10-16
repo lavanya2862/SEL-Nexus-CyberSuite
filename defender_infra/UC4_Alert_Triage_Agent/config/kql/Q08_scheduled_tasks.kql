@@ -1,0 +1,9 @@
+// Q08 scheduled_tasks: scheduled tasks created from the command line on the device.
+DeviceProcessEvents
+| where Timestamp between (datetime({{START}}) .. datetime({{END}}))
+| where DeviceId in ({{DEVICE_IDS}}) or DeviceName in ({{DEVICE_NAMES}})
+| where FileName =~ "schtasks.exe" and ProcessCommandLine contains "/create"
+| project Timestamp, DeviceName, AccountName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| order by Timestamp asc
+| take {{LIMIT}}

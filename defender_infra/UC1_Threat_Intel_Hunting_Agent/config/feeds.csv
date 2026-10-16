@@ -1,0 +1,10 @@
+feed,enabled,notes
+attack,yes,MITRE ATT&CK catalogue (refreshed weekly)
+kev,yes,CISA Known Exploited Vulnerabilities
+nvd,yes,NVD CVE details (faster with NVD_API_KEY)
+ncsc_nl,yes,NCSC-NL security advisories (RSS)
+cert_eu,yes,CERT-EU security advisories (RSS)
+msrc,yes,Microsoft monthly security updates
+abusech,yes,"ThreatFox, URLhaus, MalwareBazaar (needs ABUSECH_AUTH_KEY)"
+otx,yes,AlienVault OTX (optional; needs OTX_API_KEY)
+lab_test,yes,Harmless lab TEST indicators from lab_test_iocs.csv

@@ -1,0 +1,23 @@
+id: sentinel_signin
+label: Sentinel sign-in / account incident
+description: Sign-in incidents raised by Sentinel rules (disabled-account tries, impossible travel, risky sign-ins, MFA fatigue).
+scope: sentinel
+match:
+  any_title: ["sign-in", "signin", "sign in", "disabled account", "impossible travel", "anonymous ip", "mfa", "risky",
+              "password spray", "brute force"]
+  any_technique: ["T1078", "T1110"]
+queries:
+  - Q20_signin_summary
+  - Q22_office_activity
+  - Q21_security_events
+ti:
+  ips_from: [evidence]
+history: {same: [playbook, account], days: 90}
+watchlists: [vip_users, service_accounts, approved_scanners]
+guardrails: [privileged_account, high_ti_match, signin_success_after_failures, injection_marker, high_no_close]
+allowed_verdicts: [likely_true_positive, likely_false_positive, benign_positive, needs_investigation]
+containment_options: [disable_user, revoke_sessions, block_indicator]
+notes: >-
+  Failed tries only, from a known scanner or a service account = low. A success from the same IP after the failures,
+  or the same IP touching many accounts, = escalate (possible account takeover). No device: the response is about
+  the account (reset password, sign out everywhere), which a person does.

@@ -1,0 +1,20 @@
+// Q20 signin_summary (Sentinel): sign-ins of the incident's accounts or IP addresses, per account + IP + place.
+// The Training Lab loads its sample data through Microsoft's older log API, which adds "_s" to column names,
+// so each column is read under both spellings.
+SigninLogs_CL
+| where TimeGenerated between (datetime({{START}}) .. datetime({{END}}))
+| extend Upn = coalesce(tostring(column_ifexists("UserPrincipalName_s", "")), tostring(column_ifexists("UserPrincipalName", ""))),
+         Ip = coalesce(tostring(column_ifexists("IPAddress_s", "")), tostring(column_ifexists("IPAddress", ""))),
+         Result = coalesce(tostring(column_ifexists("ResultType_s", "")), tostring(column_ifexists("ResultType", ""))),
+         App = coalesce(tostring(column_ifexists("AppDisplayName_s", "")), tostring(column_ifexists("AppDisplayName", ""))),
+         Place = coalesce(tostring(column_ifexists("Location_s", "")), tostring(column_ifexists("Location", ""))),
+         Risk = coalesce(tostring(column_ifexists("RiskLevelDuringSignIn_s", "")), tostring(column_ifexists("RiskLevelDuringSignIn", "")))
+| where (isnotempty(Upn) and Upn in~ ({{UPNS}})) or (isnotempty(Ip) and Ip in ({{IPS}}))
+| summarize Attempts = count(), Successes = countif(Result == "0"), Failures = countif(Result != "0"),
+            DisabledAccountTries = countif(Result == "50057"),
+            FirstFail = minif(TimeGenerated, Result != "0"), LastSuccess = maxif(TimeGenerated, Result == "0"),
+            Apps = make_set(App, 5), Results = make_set(Result, 5), Risks = make_set(Risk, 3)
+          by Upn, Ip, Place
+| extend SuccessAfterFailures = Successes > 0 and Failures > 0 and LastSuccess >= FirstFail   // >=: same-second rows
+| order by Attempts desc
+| take {{LIMIT}}

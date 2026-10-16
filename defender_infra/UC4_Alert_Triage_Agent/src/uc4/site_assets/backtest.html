@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security Assistant · Accuracy</title>
+<link rel="stylesheet" href="/assets/style.css">
+<script src="/assets/app.js"></script>
+</head>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+const D = /*__DATA__*/null;
+const B = D.backtest || { sets: {} };
+const NAMES = { guide: "Microsoft GUIDE incidents (real, analyst-graded, anonymised)", lab: "Our lab incidents (truth = the test we ran)" };
+const GL = { TP: "True positive", BP: "Expected activity", FP: "False positive", human: "Needs review" };
+
+function pct(v) { return v === null || v === undefined ? "-" : v + "%"; }
+function kpi(label, value, sub, color) {
+  return h("div", { class: "card kpi", style: { "--k": color } }, h("div", { class: "l" }, label), h("div", { class: "v" }, value), h("div", { class: "s" }, sub));
+}
+function matrix(m) {
+  const preds = ["TP", "BP", "FP", "human"];
+  return h("table", { class: "matrix" },
+    h("thead", {}, h("tr", {}, h("th", {}, "Truth ↓  /  Agent →"), preds.map(p => h("th", {}, GL[p])))),
+    h("tbody", {}, Object.entries(m).map(([t, row]) => h("tr", {}, h("th", {}, GL[t]),
+      preds.map(p => h("td", { class: p === t ? "hit" : null, style: { color: t === "TP" && (p === "BP" || p === "FP") && row[p] ? "var(--tp)" : null } }, String(row[p])))))));
+}
+function setCard(name, ev) {
+  return h("div", { class: "card" }, h("h2", {}, NAMES[name] || name),
+    h("p", { class: "hint" }, `${ev.n} incidents · AI used on ${ev.ai_used}`),
+    h("div", { class: "grid kpis" },
+      kpi("Missed true positives", String(ev.missed_true_positives), "target: 0 (a real attack called false positive / expected activity)", ev.missed_true_positives ? "var(--tp)" : "var(--fp)"),
+      kpi("Accuracy when it decides", pct(ev.accuracy_when_decided_pct), "agreement with the truth", "var(--ink)"),
+      kpi("Decided by itself", pct(ev.decided_pct), "the rest went to a human", "var(--human)"),
+      kpi("False positives / expected activity it could close", pct(ev.false_alarms_closable_pct), "the time-saving potential", "var(--fp)"),
+      ev.baseline_history_accuracy_pct !== null && ev.baseline_history_accuracy_pct !== undefined ?
+        kpi("No-AI baseline accuracy", pct(ev.baseline_history_accuracy_pct), `history only, decides ${pct(ev.baseline_history_decided_pct)}`, "var(--muted)") : null),
+    h("div", { class: "tablewrap" }, matrix(ev.confusion)));
+}
+const app = document.getElementById("app");
+app.appendChild(topBar("backtest", D.status));
+const sets = Object.entries(B.sets || {});
+app.appendChild(h("main", {}, h("div", { class: "wrap" },
+  h("h1", {}, "Accuracy"),
+  h("p", { class: "lede" }, "How often the agent's recommendation matches the right answer. Most important: it must never call a true positive a false positive or expected activity. " +
+    "Refresh with `python -m uc4 backtest`."),
+  sets.length ? h("div", { class: "grid" }, sets.map(([n, ev]) => setCard(n, ev))) :
+    h("div", { class: "card" }, h("div", { class: "empty" }, "No backtest yet. Download GUIDE from Kaggle and run `python -m uc4 backtest`.")),
+  (B.lab_detail || []).length ? h("div", { class: "card", style: { marginTop: "14px" } }, h("h2", {}, "Lab incidents, one by one"),
+    h("div", { class: "tablewrap" }, h("table", {},
+      h("thead", {}, h("tr", {}, ["Test we ran", "Expected", "Agent said", "Escalated", "Result"].map(t => h("th", {}, t)))),
+      h("tbody", {}, B.lab_detail.map(r => h("tr", { class: "click", onclick: () => location.href = "/incident/" + encodeURIComponent(r.incident_id) },
+        h("td", {}, r.name, h("div", { class: "small muted" }, "wave " + r.wave)),
+        h("td", { class: "small" }, String(r.expected).split("|").map(v => (VERDICT[v] || {}).short || v).join(" or ")),
+        h("td", {}, verdictPill(r.verdict)), h("td", {}, r.escalate ? "yes" : "no"),
+        h("td", {}, h("span", { class: "chip " + (r.missed_true_positive ? "guard" : r.correct ? "ok" : "warn") },
+          r.missed_true_positive ? "MISSED" : r.correct ? "correct" : "off")))))))) : null,
+  (B.noisy_detectors || []).length ? h("div", { class: "card", style: { marginTop: "14px" } }, h("h2", {}, "Noisy detectors (tuning list)"),
+    h("p", { class: "hint" }, "GUIDE detectors whose incidents were false positives or expected activity at least 80% of the time - tuning them is a free quick win."),
+    h("table", {}, h("tbody", {}, B.noisy_detectors.map(d => h("tr", {}, h("td", {}, "detector " + d.detector),
+      h("td", { class: "num" }, d.incidents + " incidents"), h("td", { class: "num" }, d.harmless_pct + "% not real")))))) : null,
+  B.generated_at ? h("p", { class: "small muted" }, "Computed " + B.generated_at) : null)));
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+// Q03 process_network: outbound connections from the device around the alert.
+DeviceNetworkEvents
+| where Timestamp between (datetime({{START}}) .. datetime({{END}}))
+| where DeviceId in ({{DEVICE_IDS}}) or DeviceName in ({{DEVICE_NAMES}})
+| where ActionType == "ConnectionSuccess"
+| project Timestamp, DeviceName, InitiatingProcessFileName, InitiatingProcessAccountName,
+          RemoteIP, RemotePort, RemoteUrl
+| order by Timestamp asc
+| take {{LIMIT}}

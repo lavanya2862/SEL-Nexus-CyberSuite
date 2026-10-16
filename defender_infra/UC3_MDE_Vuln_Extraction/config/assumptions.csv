@@ -1,0 +1,6 @@
+name,value,unit,meaning
+old_hours_per_cycle,12,hours,"ASSUMPTION - analyst time per reporting cycle the old way: run many sliced KQL queries, export each, merge and check in Excel. Replace with a measured baseline from the vulnerability team."
+old_report_cycle_days,7,days,"ASSUMPTION - how often the old manual report is produced (weekly). A new critical can wait up to this long before it appears in a report."
+old_dashboard_days,2,days,"ASSUMPTION - elapsed time to produce the executive dashboard the old way."
+review_minutes_new,15,minutes,"ASSUMPTION - time someone spends reviewing the automatic dashboard each cycle."
+example_estate_rows,2000000,rows,"ILLUSTRATION - vulnerability rows in a large company estate, used only to show how many KQL queries the old way would need."

@@ -1,0 +1,11 @@
+// name: Unusual access to LSASS memory (credential theft)
+// kind: behaviour
+// technique: T1003.001
+DeviceEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "OpenProcessApiCall" and FileName =~ "lsass.exe"
+| where InitiatingProcessFileName !in~ ("MsMpEng.exe", "MsSense.exe", "SenseNdr.exe", "svchost.exe", "csrss.exe",
+                                        "wininit.exe", "services.exe", "WmiPrvSE.exe", "lsass.exe", "taskmgr.exe")
+| project Timestamp, DeviceId, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName,
+          InitiatingProcessCommandLine, AdditionalFields
+| take 500

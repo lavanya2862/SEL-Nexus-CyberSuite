@@ -1,0 +1,8 @@
+// Q05 logon_summary: logon outcomes per account/type on the device around the alert.
+DeviceLogonEvents
+| where Timestamp between (datetime({{START}}) .. datetime({{END}}))
+| where DeviceId in ({{DEVICE_IDS}}) or DeviceName in ({{DEVICE_NAMES}})
+| summarize Logons = count(), LastTime = max(Timestamp), RemoteIPs = make_set(RemoteIP, 10)
+          by AccountName, ActionType, LogonType
+| order by Logons desc
+| take {{LIMIT}}

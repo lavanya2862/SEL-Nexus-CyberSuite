@@ -1,0 +1,3 @@
+ioc_type,value,note
+domain,example.com,LAB TEST ONLY: harmless IANA example domain visited by scripts/lab/Test-LabIoc.ps1
+sha256,275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f,LAB TEST ONLY: EICAR antivirus test file (harmless) from scripts/lab/Test-Eicar.ps1

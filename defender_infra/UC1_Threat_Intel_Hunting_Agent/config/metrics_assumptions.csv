@@ -1,0 +1,4 @@
+setting,value,meaning
+manual_minutes_per_threat,120,ASSUMPTION: analyst time to research one new threat and judge relevance (confirm with the team)
+manual_minutes_per_hunt,45,ASSUMPTION: analyst time to write and run one hunt query and review results
+manual_minutes_per_report,240,ASSUMPTION: analyst time to write one threat-hunting report

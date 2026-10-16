@@ -1,0 +1,106 @@
+import type { ReactNode } from 'react'
+import { AlertTriangle } from 'lucide-react'
+import type { ChartTokens } from '@/lib/theme'
+import { chartTokens, statusColor, useTheme } from '@/lib/theme'
+import { Panel } from '@/components/kit'
+export { Card, DTable, legendStyle } from '@/components/kit'
+import { Skeleton } from '@/components/ui/skeleton'
+import { ago, num } from '@/lib/format'
+import { SEVS, daysBetween, type Sev, type Uc3Data, type Uc3View } from '@/lib/uc3'
+import { useRuns } from '@/lib/runs'
+import { cn } from '@/lib/utils'
+
+export function Uc3Header({ title, description, data, view, actions, hideSev }: {
+  title: string; description: string; data: Uc3Data; view?: Uc3View; actions?: ReactNode; hideSev?: boolean
+}) {
+  const { openDrawer } = useRuns()
+  const age = daysBetween(String(data.meta.snapshot), new Date().toISOString().slice(0, 10))
+  const failed = data.status && (data.status.status === 'FAIL' || data.status.status === 'ERROR')
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+          <p className="mt-1 text-sm text-ink-3">
+            {description} · snapshot {String(data.meta.snapshot)}, built {ago(data.meta.built_at)}
+            {view && view.opco !== 'all' ? ` · ${view.opco}` : ''}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">{actions}</div>
+      </div>
+      {(failed || age > 1) && (
+        <div className="flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm" style={{ borderColor: failed ? statusColor.critical : statusColor.warning }}>
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" style={{ color: failed ? statusColor.critical : statusColor.warning }} />
+          <span>
+            {failed
+              ? <>The latest run did not publish new data: {data.status?.message}. You are looking at the last good snapshot.</>
+              : <>This data is {age} days old.</>}{' '}
+            <button onClick={() => openDrawer('uc3')} className="font-medium underline underline-offset-4">Run the vulnerability update now</button>
+          </span>
+        </div>
+      )}
+      {view && !hideSev && <SevChips view={view} />}
+    </div>
+  )
+}
+
+export function SevChips({ view }: { view: Uc3View }) {
+  const { theme } = useTheme()
+  const t = chartTokens[theme]
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <span className="text-ink-3">Software vulnerabilities by severity</span>
+      {SEVS.map((s) => {
+        const on = view.sevs.has(s)
+        return (
+          <button
+            key={s}
+            onClick={() => view.toggleSev(s)}
+            aria-pressed={on}
+            className={cn('flex items-center gap-1.5 rounded-full border px-3 py-1 transition-colors', on ? 'border-hairline bg-panel text-ink' : 'border-dashed border-hairline text-ink-3 line-through')}
+          >
+            <span className="size-2 rounded-full" style={{ background: (t.severity as Record<string, string>)[s], opacity: on ? 1 : 0.35 }} />
+            {s}
+          </button>
+        )
+      })}
+      <span className="ml-1 text-ink-3">· {num(view.rows.length)} shown</span>
+    </div>
+  )
+}
+
+/** Severity-stacked bar series (UC3's stackedSeries): Critical ends the stack so it reads first. */
+export function sevStack<C>(t: ChartTokens, sevs: Sev[], cats: C[], valueOf: (c: C, s: Sev) => number, horizontal: boolean, totals?: number[]) {
+  const order = [...sevs].reverse()
+  return order.map((s, i) => ({
+    name: s, type: 'bar' as const, stack: 't', barMaxWidth: horizontal ? 16 : 46,
+    data: cats.map((c) => valueOf(c, s)),
+    itemStyle: {
+      color: (t.severity as Record<string, string>)[s], borderColor: t.surface, borderWidth: 1,
+      borderRadius: i === order.length - 1 ? (horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]) : 0,
+    },
+    label: totals && i === order.length - 1
+      ? { show: true, position: horizontal ? ('right' as const) : ('top' as const), color: t.ink, fontSize: 11.5, fontWeight: 600, formatter: (p: { dataIndex: number }) => num(totals[p.dataIndex]) }
+      : undefined,
+  }))
+}
+
+
+
+export function Uc3Loading({ error }: { error?: unknown }) {
+  if (error)
+    return (
+      <Panel className="p-6">
+        <h2 className="font-semibold">Vulnerability data is not available</h2>
+        <p className="mt-1 text-sm text-ink-3">{String((error as Error)?.message ?? error)}</p>
+      </Panel>
+    )
+  return (
+    <div className="flex flex-col gap-5">
+      <Skeleton className="h-16 w-96 rounded-xl" />
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-6">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}</div>
+      <Skeleton className="h-80 rounded-2xl" />
+    </div>
+  )
+}
+

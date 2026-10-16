@@ -1,0 +1,13 @@
+// Q21 security_events (Sentinel): Windows security events of the incident's accounts, counted per event type
+// and computer. Column names are read under both spellings (see Q20).
+SecurityEvent_CL
+| where TimeGenerated between (datetime({{START}}) .. datetime({{END}}))
+| extend Acct = coalesce(tostring(column_ifexists("Account_s", "")), tostring(column_ifexists("Account", ""))),
+         Computer_ = coalesce(tostring(column_ifexists("Computer_s", "")), tostring(column_ifexists("Computer", ""))),
+         Event = coalesce(tostring(column_ifexists("EventID_s", "")), tostring(column_ifexists("EventID_d", "")), tostring(column_ifexists("EventID", ""))),
+         What = coalesce(tostring(column_ifexists("Activity_s", "")), tostring(column_ifexists("Activity", "")))
+| extend ShortName = tostring(split(Acct, "\\")[-1])
+| where (isnotempty(ShortName) and ShortName in~ ({{ACCOUNTS}})) or (isnotempty(Acct) and Acct in~ ({{UPNS}}))
+| summarize Events = count(), FirstSeen = min(TimeGenerated), LastSeen = max(TimeGenerated) by Acct, Computer_, Event, What
+| order by Events desc
+| take {{LIMIT}}

@@ -1,0 +1,13 @@
+// Q06 logon_failures_then_success: per account, count failures and whether a success followed in the window.
+DeviceLogonEvents
+| where Timestamp between (datetime({{START}}) .. datetime({{END}}))
+| where DeviceId in ({{DEVICE_IDS}}) or DeviceName in ({{DEVICE_NAMES}})
+| summarize Failures = countif(ActionType == "LogonFailed"),
+            Successes = countif(ActionType == "LogonSuccess"),
+            FirstFail = minif(Timestamp, ActionType == "LogonFailed"),
+            FirstSuccessAfter = minif(Timestamp, ActionType == "LogonSuccess")
+          by AccountName
+| where Failures > 0
+| extend SuccessAfterBurst = Successes > 0 and FirstSuccessAfter > FirstFail
+| order by Failures desc
+| take {{LIMIT}}

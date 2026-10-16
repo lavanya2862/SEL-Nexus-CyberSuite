@@ -1,0 +1,33 @@
+# What is NOT pushed to GitHub. Each module can add its own .gitignore (defender_infra/.gitignore does).
+
+# ---- Passwords, keys and accounts (the sign-in page's accounts, session key and sign-in log)
+login/data/
+.env
+*.env
+!*.example.env
+!login/config/login.env
+*.key
+*.pem
+*.pfx
+*.cer
+*.crt
+
+# ---- Company data, databases and logs
+data/
+logs/
+*.log
+*.duckdb
+*.parquet
+
+# ---- Rebuilt on each computer
+.venv/
+node_modules/
+dist/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# ---- Local tool and editor state
+.claude/
+.impeccable/

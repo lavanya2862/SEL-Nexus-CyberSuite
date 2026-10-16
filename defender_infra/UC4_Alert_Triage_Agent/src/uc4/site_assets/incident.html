@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security Assistant · Alert</title>
+<link rel="stylesheet" href="/assets/style.css">
+<script src="/assets/app.js"></script>
+</head>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+const D = /*__DATA__*/null;
+const P = D.packet, V = D.verdict, Q = D.queries || [], TI = D.ti || [];
+const CTX = D.context || {}, HIST = D.history || {}, INJ = D.injection || [], PB = D.playbook || {};
+document.title = "Alert · " + (P.title || "Incident");
+
+const CONTAIN_LABELS = { isolate_device: "Isolate the device", release_device: "Release from isolation",
+  disable_user: "Disable the user account", revoke_sessions: "Revoke the user's sessions",
+  block_indicator: "Block the bad file / URL / IP", collect_investigation_package: "Collect an investigation package",
+  remove_inbox_rule: "Remove the suspicious mailbox rule" };
+
+function section(title, hint, ...body) {
+  return h("div", { class: "card" }, h("h2", {}, title), hint ? h("p", { class: "hint" }, hint) : null, ...body);
+}
+function rowsTable(rows) {
+  if (!rows || !rows.length) return h("div", { class: "muted small" }, "no rows");
+  const cols = Object.keys(rows[0]).slice(0, 9);
+  return h("div", { class: "tablewrap" }, h("table", {},
+    h("thead", {}, h("tr", {}, cols.map(c => h("th", {}, c)))),
+    h("tbody", {}, rows.map(r => h("tr", {}, cols.map(c => h("td", { class: "small" },
+      typeof r[c] === "object" && r[c] !== null ? JSON.stringify(r[c]) : String(r[c] ?? "").slice(0, 300))))))));
+}
+
+function liveStatus() {
+  const done = (D.actions || []).filter(a => a.status === "done");
+  const last = done.slice(-1)[0];
+  if (!last) return P.status || "-";
+  return { auto_resolve: "resolved (by the assistant)", close_incident: "resolved (by you)", auto_escalate: "in progress (escalated by the assistant)",
+           escalate_incident: "in progress (escalated by you)", reopen: "active (reopened)" }[last.action] || P.status || "-";
+}
+
+function header() {
+  return h("div", { class: "card" },
+    h("div", { class: "small muted" }, h("a", { href: "/" }, "← Triage queue"), "  ·  incident #" + P.incident_id +
+      " · " + sourceNames((P.services || []).join(","))),
+    h("h1", { style: { marginTop: "6px" } }, P.title || "(no title)"),
+    h("div", { class: "facts" },
+      h("span", {}, "Defender severity ", sevTag(P.severity)),
+      h("span", {}, "Status in Defender ", h("b", {}, liveStatus())),
+      h("span", {}, "Created ", h("b", {}, fmtTime(P.created_at))),
+      h("span", {}, "Alerts ", h("b", {}, String((P.alerts || []).length))),
+      P.is_lab ? h("span", { class: "chip lab" }, "lab test incident") : null,
+      P.web_url ? h("a", { href: P.web_url, target: "_blank", rel: "noopener" }, "Open in Defender ↗") : null));
+}
+
+function verdictCard() {
+  const meta = VERDICT[V.verdict] || { label: V.verdict, color: "var(--muted)" };
+  const reasons = V.guardrail_reasons || [];
+  return h("div", { class: "card verdict", style: { "--vc": meta.color } },
+    h("div", { class: "small muted" }, "AI recommendation (you decide)"),
+    h("div", { class: "big" }, meta.label),
+    meta.hint ? h("div", { class: "small muted" }, "= " + meta.hint) : null,
+    h("div", { class: "facts" },
+      h("span", {}, "Confidence ", h("b", {}, V.confidence || "-")),
+      h("span", {}, "Recommended severity ", sevTag(V.recommended_severity)),
+      h("span", {}, "Escalate ", h("b", { style: { color: V.escalate ? "var(--tp)" : null } }, V.escalate ? "yes" : "no")),
+      h("span", {}, "Playbook ", h("b", {}, PB.label || PB.id || "-")),
+      h("span", {}, "Made by ", h("b", {}, V.ai_status === "ai" ? "AI + safety rules" : "safety rules only (AI not used)"))),
+    h("p", { style: { margin: "0 0 10px", fontSize: "14.5px" } }, V.summary || ""),
+    (V.guardrails || []).length ? h("div", { class: "notice" },
+      h("b", {}, "Safety rules applied: "), V.guardrails.map(g => h("span", { class: "chip guard" }, g.replace(/_/g, " "))),
+      h("ul", { class: "clean small" }, reasons.map(r => h("li", {}, r)))) : null,
+    INJ.length ? h("div", { class: "notice bad", style: { marginTop: "8px" } },
+      h("b", {}, "Possible manipulation attempt: "), "text in the incident looks like instructions to an AI. It was treated as evidence only. ",
+      h("ul", { class: "clean small" }, INJ.slice(0, 5).map(i => h("li", {}, `${i.where}: “${i.phrase}”`)))) : null,
+    V.would_change_verdict_if ? h("p", { class: "small muted", style: { marginTop: "10px" } },
+      "Would change the verdict if: " + V.would_change_verdict_if) : null,
+    (V.checker_notes || []).length ? h("details", {}, h("summary", { class: "small" }, "Answer checker notes (" + V.checker_notes.length + ")"),
+      h("ul", { class: "clean small" }, V.checker_notes.map(n => h("li", {}, n)))) : null);
+}
+
+function evidenceCard() {
+  const ev = V.evidence || [];
+  return section("Evidence", "Every line points to where it was found. Lines the AI could not back up were removed by the checker.",
+    ev.length ? h("div", { class: "tablewrap" }, h("table", {},
+      h("thead", {}, h("tr", {}, ["Found in", "Finding"].map(t => h("th", {}, t)))),
+      h("tbody", {}, ev.map(e => h("tr", {},
+        h("td", { class: "small" }, e.query_id ? h("a", { href: "#q-" + e.query_id }, e.query_id) : (e.source || "-")),
+        h("td", {}, e.finding)))))) : h("div", { class: "muted" }, "No evidence lines (see the alerts and searches below)."));
+}
+
+function actionsCard() {
+  const acts = V.recommended_actions || [];
+  const cont = V.containment_options || [];
+  const labDevices = (D.flags.lab_devices || []).map(d => d.split(".")[0]);
+  const devices = (P.entities.devices || []).filter(d => labDevices.includes((d.name || "").split(".")[0]));
+  const done = D.actions || [];
+  const buttons = [];
+  if (cont.includes("isolate_device") || done.some(a => a.action === "isolate_device")) {
+    for (const d of devices) {
+      for (const action of ["isolate_device", "release_device"]) {
+        buttons.push(h("button", { class: "btn" + (action === "isolate_device" ? " danger" : ""),
+          disabled: D.flags.contain ? null : true,
+          title: D.flags.contain ? "" : "Switched off in the settings (needs your manager’s OK)",
+          onclick: async () => {
+            if (!confirm(`${CONTAIN_LABELS[action]}: ${d.name}?\n\nThis really changes the lab VM in Defender.`)) return;
+            try { await post("/api/contain", "contain", { incident_id: P.incident_id, device: d.name, action, confirm: true });
+                  toast("Done: " + CONTAIN_LABELS[action]); setTimeout(() => location.reload(), 1200); }
+            catch (e) { toast(e.message); }
+          } }, `${CONTAIN_LABELS[action]} (${d.name})`));
+      }
+    }
+  }
+  return section("What to do next", "Recommendations only. Nothing below happens unless a person clicks.",
+    acts.length ? h("ul", { class: "clean" }, acts.map(a => h("li", {}, a))) : h("div", { class: "muted" }, "No specific steps."),
+    h("div", { style: { marginTop: "10px" } }, h("b", { class: "small" }, "Containment options: "),
+      cont.length ? cont.map(c => h("span", { class: "chip warn" }, CONTAIN_LABELS[c] || c)) : h("span", { class: "muted small" }, "none recommended")),
+    buttons.length ? h("div", { class: "row", style: { display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" } }, buttons) : null,
+    done.length ? h("ul", { class: "clean small" }, done.map(a => h("li", {}, `${fmtTime(a.requested_at)}: ${a.action} on ${a.target} - ${a.status}`))) : null);
+}
+
+const DONE = (D.actions || []).filter(a => a.status === "done");
+const LAST = DONE.slice(-1)[0];
+const ACTION_TEXT = { auto_resolve: "Resolved automatically by the assistant", auto_escalate: "Escalated automatically by the assistant",
+  close_incident: "Closed in Defender by you", escalate_incident: "Marked as true positive in Defender by you",
+  reopen: "Reopened by you", isolate_device: "Device isolated", release_device: "Device released",
+  av_scan: "Antivirus scan requested by the assistant", quarantine_file: "File quarantine requested by the assistant" };
+
+function defenderStatusCard() {
+  if (!LAST) return null;
+  const canReopen = ["auto_resolve", "auto_escalate", "close_incident", "escalate_incident"].includes(LAST.action);
+  return h("div", { class: "notice", style: { borderLeft: "4px solid " + (LAST.action.includes("escalate") ? "var(--tp)" : "var(--fp)") } },
+    h("b", {}, ACTION_TEXT[LAST.action] || LAST.action), " · " + fmtTime(LAST.done_at || LAST.requested_at),
+    h("div", { class: "small muted" }, "Why: " + String(LAST.detail || "").split(" -> ")[0]),
+    canReopen ? h("button", { class: "btn", style: { marginTop: "8px" }, onclick: async () => {
+      const reason = prompt("Reopen this incident in Defender? Optional: why?", "");
+      if (reason === null) return;
+      try { await post("/api/reopen", "reopen", { incident_id: P.incident_id, reason, confirm: true });
+            toast("Reopened in Defender."); setTimeout(() => location.reload(), 1000); }
+      catch (e) { toast(e.message); }
+    } }, "↩ Reopen in Defender") : null);
+}
+
+const INVESTIGATION_WORDS = { successfullyRemediated: "cleaned up", partiallyRemediated: "partly cleaned up", benign: "nothing bad found",
+  running: "still investigating", pendingApproval: "waiting for approval", queued: "queued", failed: "failed",
+  unsupportedAlertType: "not investigated (alert type not covered)", terminatedByUser: "stopped by a person",
+  terminatedBySystem: "stopped by Defender", preexistingAlert: "covered by an earlier investigation", unknown: "unknown" };
+const ACTION_TYPE_WORDS = { RunAntiVirusScan: "Antivirus scan", StopAndQuarantineFile: "Stop and quarantine file",
+  Isolate: "Isolate computer", Unisolate: "Release from isolation", CollectInvestigationPackage: "Collect investigation package",
+  LiveResponse: "Live response" };
+
+function defenderCard() {
+  const v = D.defender;
+  if (!v) return section("What Defender did", "Filled in by the next run (Defender's clean-up status and the actions the assistant asked for).",
+    h("div", { class: "muted small" }, "Not collected yet."));
+  const planned = v.planned || [];
+  return section("What Defender did", `Situation: ${v.situation_label}. Defender's own clean-up plus the actions the assistant asked for (also in Defender's Action center).`,
+    v.ready_to_close ? h("div", { class: "notice", style: { borderLeft: "4px solid var(--fp)", marginBottom: "8px" } },
+      h("b", {}, "Ready to close: "), "the antivirus scan finished. Check the result, then close it with your decision.") : null,
+    h("div", { class: "small" }, h("b", {}, "Defender's automatic investigation: "),
+      (v.alerts || []).map(a => h("span", { class: "chip" + (a.investigation === "successfullyRemediated" ? " ok" : "") },
+        INVESTIGATION_WORDS[a.investigation] || a.investigation || "none"))),
+    (v.items || []).length ? h("div", { class: "tablewrap", style: { marginTop: "8px" } }, h("table", {},
+      h("thead", {}, h("tr", {}, ["File / program", "Detected", "Clean-up"].map(t => h("th", {}, t)))),
+      h("tbody", {}, v.items.map(i => h("tr", {}, h("td", { class: "small" }, i.name || i.kind), h("td", { class: "small" }, i.detection || "-"),
+        h("td", {}, h("span", { class: "chip " + (["remediated", "prevented", "blocked"].includes(i.remediation) ? "ok" : "warn") }, i.remediation || "none"))))))) : null,
+    h("div", { class: "small", style: { marginTop: "8px" } }, h("b", {}, "Actions on the computer: ")),
+    (v.machine_actions || []).length ? h("ul", { class: "clean small" }, v.machine_actions.map(m => h("li", {},
+      `${fmtTime(m.created)} · ${ACTION_TYPE_WORDS[m.type] || m.type} on ${m.device} · `,
+      h("span", { class: "chip " + (m.status === "Succeeded" ? "ok" : m.status === "Failed" ? "guard" : "warn") }, m.status),
+      m.requestor ? h("span", { class: "muted" }, " by " + m.requestor) : null))) :
+      h("div", { class: "muted small" }, planned.length ? "Requested, waiting for Defender…" : "None needed for this situation."));
+}
+
+function uc1Card() {
+  const u = D.uc1 || {};
+  if (!u.available || !(u.fixes || []).length) return null;
+  const open = u.fixes.filter(f => f.open);
+  return section("Fix the weak software", "Out-of-date software found on this computer. Fixing it removes ways in; the Fix Centre runs the fixes after approval.",
+    open.length ? h("div", { class: "small" }, h("b", {}, `${open.length} fix(es) open`),
+      u.exploited_open ? h("span", { class: "chip guard" }, `${u.exploited_open} known exploited`) : null) :
+      h("div", { class: "small" }, h("span", { class: "chip ok" }, "all fixes for this computer are done")),
+    h("ul", { class: "clean small" }, u.fixes.slice(0, 6).map(f => h("li", {},
+      h("b", {}, `${f.app} ${f.version}`), ` on ${f.device} - ${f.action}`,
+      f.actively_exploited ? h("span", { class: "chip guard" }, "known exploited") : null,
+      h("span", { class: "chip " + (f.open ? "warn" : "ok") }, f.status)))),
+    h("a", { class: "btn", href: u.fix_centre, target: "_blank", rel: "noopener", style: { display: "inline-block", marginTop: "8px" } },
+      "Open the Fix Centre ↗"));
+}
+
+function feedbackCard() {
+  const prev = (D.feedback || []).slice(-1)[0];
+  const verdictSel = h("select", { name: "analyst_verdict" }, h("option", { value: "" }, "(same as the AI)"),
+    Object.entries(VERDICT).map(([k, v]) => h("option", { value: k }, `${v.label} (${v.hint})`)));
+  const reason = h("textarea", { rows: 2, placeholder: "Why? (optional)" });
+  const minutes = h("input", { type: "number", min: 0, max: 600, step: 0.5, placeholder: "e.g. 3" });
+  const mode = h("select", {}, h("option", { value: "assisted" }, "with this AI page"), h("option", { value: "manual" }, "by hand in Defender (timing test)"));
+  async function send(agree) {
+    try {
+      await post("/api/feedback", "feedback", { incident_id: P.incident_id, agree,
+        analyst_verdict: verdictSel.value || null, reason: reason.value, minutes: minutes.value === "" ? null : Number(minutes.value),
+        mode: mode.value });
+      toast("Saved. Thank you.");
+      setTimeout(() => location.reload(), 900);
+    } catch (e) { toast(e.message); }
+  }
+  // "write it into Defender": final verdict = your choice, or the verdict of the AI when left as "(same as the AI)"
+  const det = h("select", {});
+  function finalVerdict() { return verdictSel.value || V.verdict; }
+  function refreshDet() {
+    det.replaceChildren(...Object.entries((D.determinations || {})[finalVerdict()] || {}).map(([k, l]) => h("option", { value: k }, l)));
+    closeBtn.textContent = finalVerdict() === "likely_true_positive" ? "🚩 Mark as true positive in Defender" : "✔ Agree & close in Defender";
+    closeBtn.disabled = !D.flags.close || finalVerdict() === "needs_investigation";
+    closeBtn.title = !D.flags.close ? "Switched off in the settings" :
+      finalVerdict() === "needs_investigation" ? "Pick a final verdict first" : "";
+  }
+  const closeBtn = h("button", { class: "btn primary", onclick: async () => {
+    const v = finalVerdict();
+    const what = v === "likely_true_positive" ? "mark this incident as TRUE POSITIVE (in progress, not closed) in Defender" :
+      "CLOSE this incident in Defender as: " + (VERDICT[v] || {}).label;
+    if (!confirm(`This will ${what}.\n\n` + ((V.guardrails || []).length ? "Note: the assistant's safety rules fired on this incident.\n\n" : "") + "Continue?")) return;
+    try {
+      await post("/api/close", "close", { incident_id: P.incident_id, verdict: v, determination: det.value,
+        reason: reason.value, minutes: minutes.value === "" ? null : Number(minutes.value), confirm: true });
+      toast("Written to Defender."); setTimeout(() => location.reload(), 1000);
+    } catch (e) { toast(e.message); }
+  } }, "✔ Agree & close in Defender");
+  verdictSel.addEventListener("change", refreshDet);
+  refreshDet();
+  const closed = LAST && ["auto_resolve", "close_incident"].includes(LAST.action);
+  return section("Your decision", "Agree / disagree trains the accuracy numbers. “Close in Defender” also writes your decision into the incident.",
+    prev ? h("div", { class: "notice", style: { marginBottom: "8px" } },
+      `Last saved ${fmtTime(prev.created_at)}: ${prev.agree ? "agreed" : "disagreed"}` +
+      (prev.analyst_verdict ? ` - your verdict: ${(VERDICT[prev.analyst_verdict] || {}).label}` : "") +
+      (prev.minutes != null ? ` - ${prev.minutes} min (${prev.mode})` : "")) : null,
+    h("div", { class: "form" },
+      h("label", {}, "Final verdict (leave as is to agree with the AI)", verdictSel),
+      h("label", {}, "Why (written into Defender)", det),
+      h("label", {}, "Reason", reason),
+      h("div", { class: "row" }, h("label", {}, "Minutes you spent", minutes), h("label", {}, "How you triaged", mode)),
+      h("div", { class: "row" }, closed ? h("span", { class: "chip ok" }, "already closed in Defender") : closeBtn),
+      h("div", { class: "row small muted" }, "Only record your opinion (nothing written to Defender):",
+        h("button", { class: "btn", onclick: () => send(true) }, "👍 Agree"),
+        h("button", { class: "btn", onclick: () => send(false) }, "👎 Disagree"))));
+}
+
+const PART_WORDS = { verdict: "the verdict", evidence: "the evidence", alerts: "the alerts", entities: "who and what is involved",
+  searches: "the searches", threat_intel: "threat intelligence", history: "history", context: "context",
+  defender: "what Defender did", actions: "actions taken" };
+
+function askCard() {
+  const turns = (D.questions || []).slice(-6);
+  const box = h("textarea", { rows: 2, maxlength: 500, placeholder: "e.g. Why is this not a true positive?" });
+  const btn = h("button", { class: "btn primary" }, "Ask");
+  const status = h("div", { class: "small muted" });
+  async function send(q) {
+    const question = (q || box.value).trim();
+    if (!question) return;
+    btn.disabled = true;
+    box.value = question;
+    status.textContent = "Thinking… (about 5 seconds)";
+    try {
+      await post("/api/ask", "ask", { incident_id: P.incident_id, question });
+      location.reload();
+    } catch (e) { status.textContent = ""; toast(e.message); btn.disabled = false; }
+  }
+  btn.addEventListener("click", () => send());
+  box.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+  const starters = ["Explain this incident in simple words", "Why this verdict?", "What would make it a true positive?",
+                    "What should I check in Defender?"];
+  return section("Ask about this incident",
+    "The AI answers from this incident's evidence only. It can't change anything; you decide.",
+    turns.length ? h("div", { class: "grid", style: { gap: "10px", marginBottom: "10px" } }, turns.map(t => h("div", {},
+      h("div", { class: "small", style: { fontWeight: 600 } }, "You: " + t.question),
+      h("div", { class: "notice", style: { marginTop: "4px", whiteSpace: "pre-line" } }, t.answer),
+      h("div", { class: "small muted" }, (t.based_on || []).length ? "Based on " + t.based_on.map(b => PART_WORDS[b] || b).join(", ") + " · " + ago(t.created_at) : ago(t.created_at))))) : null,
+    D.flags.ask ? h("div", { class: "form" },
+      turns.length ? null : h("div", { style: { display: "flex", gap: "6px", flexWrap: "wrap" } },
+        starters.map(s => h("button", { class: "chip", style: { cursor: "pointer", border: "none" }, onclick: () => send(s) }, s))),
+      h("label", {}, "Your question", box),
+      h("div", { class: "row" }, btn, status))
+      : h("div", { class: "muted small" }, "Switched off: the AI key (GEMINI_API_KEY) is not set."));
+}
+
+function alertsCard() {
+  return section("Alerts in this incident", null, (P.alerts || []).map(a => h("div", { style: { padding: "8px 0", borderBottom: "1px solid var(--border)" } },
+    h("div", {}, sevTag(a.severity), " ", h("b", {}, a.title)),
+    h("div", { class: "small muted" }, [a.category, sourceNames(a.detection_source), a.investigation_state && ("Defender auto-investigation: " + a.investigation_state),
+      fmtTime(a.first_activity || a.created)].filter(Boolean).join(" · ")),
+    (a.techniques || []).length ? h("div", {}, a.techniques.map(t => h("a", { class: "chip", href: "https://attack.mitre.org/techniques/" + t.replace(".", "/") + "/", target: "_blank", rel: "noopener" }, t))) : null,
+    a.untrusted && a.untrusted.description ? h("div", { class: "untrusted", style: { marginTop: "6px" } }, a.untrusted.description) : null)));
+}
+
+function entitiesCard() {
+  const E = P.entities || {};
+  const block = (label, items, fmt) => items && items.length ? h("div", { style: { margin: "6px 0" } },
+    h("div", { class: "small muted" }, label), items.map(fmt)) : null;
+  return section("Who and what is involved", null,
+    block("Devices", E.devices, d => h("span", { class: "chip" }, `${d.name} ${d.os ? "(" + d.os + ")" : ""}`)),
+    block("Accounts", E.accounts, a => h("span", { class: "chip" }, (a.domain ? a.domain + "\\" : "") + a.name)),
+    block("IP addresses", E.ips, i => h("span", { class: "chip" }, i.value + (i.public ? " (internet)" : " (internal)"))),
+    block("Domains", E.domains, d => h("span", { class: "chip" }, d.value)),
+    block("Files", E.files, f => h("div", { class: "small" }, h("b", {}, f.name || "?"), " ", f.sha256 ? h("span", { class: "muted" }, f.sha256.slice(0, 16) + "…") : null,
+      f.detection ? h("span", { class: "chip warn" }, f.detection) : null)),
+    block("Processes", E.processes, p => h("div", { style: { margin: "6px 0" } },
+      h("div", { class: "small" }, h("b", {}, p.file || "?"), p.parent ? " ← started by " + p.parent : "", p.account ? " · as " + p.account : ""),
+      p.untrusted && p.untrusted.command_line ? h("div", { class: "untrusted" }, p.untrusted.command_line) : null)));
+}
+
+function tiCard() {
+  return section("Threat intelligence", "Free sources: abuse.ch, AbuseIPDB, GreyNoise. Only indicators with a result are listed.",
+    TI.length ? h("table", {}, h("tbody", {}, TI.map(t => h("tr", {},
+      h("td", { class: "small" }, t.type), h("td", { class: "small" }, t.indicator),
+      h("td", {}, h("span", { class: "chip " + (t.verdict === "malicious" ? "guard" : t.verdict === "benign" ? "ok" : "") }, t.verdict)),
+      h("td", { class: "small muted" }, t.detail))))) : h("div", { class: "muted" }, "No look-up returned a result (or the incident has no checkable indicators)."));
+}
+
+function contextCard() {
+  const hits = CTX.watchlist_hits || {};
+  return section("Context and history", null,
+    h("div", { class: "small" }, h("b", {}, "Watchlists: "), Object.keys(hits).length ?
+      Object.entries(hits).map(([k, v]) => h("span", { class: "chip" + (k === "approved_admin" ? " ok" : "") }, `${k.replace(/_/g, " ")}: ${v.join(", ")}`))
+      : "no matches"),
+    h("div", { class: "small", style: { marginTop: "6px" } }, h("b", {}, "Admin account involved: "), CTX.account_is_admin ? "yes" : "no"),
+    h("div", { class: "small", style: { marginTop: "6px" } }, h("b", {}, "Devices: "),
+      (CTX.devices || []).map(d => h("span", { class: "chip" }, `${d.name} · ${d.opco || "?"}${d.exposure ? " · exposure " + d.exposure : ""}`))),
+    h("div", { class: "small", style: { marginTop: "6px" } }, h("b", {}, "History: "), HIST.note || "-"));
+}
+
+function searchesCard() {
+  return section("Searches the agent ran", `Read-only searches of the last ±hours around the alerts (${PB.label || ""}). Click to see the search and rows.`,
+    Q.map(q => h("details", { id: "q-" + q.id },
+      h("summary", {}, q.id.replace(/_/g, " "), " ",
+        h("span", { class: "chip " + (q.status === "ok" ? (q.row_count ? "warn" : "ok") : "guard") },
+          q.status === "ok" ? q.row_count + " row(s)" : q.status)),
+      q.error ? h("div", { class: "small muted" }, q.error) : null,
+      q.query ? h("pre", { class: "kql" }, q.query) : null,
+      q.status === "ok" ? rowsTable(q.rows) : null)));
+}
+
+const app = document.getElementById("app");
+app.appendChild(topBar("queue", D.status));
+app.appendChild(h("main", {}, h("div", { class: "wrap" },
+  header(),
+  defenderStatusCard() ? h("div", { style: { marginTop: "14px" } }, defenderStatusCard()) : null,
+  h("div", { class: "grid g2", style: { marginTop: "14px" } },
+    h("div", { class: "grid" }, verdictCard(), defenderCard(), evidenceCard(), alertsCard(), searchesCard()),
+    h("div", { class: "grid", style: { alignContent: "start" } }, actionsCard(), feedbackCard(), askCard(), uc1Card(), contextCard(), tiCard(), entitiesCard())))));
+</script>
+</body>
+</html>

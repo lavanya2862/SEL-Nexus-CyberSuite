@@ -1,0 +1,10 @@
+# UC4 runtime + test dependencies (same versions as UC1, Python 3.14)
+msal==1.39.0            # Microsoft Entra login (Graph + Defender APIs)
+requests==2.34.2        # Graph, Defender, threat-intel look-ups
+duckdb==1.5.6           # single-file database (also reads the GUIDE CSVs)
+python-dotenv==1.2.3    # settings from .env
+google-genai==2.25.0    # Gemini API
+pydantic==2.13.5        # checks the AI's JSON answer
+pyyaml==6.0.3           # playbooks and guardrails
+openpyxl==3.1.5         # Excel backtest report
+pytest==9.1.1           # tests

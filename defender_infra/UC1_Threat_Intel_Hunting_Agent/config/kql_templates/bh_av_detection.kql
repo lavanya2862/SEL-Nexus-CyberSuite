@@ -1,0 +1,9 @@
+// name: Antivirus detections (malware caught by Defender)
+// kind: behaviour
+// technique: T1204.002
+DeviceEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType in ("AntivirusDetection", "AntivirusDetectionActionType", "AntivirusMalwareBlocked")
+| project Timestamp, DeviceId, DeviceName, ActionType, FileName, FolderPath, SHA256,
+          InitiatingProcessAccountName, InitiatingProcessFileName, AdditionalFields
+| take 500

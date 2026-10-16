@@ -1,0 +1,23 @@
+# UC4 automatic handling (UC4_AUTO_RESOLVE=1 in .env turns it on). Applied after every triage, in code.
+# The AI's verdict is final: a true positive is escalated, a false positive / expected activity is closed.
+# Only "needs review" (or a verdict made without the AI) goes to a person.
+# (The GUIDE backtest of 5 Oct 2026 closed 0 of 100 real attacks when closing at HIGH confidence only.)
+
+resolve:                       # incidents UC4 may close by itself
+  verdicts: [benign_positive, likely_false_positive]
+  min_confidence: low
+  max_severity: high           # incident AND recommended severity must be at most this
+  block_if_any_guardrail: false # true: any safety rule fired -> no automatic close
+  block_playbooks: []          # e.g. [credential_access] to never close those automatically
+  determination:               # the "why" written into Defender
+    benign_positive: securityTesting        # lab: our tests. At a client: confirmedUserActivity is more usual
+    likely_false_positive: notMalicious
+
+escalate:                      # real attacks: never closed, handed on
+  verdicts: [likely_true_positive]
+  min_confidence: low
+
+needs_human:                   # everything else stays open with a tag
+  tag: "AI-triage: needs human"
+
+only_lab_incidents: true       # PoC safety: act only on incidents that involve the lab VMs

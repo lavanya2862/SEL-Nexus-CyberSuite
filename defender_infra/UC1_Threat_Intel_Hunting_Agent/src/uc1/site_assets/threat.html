@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Threat details · UC1</title>
+<script>try { const t = localStorage.getItem("uc1-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="stylesheet" href="/assets/live.css">
+</head>
+<body>
+<header class="hero"><div class="wrap">
+  <div class="crumbs"><a href="/">← Threat Command Centre</a><span>·</span><a href="/#explorer">Threat explorer</a><span>·</span><a href="/reports">Reports</a></div>
+  <h1 id="title"></h1>
+  <div class="meta" id="meta"></div>
+</div></header>
+<main class="wrap">
+  <div class="grid g-2-1">
+    <div class="card">
+      <h2>What is it?</h2>
+      <p class="hint" id="aiNote"></p>
+      <div id="summary"></div>
+      <div id="actions"></div>
+    </div>
+    <div class="card">
+      <h2>Risk rating</h2>
+      <p class="hint">Fixed rules (config/risk_policy.csv), never the AI.</p>
+      <div style="display:flex;align-items:baseline;gap:10px"><div class="bigscore" id="score"></div><div id="rating"></div></div>
+      <div class="score" style="margin-top:10px"><div class="bar"><div id="scorebar"></div></div></div>
+      <ul class="clean" id="factors"></ul>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card"><h2>On our computers</h2><p class="hint">Where Microsoft Defender says we have this, and the fix.</p><div class="tbl-wrap" id="exposure"></div></div>
+    <div class="card"><h2>Hunt findings</h2><p class="hint">What the hunts found on our computers (30 days of activity).</p><div id="findings"></div></div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card"><h2>Vulnerabilities (CVEs)</h2><p class="hint">Severity (CVSS), chance of attack in 30 days (EPSS), known exploited (CISA KEV).</p><div class="tbl-wrap" id="cves"></div></div>
+    <div class="card"><h2>Attacker techniques &amp; products</h2><p class="hint"><span class="chip">source</span> = stated by the feed · <span class="chip ai">AI</span> = extracted by Gemini and accepted by the checks.</p>
+      <div id="techniques"></div><div id="products" style="margin-top:10px"></div><div id="dropped"></div></div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card"><h2>Indicators (defanged)</h2><p class="hint" id="iocHint">Clues the hunts searched for. Written safely (hxxp, [.]) so they can't be clicked.</p><div class="tbl-wrap" id="iocs"></div></div>
+    <div class="card"><h2>Hunt queries</h2><p class="hint">The exact searches that ran in Microsoft Defender for this threat.</p><div id="hunts"></div></div>
+  </div>
+
+  <div class="grid"><div class="card"><h2>Original text</h2><p class="hint" id="srcHint"></p><details><summary>Show the source text</summary><pre id="text"></pre></details></div></div>
+</main>
+
+<script>
+const T = /*__DATA__*/null;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const RATING = {Critical: "--critical", High: "--serious", Medium: "--warning", Low: "--neutral"};
+const pill = r => `<span class="pill"><span class="dot" style="background:var(${RATING[r] || "--neutral"})"></span>${esc(r || "not rated")}</span>`;
+const day = v => String(v || "").replace("T", " ").slice(0, 16);
+const origin = o => o === "ai" ? '<span class="chip ai">AI</span>' : `<span class="chip">${esc(o || "source")}</span>`;
+const table = (heads, rows, num = []) => rows.length
+  ? `<table><thead><tr>${heads.map((h, i) => `<th style="${num.includes(i) ? "text-align:right" : ""}">${esc(h)}</th>`).join("")}</tr></thead>
+     <tbody>${rows.map(r => `<tr>${r.map((c, i) => `<td class="${num.includes(i) ? "num" : ""}">${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`
+  : '<p class="empty">None.</p>';
+const title = String(T.title || "").replace(/^TEST: /, "");
+document.title = `${title} · UC1`;
+document.getElementById("title").innerHTML = (T.is_test ? '<span class="test">[TEST]</span> ' : "") + esc(title);
+document.getElementById("meta").innerHTML = [
+  `<span class="hchip">${esc(T.source)}</span>`,
+  T.published ? `<span class="hchip">Published ${esc(day(T.published).slice(0, 10))}</span>` : "",
+  `<span class="hchip">First seen by the agent ${esc(day(T.first_seen))} UTC</span>`,
+  T.url ? `<span class="hchip"><a href="${esc(T.url)}" target="_blank" rel="noopener noreferrer">Open the source ↗</a></span>` : "",
+].join("");
+
+// summary + actions
+const aiDone = T.ai_status === "done";
+document.getElementById("aiNote").textContent = aiDone
+  ? `Summary written by the AI (${T.ai_model || "Gemini"}, confidence ${T.confidence || "n/a"}); facts checked against the source.`
+  : T.ai_status === "skipped" ? "Described by code (indicator lists and lab tests don't need the AI)."
+  : "AI summary pending (it will be done on the next run); showing the start of the source text.";
+document.getElementById("summary").innerHTML = `<p style="font-size:15px;margin:4px 0 0">${esc(T.summary || "")}</p>`;
+document.getElementById("actions").innerHTML = T.actions.length
+  ? `<div class="fix"><b>Do this</b><ul class="clean">${T.actions.map(a => `<li>${esc(a)}</li>`).join("")}</ul></div>` : "";
+
+// rating
+document.getElementById("score").textContent = T.score ?? "–";
+document.getElementById("rating").innerHTML = pill(T.rating) + ' <span class="muted">/ 100</span>';
+document.getElementById("scorebar").style.width = (T.score || 0) + "%";
+document.getElementById("factors").innerHTML = (T.factors || []).map(f => `<li>${esc(f)}</li>`).join("") || '<li class="muted">No risk signals.</li>';
+
+// exposure
+document.getElementById("exposure").innerHTML = table(["Computer", "OpCo", "Match", "Detail", "Fix"], T.exposure.map(e => [
+  `<b class="nw">${esc(e.device_name)}</b>`, `<span class="nw">${esc(e.opco)}</span>`,
+  e.match_type === "cve" ? '<span class="nw" title="Defender reports this CVE on the computer">exact</span>' : esc(e.match_type),
+  esc(e.detail), esc(e.recommended_update)]));
+
+// findings
+document.getElementById("findings").innerHTML = T.findings.length ? T.findings.map(f => {
+  const decoded = (f.timeline || []).map(ev => String(ev.what).split(" | decoded command: ")[1]).find(Boolean);
+  return `<div class="hit ${f.is_test ? "is-test" : ""}">
+    <div>${f.is_test ? '<span class="test">TEST</span> · ' : ""}<b>${esc(f.device)}</b> · ${esc(f.opco)} · ${esc(f.detail)}</div>
+    <div class="muted">first seen ${esc(day(f.first_hit))} UTC</div>
+    ${f.users.length ? `<div>👤 ${f.users.map(u => esc(u.account) + (u.logon_types ? ` <span class="muted">(${esc((u.logon_types || []).join(", "))})</span>` : "")).join(", ")}</div>` : ""}
+    ${f.alerts.length ? `<div>🚨 ${f.alerts.map(a => esc(a.title) + ` <span class="muted">(${esc(a.severity)}, ${esc(a.status)})</span>`).join("; ")}</div>` : ""}
+    ${decoded ? `<div class="decoded">🔓 Decoded hidden command: ${esc(decoded)}</div>` : ""}
+    ${f.timeline.length ? `<div class="timeline">${f.timeline.slice(0, 12).map(ev => `<div><span class="muted">${esc(day(ev.time).slice(5))}</span> ${esc(String(ev.what).split(" | decoded command: ")[0])}</div>`).join("")}</div>` : ""}
+  </div>`; }).join("") : '<p class="empty">No hunt findings for this threat.</p>';
+
+// CVEs
+document.getElementById("cves").innerHTML = table(["CVE", "CVSS", "EPSS", "Known exploited", "From"], T.cves.map(c => [
+  `<a class="nw" href="https://nvd.nist.gov/vuln/detail/${esc(c.id)}" target="_blank" rel="noopener noreferrer">${esc(c.id)}</a>${c.description ? `<div class="muted" style="min-width:180px">${esc(c.description.slice(0, 160))}${c.description.length > 160 ? "…" : ""}</div>` : ""}`,
+  c.cvss != null ? `${c.cvss}${c.severity ? `<div class="muted">${esc(c.severity)}</div>` : ""}` : "–",
+  c.epss != null ? (c.epss * 100).toFixed(c.epss < .01 ? 2 : 1) + "%" : "–",
+  c.kev_added ? `<span class="chip hot">since ${esc(String(c.kev_added).slice(0, 10))}</span>${c.kev_ransomware === "Known" ? '<span class="chip hot">ransomware</span>' : ""}` : "no",
+  origin(c.origin)]), [1, 2]);
+
+// techniques, products, dropped
+document.getElementById("techniques").innerHTML = T.techniques.length ? T.techniques.map(t => `
+  <div style="margin-bottom:8px">${origin(t.origin)} <a href="${esc(t.url || `https://attack.mitre.org/techniques/${t.id.replace(".", "/")}/`)}" target="_blank" rel="noopener noreferrer"><b>${esc(t.id)}</b></a>
+  ${esc(t.name)} <span class="muted">${esc(t.tactics)}</span>${t.reason ? `<div class="muted">${esc(t.reason)}</div>` : ""}</div>`).join("")
+  : '<p class="empty">No attacker techniques identified.</p>';
+document.getElementById("products").innerHTML = T.products.length
+  ? `<div class="muted" style="margin-bottom:4px">Products named</div>${T.products.map(p => `<span class="chip ${p.origin === "ai" ? "ai" : ""}">${esc(p.value)}</span>`).join("")}` : "";
+const dropped = Object.entries(T.dropped || {}).flatMap(([k, v]) => v.map(x => `${k}: ${x}`));
+document.getElementById("dropped").innerHTML = dropped.length
+  ? `<div class="fix"><b>Removed by the fact checks</b>${dropped.map(d => `<div>${esc(d)}</div>`).join("")}</div>` : "";
+
+// iocs
+if (T.ioc_count > T.iocs.length) document.getElementById("iocHint").textContent += ` Showing ${T.iocs.length} of ${T.ioc_count}.`;
+document.getElementById("iocs").innerHTML = table(["Type", "Indicator", "From"], T.iocs.map(i => [esc(i.type), `<code>${esc(i.value)}</code>`, origin(i.origin)]));
+
+// hunts
+document.getElementById("hunts").innerHTML = T.hunts.length ? T.hunts.map(h => `
+  <details><summary><b>${esc(h.name)}</b> · ${h.origin === "ai" ? "AI · validated" : "template"} · ${esc(h.status)} · ${h.row_count ?? 0} rows · ${esc(day(h.started_at))} UTC</summary>
+  ${h.error ? `<div class="muted">${esc(h.error)}</div>` : ""}<pre>${esc(h.query)}</pre></details>`).join("")
+  : '<p class="empty">No search ran specifically for this threat. Flaws are checked through Defender\'s list of installed software (see "On our computers"); attack clues are searched in batches (Command Centre → Hunting).</p>';
+
+// source text
+document.getElementById("srcHint").textContent = `As collected from ${T.source}${T.text && T.text.length >= 8000 ? " (first 8,000 characters)" : ""}.`;
+document.getElementById("text").textContent = T.text || "";
+</script>
+<script src="/assets/live.js"></script>
+</body>
+</html>

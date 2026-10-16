@@ -1,0 +1,14 @@
+// Q22 office_activity (Sentinel): Office 365 / Exchange actions of the incident's accounts, per operation.
+// Column names are read under both spellings (see Q20). Rule parameters can contain attacker text: kept short.
+OfficeActivity_CL
+| where TimeGenerated between (datetime({{START}}) .. datetime({{END}}))
+| extend User = coalesce(tostring(column_ifexists("UserId_s", "")), tostring(column_ifexists("UserId__s", "")), tostring(column_ifexists("UserId", ""))),
+         Op = coalesce(tostring(column_ifexists("Operation_s", "")), tostring(column_ifexists("Operation", ""))),
+         Workload = coalesce(tostring(column_ifexists("OfficeWorkload_s", "")), tostring(column_ifexists("OfficeWorkload", ""))),
+         ClientIp = coalesce(tostring(column_ifexists("ClientIP_s", "")), tostring(column_ifexists("ClientIP", ""))),
+         Result = coalesce(tostring(column_ifexists("ResultStatus_s", "")), tostring(column_ifexists("ResultStatus", "")))
+| where isnotempty(User) and User in~ ({{UPNS}})
+| summarize Count = count(), FirstSeen = min(TimeGenerated), LastSeen = max(TimeGenerated),
+            ClientIps = make_set(ClientIp, 5), Results = make_set(Result, 3) by User, Workload, Op
+| order by Count desc
+| take {{LIMIT}}

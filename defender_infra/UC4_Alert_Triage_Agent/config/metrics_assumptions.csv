@@ -1,0 +1,4 @@
+key,value,label,note
+manual_triage_minutes,25,ASSUMPTION,Minutes an analyst spends collecting+deciding per incident at the client (confirm with manager)
+analyst_cost_per_hour,60,ASSUMPTION,Blended analyst cost per hour for savings estimate
+incidents_per_day,120,ASSUMPTION,In-scope incidents per day at the client (for scaling the estimate)

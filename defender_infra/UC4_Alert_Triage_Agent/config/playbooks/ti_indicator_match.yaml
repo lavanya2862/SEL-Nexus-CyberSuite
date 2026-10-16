@@ -1,0 +1,21 @@
+id: ti_indicator_match
+label: Threat-intelligence indicator match
+description: A file, IP or domain on the incident matched a known-bad indicator (or our lab test indicator).
+match:
+  any_title: ["threat intel", "indicator", "known-bad", "uc4 lab: threat-intel"]
+  any_technique: ["T1204"]
+queries:
+  - Q10_hash_prevalence
+  - Q03_process_network
+  - Q11_domain_contacts
+  - Q09_other_alerts_same_device
+ti:
+  hashes_from: [evidence, Q10_hash_prevalence]
+  domains_from: [evidence, Q11_domain_contacts]
+  ips_from: [evidence, Q03_process_network]
+history: {same: [playbook, device], days: 90}
+watchlists: [approved_scanners, service_accounts]
+guardrails: [credential_access, high_ti_match, injection_marker, high_no_close]
+allowed_verdicts: [likely_true_positive, likely_false_positive, benign_positive, needs_investigation]
+containment_options: [isolate_device, block_indicator, collect_investigation_package]
+notes: Confirm the indicator is genuinely bad (not an expired or low-confidence feed entry) before escalating.

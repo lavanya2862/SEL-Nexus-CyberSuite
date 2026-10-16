@@ -1,0 +1,10 @@
+// name: New scheduled tasks created from the command line
+// kind: behaviour
+// technique: T1053.005
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName =~ "schtasks.exe" and ProcessCommandLine contains "/create"
+| where InitiatingProcessFileName !in~ ("MsSense.exe", "SenseIR.exe", "MpCmdRun.exe", "WindowsAzureGuestAgent.exe")
+| project Timestamp, DeviceId, DeviceName, AccountName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

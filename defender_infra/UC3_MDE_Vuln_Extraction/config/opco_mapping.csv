@@ -1,0 +1,10 @@
+match_type,pattern,opco
+rbac_group,OPCO-A-*,OpCo A
+rbac_group,OPCO-B-*,OpCo B
+rbac_group,OPCO-C-*,OpCo C
+tag,OpCo A,OpCo A
+tag,OpCo B,OpCo B
+tag,OpCo C,OpCo C
+name_pattern,opca-*,OpCo A
+name_pattern,opcb-*,OpCo B
+name_pattern,opcc-*,OpCo C

@@ -1,0 +1,115 @@
+/* "Ember Glass" preview world: warm near-black, frosted panels, ember = urgent, emerald = healthy / selected.
+   Scoped to .glass-root so the classic design is untouched. Palette validated with the dataviz checker (dark). */
+@layer components {
+.glass-root {
+  --g-bg: #0c0806;
+  --g-ink: #f6efe9;
+  --g-ink-2: #cdbfb4;
+  --g-ink-3: #9a8b80;
+  --g-line: rgba(255, 236, 222, 0.09);
+  --g-line-2: rgba(255, 236, 222, 0.16);
+  --g-panel: rgba(38, 26, 20, 0.55);
+  --g-panel-2: rgba(255, 240, 230, 0.05);
+  --g-ember: #e8662a;
+  --g-ember-hi: #ff8a3d;
+  --g-emerald: #1fae7c;
+  --g-emerald-hi: #3ee6a6;
+  --g-sky: #3d8fe8;
+  --g-violet: #9085e9;
+  --g-amber: #c98500;
+  --g-rose: #d55181;
+  --g-critical: #ff5a4f;
+  color: var(--g-ink);
+  background: var(--g-bg);
+  color-scheme: dark;
+}
+
+.glass-root ::selection { background: rgba(232, 102, 42, 0.35); color: #fff; }
+.glass-root * { scrollbar-color: rgba(255, 236, 222, 0.16) transparent; }
+.glass-root :focus-visible { outline: 2px solid var(--g-ember-hi); outline-offset: 2px; }
+
+/* the atmosphere behind the glass: two light sources and a faint cyber grid */
+.glass-sky {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 36rem at 22% -8%, rgba(232, 102, 42, 0.30), transparent 60%),
+    radial-gradient(40rem 30rem at 70% 18%, rgba(160, 64, 20, 0.22), transparent 65%),
+    radial-gradient(50rem 34rem at 95% 105%, rgba(31, 174, 124, 0.16), transparent 60%),
+    var(--g-bg);
+}
+.glass-sky::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 236, 222, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 236, 222, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse at 40% 20%, #000 20%, transparent 75%);
+}
+
+.glass-panel {
+  position: relative;
+  background: linear-gradient(180deg, rgba(255, 240, 230, 0.06), rgba(255, 240, 230, 0.02)) , var(--g-panel);
+  border: 1px solid var(--g-line);
+  border-radius: 22px;
+  box-shadow: inset 0 1px 0 rgba(255, 245, 238, 0.07), 0 24px 48px -28px rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+}
+
+.glass-ember {
+  background:
+    radial-gradient(120% 90% at 0% 0%, rgba(255, 170, 110, 0.55), transparent 55%),
+    linear-gradient(150deg, #f07a32 0%, #c24b16 45%, #5a2210 100%);
+  border: 1px solid rgba(255, 190, 150, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 230, 210, 0.35), 0 30px 60px -30px rgba(232, 102, 42, 0.6);
+}
+
+.glass-pill {
+  border: 1px solid var(--g-line);
+  background: var(--g-panel-2);
+  border-radius: 999px;
+}
+.glass-pill[data-active='true'] {
+  background: rgba(255, 240, 230, 0.12);
+  border-color: var(--g-line-2);
+  color: var(--g-ink);
+}
+
+.glass-btn-ember {
+  background: linear-gradient(180deg, var(--g-ember-hi), var(--g-ember));
+  color: #1b0d06;
+  box-shadow: inset 0 1px 0 rgba(255, 235, 220, 0.5), 0 10px 24px -10px rgba(232, 102, 42, 0.8);
+}
+
+.glass-row:hover { background: rgba(255, 240, 230, 0.035); }
+
+.glass-glow-emerald {
+  background: linear-gradient(180deg, var(--g-emerald-hi), rgba(31, 174, 124, 0.25));
+  box-shadow: 0 0 0 1px rgba(62, 230, 166, 0.5), 0 0 28px rgba(62, 230, 166, 0.45);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .glass-rise { animation: glass-rise 600ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .glass-sweep { animation: glass-sweep 6s linear infinite; transform-origin: 50% 50%; }
+}
+@keyframes glass-rise { from { opacity: 0; transform: translateY(10px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes glass-sweep { to { transform: rotate(360deg); } }
+
+
+
+}
+
+/* segmented control item: quiet until selected. The selected state sits outside the layer on purpose, so it wins
+   over the item's own muted text utility. */
+@layer components { .glass-seg { border: 1px solid transparent; transition: background 160ms, color 160ms; } }
+.glass-root .glass-seg[data-active='true'] {
+  background: rgba(255, 240, 230, 0.12);
+  border-color: var(--g-line-2);
+  color: var(--g-ink);
+  box-shadow: inset 0 1px 0 rgba(255, 245, 238, 0.08);
+}

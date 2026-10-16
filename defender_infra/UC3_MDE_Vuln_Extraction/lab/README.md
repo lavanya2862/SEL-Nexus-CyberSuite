@@ -1,0 +1,106 @@
+# Lab: add more vulnerabilities to the test VMs
+
+LAB VMs ONLY. These scripts install old, vulnerable apps and weaken Windows settings so Defender
+has more to report for the UC3 dashboard. Never run them on a real PC or on your laptop itself.
+
+| File | What it does |
+|---|---|
+| `vm_install_old_apps.ps1` | Installs old app versions, turns off their auto-update, adds a Log4j file (Role A) |
+| `vm_weak_settings.ps1` | Weak Windows settings (Role A) / stops Windows updates (Role B) |
+
+- **opcc-wks-01 = Role A**: browsers, Java, PDF readers, KeePass, Python 2, Log4j + weak settings
+- **opca-wks-01 = Role B**: XAMPP (Apache/PHP/MariaDB), PostgreSQL 12, Node.js 14, VNC/TeamViewer/AnyDesk/OpenVPN, VC++ 2008 + no Windows updates
+
+## Step 1 - Get this folder onto your personal laptop
+
+Put the `lab` folder in e.g. `C:\VMLab` on the laptop (via email to yourself, OneDrive / Google Drive,
+or a USB stick - whatever your company allows). If email blocks `.ps1` files, zip the folder first or
+use a cloud drive.
+
+## Step 2 - Before you start: snapshot + lock down RDP
+
+1. **Snapshot each VM** (Azure portal: VM > Disks > OS disk > Create snapshot; Hyper-V/VMware: Checkpoint/Snapshot).
+2. **If the VMs are in Azure with a public IP:** VM > Networking > the inbound rule for port 3389 (RDP) >
+   set **Source** to **My IP address** (your laptop's IP) instead of "Any". After the weak-settings script
+   RDP no longer needs Network Level Authentication, so it must not be open to the whole internet.
+
+## Step 3 - Connect to the VM with Remote Desktop and share the folder
+
+On the Windows laptop:
+
+1. Press **Win + R**, type `mstsc`, press Enter.
+2. Click **Show Options**.
+3. **General** tab: Computer = the VM's IP address or DNS name (Azure portal: VM > Overview > Public IP address).
+   User name = the VM's admin user.
+4. **Local Resources** tab: make sure **Clipboard** is ticked, then click **More...** > expand **Drives** >
+   tick the drive that holds `C:\VMLab` (e.g. `Local Disk (C:)`) > OK.
+5. Click **Connect**, enter the VM password, accept the certificate warning.
+
+(Azure tip: VM > Connect > RDP > Download RDP file also works - right-click the file > **Edit** to do step 4.)
+
+(Mac laptop: use the **Windows App** from the App Store; in the PC's settings add the `VMLab` folder under **Folders**.)
+
+## Step 4 - Copy the scripts inside the VM
+
+In the VM:
+
+1. Open **File Explorer** > **This PC** - your laptop drive shows as e.g. `C on LAPTOP-NAME`.
+2. Copy the `VMLab\lab` folder to `C:\LabApps\` on the VM, so the scripts are in `C:\LabApps\lab`.
+
+## Step 5 - Open PowerShell as administrator (in the VM)
+
+1. Click **Start**, type `PowerShell`.
+2. Right-click **Windows PowerShell** > **Run as administrator** > **Yes**.
+3. Type:
+   ```powershell
+   cd C:\LabApps\lab
+   winget --version
+   ```
+   If `winget --version` shows an error, run this once, then try again:
+   ```powershell
+   Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe
+   ```
+
+## Step 6a - On opcc-wks-01 (Role A)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\vm_install_old_apps.ps1 -Role A
+```
+Takes 15-40 minutes. Installers may pop up briefly - leave them alone. At the end it prints a
+**RESULT** section (Installed / Failed). Then:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\vm_weak_settings.ps1 -Role A
+Restart-Computer
+```
+The Remote Desktop window closes. Wait 2-3 minutes and connect again to check the VM is back.
+
+## Step 6b - On opca-wks-01 (Role B)
+
+Disconnect from the first VM, then repeat Steps 3-5 for opca-wks-01, and run:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\vm_install_old_apps.ps1 -Role B
+powershell -ExecutionPolicy Bypass -File .\vm_weak_settings.ps1 -Role B -RemoveLatestUpdate
+Restart-Computer
+```
+`-RemoveLatestUpdate` uninstalls the newest Windows update (10-20 minutes, restart may take longer).
+Leave it off if you don't want that.
+
+## Step 7 - Bring back the results
+
+On each VM, copy `C:\LabApps\install_old_apps.log` to the shared laptop drive (`This PC` > `C on LAPTOP-NAME` > `VMLab`).
+Get the two logs to your work PC and paste the **RESULT** parts into the Claude chat - failed apps get fixed there.
+
+## Step 8 - Wait, then refresh the dashboard
+
+Defender shows new software and settings after a few hours (up to 24). Then tell Claude on the work PC,
+which runs `python -m uc3 run` and checks the dashboard.
+
+## If something goes wrong
+
+| Problem | What to do |
+|---|---|
+| A lot of `NOT FOUND` / failed apps | Normal for a few. Send the RESULT list - IDs get corrected |
+| winget hangs for many minutes | Press Ctrl+C. The VM's internet is probably blocked; report it |
+| "running scripts is disabled" | You left out `-ExecutionPolicy Bypass` - copy the command exactly |
+| Can't RDP after restart | Wait 5 minutes; Azure portal > VM > Boot diagnostics shows if it is still updating |
+| Want to undo everything | Restore the snapshot from Step 2 |

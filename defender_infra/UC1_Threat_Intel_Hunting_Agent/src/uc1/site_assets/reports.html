@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reports · UC1</title>
+<script>try { const t = localStorage.getItem("uc1-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<link rel="stylesheet" href="/assets/site.css">
+<link rel="stylesheet" href="/assets/live.css">
+</head>
+<body>
+<header class="hero"><div class="wrap">
+  <div class="crumbs"><a href="/">← Threat Command Centre</a></div>
+  <h1>Reports &amp; downloads</h1>
+  <div class="meta"><span class="hchip">A new report is made by every run (every 4 hours when scheduled)</span></div>
+</div></header>
+<main class="wrap">
+  <div class="grid g-2-1">
+    <div class="card"><h2>Threat-hunting reports</h2><p class="hint">Newest first. PDF to read or send, Word to edit. File times are UTC.</p><div class="tbl-wrap" id="reports"></div></div>
+    <div class="card"><h2>Other files</h2><p class="hint">Live data from the last run.</p><div id="data"></div>
+      <h2 style="margin-top:18px">AI spot-check</h2>
+      <p class="hint" id="spotHint">How you measure the AI's accuracy yourself: open the workbook, type Y (right) or N (wrong) in the 4 check columns for each of the 20 AI answers, save, then run this in PowerShell in the UC1 folder:</p>
+      <pre id="spotCmd">.\.venv\Scripts\python.exe -m uc1 spotcheck</pre>
+      <p class="hint">The result appears in the "AI accuracy" tile on the Command Centre. No workbook yet, or want a new sample of 20? Run <code>.\.venv\Scripts\python.exe -m uc1 spotcheck</code> (without --score).</p>
+    </div>
+  </div>
+</main>
+<script>
+const R = /*__DATA__*/null;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const size = n => n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+const KIND = {pdf: "📄 PDF report", docx: "📝 Word report", xlsx: "✅ AI spot-check workbook"};
+const rows = R.reports.map(f => `<tr><td>${KIND[f.type] || esc(f.type)}</td>
+  <td><a href="/files/reports/${encodeURIComponent(f.name)}">${esc(f.name)}</a></td>
+  <td class="num">${size(f.size)}</td><td>${esc(String(f.modified).replace("T", " ").slice(0, 16))}</td></tr>`).join("");
+document.getElementById("reports").innerHTML = rows
+  ? `<table><thead><tr><th>Type</th><th>File</th><th style="text-align:right">Size</th><th>Made (UTC)</th></tr></thead><tbody>${rows}</tbody></table>`
+  : '<p class="empty">No reports yet: use ▶ Run now.</p>';
+const spot = R.reports.find(f => f.type === "xlsx");     // newest spot-check workbook (list is newest first)
+if (spot) {
+  document.getElementById("spotHint").innerHTML = `Measure the AI's accuracy yourself: open <a href="/files/reports/${encodeURIComponent(spot.name)}">${esc(spot.name)}</a>, type <b>Y</b> (right) or <b>N</b> (wrong) in the 4 check columns for each of the 20 AI answers, save, then run this in PowerShell in the UC1 folder:`;
+  document.getElementById("spotCmd").textContent = `.\\.venv\\Scripts\\python.exe -m uc1 spotcheck --score "data\\reports\\${spot.name}"`;
+}
+const DESC = {"demo_notes.md": "Demo notes with today's numbers (python -m uc1 demo)", "alerts.jsonl": "All alerts (one per line)", "metrics.json": "Key metrics of the last run"};
+document.getElementById("data").innerHTML = R.data.length ? R.data.map(d => `<div style="margin-bottom:8px">
+  <a href="/files/data/${encodeURIComponent(d.name)}" target="_blank" rel="noopener">${esc(d.name)}</a> <span class="muted">· ${size(d.size)}</span>
+  <div class="muted">${esc(DESC[d.name] || "")}</div></div>`).join("") : '<p class="empty">Nothing yet.</p>';
+</script>
+<script src="/assets/live.js"></script>
+</body>
+</html>

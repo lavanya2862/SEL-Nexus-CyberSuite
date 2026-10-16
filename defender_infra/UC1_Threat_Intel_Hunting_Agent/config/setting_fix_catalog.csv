@@ -1,0 +1,33 @@
+config_id,name,kind,target,value,note
+scid-2513,Block Adobe Reader from creating child processes,asr,7674ba52-37eb-4a4f-a9a1-f0f9a1619a2c,1,Attack-protection rule in block mode
+scid-2504,Block JavaScript or VBScript from launching downloaded executable content,asr,d3e037e1-3eb8-44c8-a917-57927947596d,1,Attack-protection rule in block mode
+scid-2502,Block Office applications from creating executable content,asr,3b576869-a4ec-4529-8536-b80a7769e899,1,Attack-protection rule in block mode
+scid-2503,Block Office applications from injecting code into other processes,asr,75668c1f-73b5-4cf0-bb93-3ecf5cb7cc84,1,Attack-protection rule in block mode
+scid-2512,Block Office communication application from creating child processes,asr,26190899-1602-49e8-8b27-eb1d0a1ce869,1,Attack-protection rule in block mode
+scid-2506,Block Win32 API calls from Office macros,asr,92e97fa1-2edf-4476-bdd6-9dd0b4dddc7b,1,Attack-protection rule in block mode
+scid-2515,Block abuse of exploited vulnerable signed drivers,asr,56a863a9-875e-4185-98a7-b882c64b5ce5,1,Attack-protection rule in block mode
+scid-2501,Block all Office applications from creating child processes,asr,d4f940ab-401b-4efc-aadc-ad5f3c50688a,1,Attack-protection rule in block mode
+scid-2500,Block executable content from email client and webmail,asr,be9ba2d9-53ea-4cdc-84e5-9b1eeee46550,1,Attack-protection rule in block mode
+scid-2514,Block persistence through WMI event subscription,asr,e6db77e5-3df2-4cf1-b95a-636979351e5b,1,Attack-protection rule in block mode
+scid-2518,Block rebooting machine in Safe Mode,asr,33ddedf1-c6e0-47cb-833e-de6133960387,1,Attack-protection rule in block mode
+scid-2511,Block untrusted and unsigned processes that run from USB,asr,b2b3f03d-6a65-4f7b-a9c7-1c7ef74a9ba4,1,Attack-protection rule in block mode
+scid-90,Enable Microsoft Defender Antivirus email scanning,defender,DisableEmailScanning,0,
+scid-2013,Turn on PUA protection in block mode,defender,PUAProtection,1,Blocks potentially unwanted apps (adware and bundled junk)
+scid-89,Enable scanning of removable drives during a full scan,defender,DisableRemovableDriveScanning,0,
+scid-96,Enable 'Network Protection',defender,EnableNetworkProtection,1,Blocks connections to dangerous websites
+scid-2021,Set controlled folder access to enabled or audit mode,defender,EnableControlledFolderAccess,2,Audit mode: only logs (blocking could stop business apps saving files)
+scid-69,Disable 'Autoplay' for all drives,registry,HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer|NoDriveTypeAutoRun,255,
+scid-70,Set default behavior for 'AutoRun' to 'Enabled: Do not execute any autorun commands',registry,HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer|NoAutorun,1,
+scid-67,Disable 'Autoplay for non-volume devices',registry,HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer|NoAutoplayfornonVolume,1,
+scid-87,Disable Solicited Remote Assistance,registry,HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services|fAllowToGetHelp,0,Windows Remote Assistance stops working (remote desktop is not affected)
+scid-73,Disable 'Allow Basic authentication' for WinRM Client,registry,HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client|AllowBasic,0,
+scid-74,Disable 'Allow Basic authentication' for WinRM Service,registry,HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Service|AllowBasic,0,
+scid-29,Disable 'Enumerate administrator accounts on elevation',registry,HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\CredUI|EnumerateAdministrators,0,
+scid-88,Disable Anonymous enumeration of shares,registry,HKLM:\SYSTEM\CurrentControlSet\Control\Lsa|RestrictAnonymous,1,
+scid-82,Disable IP source routing,registry,HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters|DisableIPSourceRouting,2,
+scid-81,Set IPv6 source routing to highest protection,registry,HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters|DisableIPSourceRouting,2,
+scid-58,Disable 'Installation and configuration of Network Bridge on your DNS domain network',registry,HKLM:\SOFTWARE\Policies\Microsoft\Windows\Network Connections|NC_AllowNetBridge_NLA,0,
+scid-60,Prohibit use of Internet Connection Sharing on your DNS domain network,registry,HKLM:\SOFTWARE\Policies\Microsoft\Windows\Network Connections|NC_ShowSharedAccessUI,0,
+scid-59,Enable 'Require domain users to elevate when setting a network's location',registry,HKLM:\SOFTWARE\Policies\Microsoft\Windows\Network Connections|NC_StdDomainUserSetLocation,1,
+scid-76,Disable JavaScript on Adobe Reader DC,registry,HKLM:\SOFTWARE\Policies\Adobe\Acrobat Reader\DC\FeatureLockDown|bDisableJavaScript,1,PDF forms that use JavaScript stop working
+scid-27,Set User Account Control (UAC) to automatically deny elevation requests,registry,HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System|ConsentPromptBehaviorUser,0,Standard users can no longer type an admin password to install things (admin accounts are not affected)

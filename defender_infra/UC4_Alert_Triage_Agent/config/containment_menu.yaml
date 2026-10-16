@@ -1,0 +1,37 @@
+# The ONLY containment options the agent may recommend. The AI cannot invent others; the checker drops anything
+# not listed here. None of these are performed automatically - a human acts, and only the lab-device isolate is
+# wired to a real API call (behind the UC4_CONTAIN flag and a confirm click).
+options:
+  isolate_device:
+    label: Isolate the device from the network
+    reversible: true
+    who_approves: analyst
+    note: Defender Selective isolation; the device keeps its link to Defender only. Lab VMs only in the PoC.
+  release_device:
+    label: Release the device from isolation
+    reversible: true
+    who_approves: analyst
+  disable_user:
+    label: Disable the user account
+    reversible: true
+    who_approves: analyst
+    note: Recommend-only in the PoC (no write to Entra).
+  revoke_sessions:
+    label: Revoke the user's active sessions / tokens
+    reversible: true
+    who_approves: analyst
+    note: Recommend-only in the PoC.
+  remove_inbox_rule:
+    label: Remove the suspicious mailbox rule / forwarding
+    reversible: false
+    who_approves: analyst
+    note: Recommend-only in the PoC (no write to Exchange).
+  block_indicator:
+    label: Block the malicious file/URL/IP indicator
+    reversible: true
+    who_approves: analyst
+    note: Recommend-only in the PoC.
+  collect_investigation_package:
+    label: Collect an investigation package from the device
+    reversible: true
+    who_approves: analyst

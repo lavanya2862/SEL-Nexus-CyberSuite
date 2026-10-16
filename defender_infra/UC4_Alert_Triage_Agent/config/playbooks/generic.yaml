@@ -1,0 +1,18 @@
+id: generic
+label: Generic triage (unmatched incident type)
+description: Fallback for incidents no specific playbook recognises. Collects broad context and leans cautious.
+match: {}
+queries:
+  - Q01_process_tree
+  - Q09_other_alerts_same_device
+  - Q05_logon_summary
+ti:
+  hashes_from: [evidence]
+  domains_from: [evidence]
+  ips_from: [evidence]
+history: {same: [playbook, device], days: 90}
+watchlists: [approved_admin_tools, service_accounts, vip_users, approved_scanners]
+guardrails: [credential_access, ransomware, privileged_account, high_ti_match, injection_marker, high_no_close]
+allowed_verdicts: [likely_true_positive, likely_false_positive, benign_positive, needs_investigation]
+containment_options: [isolate_device, collect_investigation_package]
+notes: An unknown type defaults to needs_investigation unless the evidence is clearly benign.

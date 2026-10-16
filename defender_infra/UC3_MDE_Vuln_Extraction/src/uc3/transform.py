@@ -1,0 +1,125 @@
+"""Transform step: DuckDB views over the Parquet data lake (data/uc3.duckdb).
+
+The lake is the source of truth; the database only holds views, the two small config tables and the
+data-quality results, so it can be rebuilt at any time.
+
+Views:
+  lake_vulnerabilities / lake_devices / lake_changes   raw lake tables, one partition per snapshot_date
+  device_snapshot      devices + OpCo (rules from config/opco_mapping.csv) + stale flag
+  vuln_enriched        vulnerabilities + OpCo, priority P1-P4, age, age bucket, SLA days, SLA breached
+  vuln_current / device_current                          the latest snapshot only
+  vuln_daily_summary   per day x OpCo x severity x priority: vulnerabilities, devices, exploitable, SLA breaches
+  changes_dedup        change events without repeats collected by overlapping runs
+  remediation_events   Fixed events (excluding device-group moves) with days to fix
+  cve_summary / software_summary                          latest snapshot rolled up per CVE / per software
+"""
+
+from __future__ import annotations
+
+import duckdb
+
+from uc3.config import CONFIG_DIR, Settings
+
+EXPLOITED = "('ExploitIsVerified', 'ExploitIsInKit')"
+ANY_EXPLOIT = "('ExploitIsPublic', 'ExploitIsVerified', 'ExploitIsInKit')"
+STALE_AFTER_DAYS = 30
+
+
+def connect(settings: Settings, read_only: bool = False) -> duckdb.DuckDBPyConnection:
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    return duckdb.connect(str(settings.duckdb_path), read_only=read_only)
+
+
+def _lake(settings: Settings, table: str) -> str:
+    return (settings.lake_dir / table / "*" / "*.parquet").as_posix()
+
+
+def view_sql(settings: Settings) -> list[str]:
+    config = CONFIG_DIR.as_posix()
+    return [
+        *(f"""CREATE OR REPLACE VIEW lake_{t} AS
+              SELECT * FROM read_parquet('{_lake(settings, t)}', hive_partitioning = true, hive_types = {{'snapshot_date': DATE}})"""
+          for t in ("vulnerabilities", "devices", "changes")),
+        f"""CREATE OR REPLACE TABLE opco_rules AS
+            SELECT row_number() OVER () AS rule_order, lower(trim(match_type)) AS match_type,
+                   trim(pattern) AS pattern, trim(opco) AS opco
+            FROM read_csv('{config}/opco_mapping.csv', header = true, all_varchar = true)""",
+        f"""CREATE OR REPLACE TABLE sla_policy AS
+            SELECT trim(severity) AS severity, CAST(days_to_fix AS INTEGER) AS days_to_fix
+            FROM read_csv('{config}/sla_policy.csv', header = true, all_varchar = true)""",
+        f"""CREATE OR REPLACE VIEW device_snapshot AS
+            WITH matches AS (
+              SELECT d.snapshot_date, d.device_id, r.rule_order, r.opco
+              FROM lake_devices d JOIN opco_rules r ON
+                   (r.match_type = 'rbac_group' AND lower(coalesce(d.rbac_group_name, '')) GLOB lower(r.pattern))
+                OR (r.match_type = 'tag' AND len(list_filter(coalesce(d.machine_tags, []::VARCHAR[]),
+                                                             t -> lower(t) GLOB lower(r.pattern))) > 0)
+                OR (r.match_type = 'name_pattern' AND lower(coalesce(d.device_name, '')) GLOB lower(r.pattern))),
+            best AS (SELECT snapshot_date, device_id, arg_min(opco, rule_order) AS opco FROM matches GROUP BY ALL)
+            SELECT d.*, coalesce(b.opco, 'UNMAPPED') AS opco,
+                   coalesce(date_diff('day', CAST(d.last_seen AS DATE), d.snapshot_date) > {STALE_AFTER_DAYS}, false) AS is_stale
+            FROM lake_devices d LEFT JOIN best b USING (snapshot_date, device_id)""",
+        # Brand-new CVEs can arrive before Microsoft has rated them: severity 'Unrated', treated as P3 until rated.
+        f"""CREATE OR REPLACE VIEW vuln_enriched AS
+            WITH rated AS (
+              SELECT * REPLACE (CASE WHEN cve_id IS NOT NULL AND severity IS NULL THEN 'Unrated' ELSE severity END AS severity)
+              FROM lake_vulnerabilities),
+            base AS (
+              SELECT v.*, coalesce(d.opco, 'UNMAPPED') AS opco, coalesce(d.is_stale, false) AS device_is_stale,
+                     d.machine_tags,
+                     CASE WHEN v.cve_id IS NULL THEN NULL
+                          WHEN v.severity = 'Critical' OR (v.severity = 'High' AND v.exploitability IN {EXPLOITED}) THEN 'P1'
+                          WHEN v.severity = 'High' OR (v.severity = 'Medium' AND v.exploitability IN {EXPLOITED}) THEN 'P2'
+                          WHEN v.severity IN ('Medium', 'Unrated') THEN 'P3' ELSE 'P4' END AS priority,
+                     greatest(date_diff('day', CAST(v.first_seen AS DATE), v.snapshot_date), 0) AS age_days,
+                     s.days_to_fix AS sla_days
+              FROM rated v
+              LEFT JOIN device_snapshot d USING (snapshot_date, device_id)
+              LEFT JOIN sla_policy s ON s.severity = v.severity)
+            SELECT *,
+                   CASE WHEN age_days <= 30 THEN '0-30' WHEN age_days <= 60 THEN '31-60'
+                        WHEN age_days <= 90 THEN '61-90' ELSE '90+' END AS age_bucket,
+                   coalesce(age_days > sla_days, false) AS sla_breached
+            FROM base""",
+        """CREATE OR REPLACE VIEW vuln_current AS
+           SELECT * FROM vuln_enriched WHERE snapshot_date = (SELECT max(snapshot_date) FROM lake_vulnerabilities)""",
+        """CREATE OR REPLACE VIEW device_current AS
+           SELECT * FROM device_snapshot WHERE snapshot_date = (SELECT max(snapshot_date) FROM lake_devices)""",
+        f"""CREATE OR REPLACE VIEW vuln_daily_summary AS
+            SELECT snapshot_date, opco, severity, priority, count(*) AS vulnerabilities,
+                   count(DISTINCT device_id) AS exposed_devices,
+                   count(*) FILTER (WHERE exploitability IN {ANY_EXPLOIT}) AS exploitable,
+                   count(*) FILTER (WHERE sla_breached) AS sla_breaches
+            FROM vuln_enriched WHERE cve_id IS NOT NULL GROUP BY ALL""",
+        """CREATE OR REPLACE VIEW changes_dedup AS
+           SELECT DISTINCT ON (record_id, status, event_time, rbac_group_id) * EXCLUDE (snapshot_date)
+           FROM lake_changes ORDER BY record_id, status, event_time, rbac_group_id""",
+        """CREATE OR REPLACE VIEW remediation_events AS
+           SELECT f.*, date_diff('day', f.first_seen, f.event_time) AS days_to_fix
+           FROM changes_dedup f
+           WHERE f.status = 'Fixed' AND f.cve_id IS NOT NULL AND NOT EXISTS (
+                 SELECT 1 FROM changes_dedup n
+                 WHERE n.status = 'New' AND n.record_id = f.record_id AND n.event_time = f.event_time)""",
+        f"""CREATE OR REPLACE VIEW cve_summary AS
+            SELECT cve_id, max(cvss_score) AS cvss_score, any_value(severity) AS severity,
+                   CASE max(CASE exploitability WHEN 'ExploitIsInKit' THEN 3 WHEN 'ExploitIsVerified' THEN 2
+                                                WHEN 'ExploitIsPublic' THEN 1 ELSE 0 END)
+                        WHEN 3 THEN 'ExploitIsInKit' WHEN 2 THEN 'ExploitIsVerified'
+                        WHEN 1 THEN 'ExploitIsPublic' ELSE 'NoExploit' END AS exploitability,
+                   count(DISTINCT device_id) AS exposed_devices, list_sort(list(DISTINCT opco)) AS opcos,
+                   list_sort(list(DISTINCT software_name)) AS software, min(first_seen) AS first_seen
+            FROM vuln_current WHERE cve_id IS NOT NULL GROUP BY cve_id""",
+        """CREATE OR REPLACE VIEW software_summary AS
+           SELECT software_vendor, software_name, software_version, any_value(recommended_update) AS recommended_update,
+                  count(*) AS vulnerabilities, count(DISTINCT device_id) AS devices,
+                  count(*) FILTER (WHERE severity = 'Critical') AS critical,
+                  count(*) FILTER (WHERE priority = 'P1') AS p1
+           FROM vuln_current WHERE cve_id IS NOT NULL GROUP BY ALL""",
+    ]
+
+
+def refresh_views(settings: Settings) -> None:
+    """(Re)create all views; call after loading a day."""
+    with connect(settings) as con:
+        for statement in view_sql(settings):
+            con.execute(statement)

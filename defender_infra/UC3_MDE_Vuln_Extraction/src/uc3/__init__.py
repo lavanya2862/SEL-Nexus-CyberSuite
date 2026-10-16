@@ -1,0 +1,3 @@
+"""UC3 - complete Microsoft Defender vulnerability extraction beyond KQL limits."""
+
+__version__ = "0.1.0"

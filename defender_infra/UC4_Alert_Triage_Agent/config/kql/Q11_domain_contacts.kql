@@ -1,0 +1,6 @@
+// Q11 domain_contacts: devices that contacted each suspect domain in the window.
+DeviceNetworkEvents
+| where Timestamp between (datetime({{START}}) .. datetime({{END}}))
+| where RemoteUrl in ({{DOMAINS}})
+| summarize Connections = count(), Devices = make_set(DeviceName, 10), LastSeen = max(Timestamp) by RemoteUrl
+| take {{LIMIT}}

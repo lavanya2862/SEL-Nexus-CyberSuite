@@ -1,0 +1,17 @@
+// Q23 inbox_rules (Sentinel): mailbox rules and forwarding set up by the incident's accounts. A rule that hides
+// mail (moves to Deleted Items / Junk, matches words like "phishing" or "hacked") is a classic sign of a hijacked mailbox.
+OfficeActivity_CL
+| where TimeGenerated between (datetime({{START}}) .. datetime({{END}}))
+| extend User = coalesce(tostring(column_ifexists("UserId_s", "")), tostring(column_ifexists("UserId__s", "")), tostring(column_ifexists("UserId", ""))),
+         Op = coalesce(tostring(column_ifexists("Operation_s", "")), tostring(column_ifexists("Operation", ""))),
+         ClientIp = coalesce(tostring(column_ifexists("ClientIP_s", "")), tostring(column_ifexists("ClientIP", ""))),
+         Params = coalesce(tostring(column_ifexists("Parameters_s", "")), tostring(column_ifexists("Parameters", ""))),
+         Server = coalesce(tostring(column_ifexists("OriginatingServer_s", "")), tostring(column_ifexists("OriginatingServer", "")))
+| where Op in~ ("New-InboxRule", "Set-InboxRule", "UpdateInboxRules", "Set-Mailbox", "New-TransportRule")
+| where isnotempty(User) and User in~ ({{UPNS}})
+| extend HidesMail = Params has_any ("Deleted Items", "Junk Email", "DeleteMessage", "MoveToFolder"),
+         Forwards = Params has_any ("ForwardTo", "RedirectTo", "ForwardingSmtpAddress", "ForwardAsAttachmentTo"),
+         Rule = substring(Params, 0, 300)
+| project TimeGenerated, User, Op, ClientIp, Server, HidesMail, Forwards, Rule
+| order by TimeGenerated asc
+| take {{LIMIT}}

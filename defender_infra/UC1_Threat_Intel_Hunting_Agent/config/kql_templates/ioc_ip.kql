@@ -1,0 +1,10 @@
+// name: IOC sweep - IP addresses
+// kind: ioc
+// ioc_type: ip
+// technique: T1071
+DeviceNetworkEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where RemoteIP in ({{VALUES}})
+| project Timestamp, DeviceId, DeviceName, ActionType, RemoteIP, RemotePort, RemoteUrl,
+          InitiatingProcessFileName, InitiatingProcessCommandLine, InitiatingProcessAccountName
+| take 1000

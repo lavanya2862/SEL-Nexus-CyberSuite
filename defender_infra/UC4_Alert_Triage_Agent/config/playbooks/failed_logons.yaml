@@ -1,0 +1,19 @@
+id: failed_logons
+label: Brute force / many failed logons
+description: Many failed sign-ins for one account. Escalate when a success follows the failures (possible break-in).
+match:
+  any_title: ["failed logon", "brute force", "password spray", "many failed"]
+  any_technique: ["T1110"]
+queries:
+  - Q06_logon_failures_then_success
+  - Q05_logon_summary
+  - Q13_account_devices
+  - Q09_other_alerts_same_device
+ti:
+  ips_from: [Q05_logon_summary, Q06_logon_failures_then_success]
+history: {same: [playbook, account], days: 90}
+watchlists: [service_accounts, vip_users, approved_scanners]
+guardrails: [privileged_account, high_ti_match, injection_marker, high_no_close, logon_success_after_failures]
+allowed_verdicts: [likely_true_positive, likely_false_positive, benign_positive, needs_investigation]
+containment_options: [disable_user, isolate_device, collect_investigation_package]
+notes: Failures only = low. A successful sign-in after the burst = escalate. A service account locking itself out = benign positive.

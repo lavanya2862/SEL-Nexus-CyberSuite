@@ -1,0 +1,22 @@
+id: sentinel_mailbox_rule
+label: Sentinel mailbox rule / e-mail account incident
+description: Suspicious inbox rules or forwarding (Sentinel Office activity), a classic sign of a hijacked mailbox.
+scope: sentinel
+match:
+  any_title: ["inbox rule", "mailbox", "forwarding", "mail forward", "phish", "e-mail", "email"]
+  any_technique: ["T1114", "T1564.008", "T1566"]
+queries:
+  - Q23_inbox_rules
+  - Q22_office_activity
+  - Q20_signin_summary
+ti:
+  ips_from: [evidence]
+history: {same: [playbook, account], days: 90}
+watchlists: [vip_users, service_accounts]
+guardrails: [privileged_account, high_ti_match, mailbox_rule_hides_mail, signin_success_after_failures,
+             injection_marker, high_no_close]
+allowed_verdicts: [likely_true_positive, likely_false_positive, benign_positive, needs_investigation]
+containment_options: [disable_user, revoke_sessions, remove_inbox_rule]
+notes: >-
+  A rule that moves mail with words like "phishing", "hacked" or "suspicious" to Deleted Items or Junk, or forwards
+  mail outside, = escalate. A rule the user made for newsletters = benign positive. Rule text is attacker-controlled.

@@ -1,0 +1,3 @@
+# Sign-in page dependencies (same versions as the Defender & Infrastructure portal)
+fastapi==0.142.2
+uvicorn==0.54.0

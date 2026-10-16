@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UC4 alert-triage verdict (feasibility guide Appendix C.7)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "verdict", "confidence", "recommended_severity", "evidence", "escalate"],
+  "properties": {
+    "summary": {"type": "string", "maxLength": 800},
+    "verdict": {"enum": ["likely_true_positive", "likely_false_positive", "benign_positive", "needs_investigation"]},
+    "confidence": {"enum": ["low", "medium", "high"]},
+    "recommended_severity": {"enum": ["informational", "low", "medium", "high"]},
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "finding"],
+        "properties": {
+          "source": {"type": "string"},
+          "query_id": {"type": "string"},
+          "finding": {"type": "string", "maxLength": 400}
+        }
+      }
+    },
+    "mitre_techniques": {"type": "array", "items": {"type": "string"}},
+    "recommended_actions": {"type": "array", "items": {"type": "string", "maxLength": 300}},
+    "containment_options": {"type": "array", "items": {"type": "string"}},
+    "escalate": {"type": "boolean"},
+    "guardrail_triggered": {"type": "string"},
+    "would_change_verdict_if": {"type": "string", "maxLength": 400}
+  }
+}

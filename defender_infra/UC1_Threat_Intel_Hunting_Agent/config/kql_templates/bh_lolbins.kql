@@ -1,0 +1,10 @@
+// name: Windows tools misused to download or run code (LOLBins)
+// kind: behaviour
+// technique: T1218
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName in~ ("mshta.exe", "regsvr32.exe", "rundll32.exe", "certutil.exe", "bitsadmin.exe")
+| where ProcessCommandLine matches regex @"(?i)(https?://|javascript:|vbscript:|scrobj\.dll|-urlcache|/transfer)"
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

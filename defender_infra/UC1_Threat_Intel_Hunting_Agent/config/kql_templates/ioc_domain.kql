@@ -1,0 +1,13 @@
+// name: IOC sweep - domains
+// kind: ioc
+// ioc_type: domain
+// technique: T1071
+DeviceNetworkEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where isnotempty(RemoteUrl)
+| extend Host = tolower(tostring(coalesce(parse_url(RemoteUrl).Host, RemoteUrl)))
+| extend Host = iff(isempty(Host), tolower(RemoteUrl), Host)
+| where Host in ({{VALUES}}) or RemoteUrl has_any ({{VALUES}})
+| project Timestamp, DeviceId, DeviceName, ActionType, RemoteUrl, RemoteIP, RemotePort,
+          InitiatingProcessFileName, InitiatingProcessCommandLine, InitiatingProcessAccountName
+| take 1000

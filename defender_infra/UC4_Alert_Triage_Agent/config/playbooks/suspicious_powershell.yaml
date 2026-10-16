@@ -1,0 +1,22 @@
+id: suspicious_powershell
+label: Suspicious PowerShell / script execution
+description: PowerShell run in a way attackers favour (encoded command, download-and-run). Context decides TP vs benign admin use.
+match:
+  any_title: ["powershell", "encoded command", "fileless", "suspicious script"]
+  any_technique: ["T1059"]
+queries:
+  - Q01_process_tree
+  - Q02_script_commands
+  - Q03_process_network
+  - Q04_file_writes
+  - Q09_other_alerts_same_device
+ti:
+  domains_from: [evidence, Q03_process_network]
+  ips_from: [Q03_process_network]
+  hashes_from: [evidence, Q04_file_writes]
+history: {same: [playbook, device], days: 90}
+watchlists: [approved_admin_tools, service_accounts, vip_users]
+guardrails: [credential_access, privileged_account, high_ti_match, injection_marker, high_no_close]
+allowed_verdicts: [likely_true_positive, likely_false_positive, benign_positive, needs_investigation]
+containment_options: [isolate_device, collect_investigation_package, block_indicator]
+notes: PowerShell from an approved admin path/account can be a benign positive; from a user's Downloads it is not.

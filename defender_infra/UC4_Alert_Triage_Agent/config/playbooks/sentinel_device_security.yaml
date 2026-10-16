@@ -1,0 +1,24 @@
+id: sentinel_device_security
+label: Sentinel Windows security incident on a lab computer
+description: Sentinel rules on the lab VMs' Windows security log (failed logons, new users, admin rights, password resets, log cleared).
+scope: sentinel
+match:
+  any_title: ["uc4 lab - ", "failed logon", "local user", "added to administrators", "password of", "security log cleared"]
+queries:
+  - Q25_host_security_events
+  - Q06_logon_failures_then_success
+  - Q05_logon_summary
+  - Q09_other_alerts_same_device
+ti:
+  ips_from: [evidence]
+history: {same: [playbook, device], days: 90}
+watchlists: [approved_admin_tools, service_accounts, vip_users, approved_scanners]
+guardrails: [privileged_account, high_ti_match, logon_success_after_failures, local_admin_added, injection_marker,
+             high_no_close]
+allowed_verdicts: [likely_true_positive, likely_false_positive, benign_positive, needs_investigation]
+containment_options: [disable_user, revoke_sessions, isolate_device, collect_investigation_package]
+notes: >-
+  These come from the computer's own Windows security log. Failed logons from one known admin who then got in = often a
+  mistyped password (low), unless the source IP is unknown or public. A new local user, especially one added to
+  Administrators, a password reset by someone else, or a cleared security log = a person must confirm it was planned.
+  In this lab they are done by hand on purpose, but the agent cannot know that.

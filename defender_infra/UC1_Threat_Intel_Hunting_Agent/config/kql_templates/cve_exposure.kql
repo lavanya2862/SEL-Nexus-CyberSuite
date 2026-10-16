@@ -1,0 +1,7 @@
+// name: Devices exposed to specific CVEs (manual use)
+// kind: manual
+// technique:
+DeviceTvmSoftwareVulnerabilities
+| where CveId in ({{VALUES}})
+| project DeviceId, DeviceName, CveId, SoftwareVendor, SoftwareName, SoftwareVersion,
+          VulnerabilitySeverityLevel, RecommendedSecurityUpdate

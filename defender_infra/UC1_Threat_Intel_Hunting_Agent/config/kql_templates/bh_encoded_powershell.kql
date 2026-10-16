@@ -1,0 +1,11 @@
+// name: Encoded / hidden PowerShell commands
+// kind: behaviour
+// technique: T1059.001
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName in~ ("powershell.exe", "pwsh.exe")
+| where ProcessCommandLine matches regex @"(?i)\s[-/]e(c|n|nc|nco|ncod|ncode|ncoded|ncodedc|ncodedco|ncodedcom|ncodedcomm|ncodedcomma|ncodedcomman|ncodedcommand)?\s+[A-Za-z0-9+/=]{16,}"
+| where InitiatingProcessFileName !in~ ("MsSense.exe", "SenseIR.exe", "SenseCM.exe", "MsMpEng.exe")
+| project Timestamp, DeviceId, DeviceName, AccountName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine, SHA256
+| take 500

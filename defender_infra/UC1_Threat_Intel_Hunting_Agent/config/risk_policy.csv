@@ -1,0 +1,22 @@
+setting,value,meaning
+kev_points,35,On CISA's known-exploited list
+ransomware_points,15,Known use in ransomware campaigns
+epss_high,0.5,EPSS threshold for 'high'
+epss_high_points,15,Points when EPSS >= epss_high
+epss_medium,0.1,EPSS threshold for 'medium'
+epss_medium_points,8,Points when EPSS >= epss_medium
+cvss_critical,9.0,CVSS threshold for critical
+cvss_critical_points,15,Points when CVSS >= cvss_critical
+cvss_high,7.0,CVSS threshold for high
+cvss_high_points,10,Points when CVSS >= cvss_high
+exploit_available_points,10,Defender says a public exploit exists
+ncsc_high_high_points,15,NCSC-NL rates it [H/H] (high likelihood / high damage)
+exposed_points,15,At least one of our devices has the CVE (Defender)
+possible_exposure_points,8,Product name matches installed software (not verified by CVE)
+ioc_base_points,20,Fresh indicators of compromise to hunt for
+critical,70,Score from which the rating is Critical
+high,50,Score from which the rating is High
+medium,30,Score from which the rating is Medium
+cap_not_exposed,49,Max score when not on our devices (monitor only)
+cap_possible_only,69,Max score when only a possible product match
+hunt_hit_score,95,Score when a hunt found matching activity

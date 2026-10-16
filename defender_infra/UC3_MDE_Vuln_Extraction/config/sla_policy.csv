@@ -1,0 +1,5 @@
+severity,days_to_fix
+Critical,15
+High,30
+Medium,90
+Low,180

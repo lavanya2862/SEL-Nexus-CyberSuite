@@ -1,0 +1,41 @@
+# UC4 guardrails: fixed safety rules enforced in code, BEFORE and AFTER the AI.
+# The AI can only make a verdict MORE cautious; a guardrail can force escalation or block a "close" recommendation.
+# Each rule has an id (used in the verdict's guardrail_triggered field) and the effect it forces.
+
+rules:
+  # "Never overrule Microsoft": the agent does not close what Microsoft itself rated serious. No rules of our own.
+  - id: microsoft_high_severity
+    when: {incident_severity: [high]}
+    force: {deny_verdicts: [likely_false_positive, benign_positive]}
+    reason: Microsoft rated this incident high severity, so the agent does not close it.
+    basis: microsoft
+    link: https://learn.microsoft.com/en-us/defender-xdr/incident-queue
+
+  - id: microsoft_malicious_evidence
+    when: {evidence_verdict: [malicious]}
+    force: {deny_verdicts: [likely_false_positive, benign_positive]}
+    reason: Microsoft Defender marked evidence in this incident as malicious, so the agent does not close it.
+    basis: microsoft
+    link: https://learn.microsoft.com/en-us/graph/api/resources/security-alertevidence?view=graph-rest-1.0
+
+  # Not a classification rule: protects the AI from attacker text that tries to steer the verdict (prompt injection).
+  - id: injection_marker
+    when: {injection_detected: true}
+    force: {min_verdict: needs_investigation}
+    reason: Text that tries to give the AI instructions was found in attacker-controlled fields, so a person decides.
+    basis: ai_protection
+    link: https://owasp.org/www-project-top-10-for-large-language-model-applications/
+
+# Approved-test easing: ONLY applies when an approved-test watchlist matches AND no escalating rule fired.
+approved_test:
+  watchlist: approved_admin_tools
+  allow_benign_if_no_escalation: true
+  max_severity: low
+
+# Safety dial (a SOC-lead decision). true = the agent may only recommend closing (harmless / false alarm) when its
+# confidence is HIGH; everything else goes to a human. GUIDE backtest 5 Oct: false -> 1 missed real attack in 300,
+# 68% of false alarms closable; true -> 0 missed, 38% closable.
+close_requires_high_confidence: false
+
+# verdict ordering, least to most severe (min_verdict raises up this ladder)
+verdict_order: [benign_positive, likely_false_positive, needs_investigation, likely_true_positive]

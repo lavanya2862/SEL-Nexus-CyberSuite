@@ -1,0 +1,18 @@
+id: sentinel_generic
+label: Sentinel incident (other type)
+description: Fallback for Sentinel incidents no specific Sentinel playbook recognises. Collects account context, leans cautious.
+scope: sentinel
+match: {always: true}
+queries:
+  - Q20_signin_summary
+  - Q22_office_activity
+  - Q21_security_events
+ti:
+  ips_from: [evidence]
+  domains_from: [evidence]
+history: {same: [playbook, account], days: 90}
+watchlists: [vip_users, service_accounts, approved_scanners]
+guardrails: [privileged_account, high_ti_match, signin_success_after_failures, injection_marker, high_no_close]
+allowed_verdicts: [likely_true_positive, likely_false_positive, benign_positive, needs_investigation]
+containment_options: [disable_user, revoke_sessions, block_indicator]
+notes: An unknown Sentinel rule type defaults to needs_investigation unless the evidence is clearly benign.
