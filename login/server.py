@@ -2,15 +2,17 @@
 
     .venv\\Scripts\\python.exe server.py            # http://127.0.0.1:8000
 
-After sign-in the page shows one button per module (config/login.env). The session cookie it sets is the one every
-module on 127.0.0.1 checks (see accounts.py), so people sign in once.
+People choose a domain (module) on the sign-in form and go straight there; at sign-up they pick which domains their
+account needs (config/login.env lists them). The session cookie it sets is the one every module on 127.0.0.1 checks
+(see accounts.py), so people sign in once; it carries the account's domains so each module can refuse the others.
 
 API (all JSON):
   GET  /api/health          is the page up
   GET  /api/config          modules, sign-up on or off, password rule (nothing secret)
   GET  /api/me              who is signed in (null if nobody)
-  POST /api/login           {email, password}            -> sets the cookie
-  POST /api/signup          {name, email, password}      -> creates the account and sets the cookie
+  POST /api/login           {email, password, domain}                   -> sets the cookie
+  POST /api/signup          {name, email, password, domains, domain?}   -> creates the account and sets the cookie
+  POST /api/switch          {domain}                                    -> moves a signed-in person to another domain
   POST /api/logout                                       -> clears the cookie (signs out of every module)
 The POSTs need the header X-CyberSuite: auth, which a form on another website cannot send.
 """
@@ -71,10 +73,10 @@ def create_app(settings: dict | None = None) -> FastAPI:
     app = FastAPI(title="SEL Nexus CyberSuite sign-in", docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
     accounts = Accounts(HERE / "data" / "auth", settings["session_hours"], settings["signup_open"],
-                        settings["allowed_email_domains"])
+                        settings["allowed_email_domains"], {m["id"]: m["name"] for m in settings["modules"]})
 
     def signed_in(user: dict) -> JSONResponse:
-        token = accounts.sessions.issue(user["email"], user["name"])
+        token = accounts.sessions.issue(user["email"], user["name"], user["domains"], user["domain"])
         out = JSONResponse({"user": accounts.sessions.read(token)})
         out.set_cookie(COOKIE, token, max_age=settings["session_hours"] * 3600, httponly=True, samesite="lax",
                        secure=settings["cookie_secure"], path="/")
@@ -105,7 +107,9 @@ def create_app(settings: dict | None = None) -> FastAPI:
             out = JSONResponse({"user": None})
             out.delete_cookie(COOKIE, path="/", httponly=True, samesite="lax", secure=settings["cookie_secure"])
             return out
-        handlers = {"login": accounts.login, "signup": accounts.signup}
+        current = accounts.sessions.read(request.cookies.get(COOKIE))
+        handlers = {"login": accounts.login, "signup": accounts.signup,
+                    "switch": lambda body: accounts.switch(current, body)}
         if action not in handlers:
             return JSONResponse({"error": "Unknown action."}, status_code=404)
         try:

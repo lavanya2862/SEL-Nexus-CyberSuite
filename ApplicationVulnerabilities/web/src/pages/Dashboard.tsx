@@ -1,20 +1,16 @@
-import { useState, type CSSProperties } from 'react'
+import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight, CheckCircle2, CircleAlert, CirclePlus, Clock, GitPullRequestArrow, ScanSearch, ShieldCheck, Wrench, XCircle,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AgentCard, StoryCard } from '@/components/Agents'
-import { Chart } from '@/components/Chart'
-import { Card, Chip, ErrorBox, InfoTip, JobStatusTag, LinkBtn, PageHeader, Panel, Stat, VerdictTag } from '@/components/kit'
-import { PipelineFlow, StageDetail } from '@/components/Pipeline'
-import { RunsTable } from '@/components/Tables'
-import { isLive, useAttention, useCaps, useDashboard, useJob, useJobAgents, useJobs } from '@/lib/api'
+import { Chip, ErrorBox, InfoTip, JobStatusTag, LinkBtn, PageHeader, Panel, Stat, VerdictTag } from '@/components/kit'
+import { PipelineFlow } from '@/components/Pipeline'
+import { isLive, useAttention, useCaps, useDashboard, useJob, useJobs } from '@/lib/api'
 import { ago, num } from '@/lib/format'
-import { AGENT_IDS, SEVERITIES, mergedStages, plural, sevLabel } from '@/lib/labels'
-import { statusColor, useTheme } from '@/lib/theme'
-import { sevColor } from '@/components/kit'
+import { SEVERITIES, mergedStages, plural, sevLabel } from '@/lib/labels'
+import { statusColor } from '@/lib/theme'
 import type { Attention, Capabilities, Dashboard as DashboardData } from '@/lib/types'
 
 export function Dashboard() {
@@ -53,22 +49,12 @@ function DashboardView({ d, att }: { d: DashboardData; att?: Attention }) {
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <LivePipeline />
+        <LatestRun />
         <AttentionPanel att={att} />
       </div>
 
-      <AgentsRow />
-
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <SeverityCard d={d} />
-        <Card title="Recent runs" description="Every repository the agents processed, newest first. Click a row to open it."
-          className="xl:col-span-2" action={<LinkBtn to="/runs">All runs <ArrowRight className="size-3.5" /></LinkBtn>}>
-          <RunsTable items={d.recent.slice(0, 6)} empty="No runs yet. Start with New scan." />
-        </Card>
-      </div>
-
       <p className="pb-2 text-center text-xs text-ink-3">
-        {plural(d.runs, 'pipeline run')} · {plural(d.repositories, 'repository')} · refreshes by itself · fixes are never merged without a person
+        {plural(d.runs, 'pipeline run')} · {plural(d.repositories, 'repository')} · details live in the menu: Agents, Vulnerabilities, Pipeline runs
       </p>
     </div>
   )
@@ -157,16 +143,13 @@ function OpenFindingsCard({ d }: { d: DashboardData }) {
   )
 }
 
-/* ───────── the run that is working now (or the latest) ───────── */
+/* ───────── the run that is working now (or the latest), at a glance ───────── */
 
-function LivePipeline() {
+function LatestRun() {
   const running = useJobs({ status: 'running', limit: 1 }, 3_000)
   const latest = useJobs({ limit: 1 }, 5_000)
   const pick = running.data?.items[0] ?? latest.data?.items[0]
   const job = useJob(pick?.id)
-  const live = isLive(job.data)
-  const agents = useJobAgents(pick?.id, live)
-  const [picked, setPicked] = useState<string | null>(null)
 
   if (!pick) {
     return (
@@ -178,17 +161,14 @@ function LivePipeline() {
     )
   }
   const j = job.data ?? pick
-  const stages = mergedStages(job.data?.stages)
-  const active = stages.find((s) => s.status === 'running') ?? [...stages].reverse().find((s) => !['pending', 'skipped'].includes(s.status)) ?? stages[0]
-  const selected = live ? active.id : picked ?? active.id
-
+  const live = isLive(j)
   return (
     <Panel className="flex min-w-0 flex-col gap-4 p-6 xl:col-span-2">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">{live ? 'Live pipeline' : 'Latest pipeline run'}</span>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">{live ? 'Running now' : 'Latest run'}</span>
         {live && <span className="size-2 animate-pulse rounded-full bg-sky" />}
         <span className="flex-1" />
-        <LinkBtn to={`/runs/${j.id}`}>Open full run <ArrowRight className="size-3.5" /></LinkBtn>
+        <LinkBtn to={`/runs/${j.id}`} kind="primary">Open run <ArrowRight className="size-3.5" /></LinkBtn>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-lg font-semibold tracking-tight">{j.repo}</h3>
@@ -202,9 +182,7 @@ function LivePipeline() {
           <p className="mt-1.5 text-xs text-ink-3">Now: {j.stage} · {j.progress}%</p>
         </div>
       )}
-      <PipelineFlow stages={stages} selected={selected} onSelect={setPicked} />
-      <StageDetail stage={stages.find((s) => s.id === selected)} />
-      {!live && agents.data?.story && <div className="border-t border-hairline pt-4"><StoryCard story={agents.data.story} job={j} linkToRun /></div>}
+      <PipelineFlow stages={mergedStages(job.data?.stages)} />
     </Panel>
   )
 }
@@ -213,18 +191,14 @@ function LivePipeline() {
 
 function AttentionPanel({ att }: { att?: Attention }) {
   if (!att) return <Panel className="p-6"><Skeleton className="h-64" /></Panel>
-  const reasons: Record<string, number> = {}
-  att.fixes_needed.forEach((f) => { reasons[f.reason] = (reasons[f.reason] ?? 0) + 1 })
-  const top = Object.entries(reasons).sort((a, b) => b[1] - a[1]).slice(0, 3)
   const errors = [...att.config_errors, ...att.errors]
   const boxes = [
     { to: '/approvals', icon: ShieldCheck, n: att.counts.approvals, label: 'Approvals waiting', tint: att.counts.approvals ? 'var(--blue)' : 'var(--teal)',
-      text: att.counts.approvals ? 'Fix sets ready for your decision' : 'Nothing is waiting for you',
-      list: att.approvals.slice(0, 3).map((a) => `${a.repo}: ${a.summary?.fixes_applied ?? 0} fixes${a.summary?.validation_status === 'flagged' ? ' (flagged)' : ''}`) },
+      text: att.counts.approvals ? 'Fix sets ready for your decision' : 'Nothing is waiting for you' },
     { to: '/fixes', icon: Wrench, n: att.counts.fixes_needed, label: 'Fixes needed', tint: att.counts.fixes_needed ? 'var(--amber)' : 'var(--teal)',
-      text: att.counts.fixes_needed ? 'Issues the agents could not fix' : 'Every selected issue was fixed', list: top.map(([r, n]) => `${n} · ${r}`) },
+      text: att.counts.fixes_needed ? 'Issues the agents could not fix' : 'Every selected issue was fixed' },
     { to: '/errors', icon: errors.length ? XCircle : CircleAlert, n: errors.length, label: 'Errors', tint: errors.length ? 'var(--rose)' : 'var(--teal)',
-      text: errors.length ? 'Problems with runs, scanners or setup' : 'No errors', list: errors.slice(0, 3).map((e) => e.kind) },
+      text: errors.length ? 'Problems with runs, scanners or setup' : 'No errors' },
   ]
   return (
     <Panel className="flex flex-col gap-3 p-6">
@@ -240,63 +214,9 @@ function AttentionPanel({ att }: { att?: Attention }) {
             <span className="tint-num tabular text-2xl leading-none">{b.n}</span>
           </div>
           <p className="mt-1 text-xs text-ink-2">{b.text}</p>
-          {b.list.length > 0 && <ul className="mt-2 flex flex-col gap-0.5 text-xs text-ink-3">{b.list.map((l) => <li key={l} className="truncate">• {l}</li>)}</ul>}
         </Link>
       ))}
     </Panel>
-  )
-}
-
-/* ───────── the four agents ───────── */
-
-function AgentsRow() {
-  const latest = useJobs({ limit: 1 }, 5_000)
-  const pick = latest.data?.items[0]
-  const agents = useJobAgents(pick?.id, isLive(pick))
-  return (
-    <section className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold tracking-tight">The four agents</h2>
-        <p className="text-sm text-ink-3">{pick ? `${isLive(pick) ? 'Working on' : 'Last run on'} ${pick.repo} · click one to see its inputs, outputs and conclusions` : 'They start when you run a scan'}</p>
-      </div>
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        {AGENT_IDS.map((id) => <AgentCard key={id} id={id} view={agents.data?.agents[id]} />)}
-      </div>
-    </section>
-  )
-}
-
-/* ───────── severity ───────── */
-
-function SeverityCard({ d }: { d: DashboardData }) {
-  const { theme } = useTheme()
-  const data = SEVERITIES.filter((s) => d.severity[s]).map((s) => ({ name: sevLabel(s), value: d.severity[s] ?? 0, itemStyle: { color: sevColor(theme, s) } }))
-  const total = data.reduce((a, x) => a + x.value, 0)
-  return (
-    <Card title="Open findings by severity" description="Latest scan of each repository." action={<LinkBtn to="/vulnerabilities">All <ArrowRight className="size-3.5" /></LinkBtn>}>
-      {total ? (
-        <div className="flex items-center gap-4">
-          <div className="relative size-[170px] shrink-0">
-            <Chart height={170} build={() => ({
-              tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-              series: [{ type: 'pie', radius: ['68%', '92%'], padAngle: 2, label: { show: false }, data }],
-            })} />
-            <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
-              <div><div className="tabular text-2xl font-semibold">{num(total)}</div><div className="text-xs text-ink-3">findings</div></div>
-            </div>
-          </div>
-          <ul className="flex flex-1 flex-col gap-2 text-sm">
-            {data.map((x) => (
-              <li key={x.name} className="flex items-center gap-2">
-                <span className="size-2.5 rounded-full" style={{ background: x.itemStyle.color }} />
-                <span className="flex-1 text-ink-2">{x.name}</span>
-                <span className="tabular font-medium">{num(x.value)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : <p className="text-sm text-ink-3">No data yet.</p>}
-    </Card>
   )
 }
 

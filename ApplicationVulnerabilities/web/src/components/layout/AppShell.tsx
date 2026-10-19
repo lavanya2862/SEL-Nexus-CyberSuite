@@ -273,8 +273,8 @@ function PhoneMenu({ activeItem, counts }: { activeItem?: string; counts: Counts
   )
 }
 
-/** Who is signed in, Modules (back to the CyberSuite chooser) and Sign out: a box at the bottom of the side menu.
-    Collapsed menu: the initials and the two buttons. Hidden when there is no shared sign-in (local use). */
+/** Who is signed in, Switch domain (only for people with more than one CyberSuite domain) and Sign out: a box at the
+    bottom of the side menu. Collapsed menu: the initials and the buttons. Hidden when there is no shared sign-in. */
 function ProfileBox({ compact }: { compact?: boolean }) {
   const { user, loginUrl, signOut } = useAuth()
   if (!user || user.via === 'off' || !loginUrl) return null
@@ -283,7 +283,8 @@ function ProfileBox({ compact }: { compact?: boolean }) {
     await signOut()
     goToSharedLogin(loginUrl)
   }
-  const modules = () => { window.location.href = `${loginUrl}/` }
+  // accounts made before domains existed have no list and may open every domain
+  const modules = !user.domains || user.domains.length > 1 ? () => { window.location.href = `${loginUrl}/?switch=1` } : null
   if (compact) {
     return (
       <div className="flex flex-col items-center gap-1.5 border-t border-hairline py-3">
@@ -293,7 +294,7 @@ function ProfileBox({ compact }: { compact?: boolean }) {
           </TooltipTrigger>
           <TooltipContent side="right">{user.name}<span className="text-ink-3"> · {user.email}</span></TooltipContent>
         </Tooltip>
-        <RailButton label="All CyberSuite modules" onClick={modules}><Grip className="size-4" /></RailButton>
+        {modules && <RailButton label="Switch domain" onClick={modules}><Grip className="size-4" /></RailButton>}
         <RailButton label="Sign out" onClick={out}><LogOut className="size-4" /></RailButton>
       </div>
     )
@@ -309,10 +310,12 @@ function ProfileBox({ compact }: { compact?: boolean }) {
           </span>
         </div>
         <div className="mt-3 flex gap-2">
-          <button onClick={modules} title="Back to the CyberSuite module chooser"
-            className="flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-hairline-strong text-sm font-medium text-ink-2 transition-colors hover:border-blue/60 hover:bg-blue/10 hover:text-ink">
-            <Grip className="size-4" /> Modules
-          </button>
+          {modules && (
+            <button onClick={modules} title="Switch to another CyberSuite domain"
+              className="flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-hairline-strong text-sm font-medium text-ink-2 transition-colors hover:border-blue/60 hover:bg-blue/10 hover:text-ink">
+              <Grip className="size-4" /> Switch
+            </button>
+          )}
           <button onClick={out}
             className="flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-hairline-strong text-sm font-medium text-ink-2 transition-colors hover:border-rose/60 hover:bg-rose/10 hover:text-ink">
             <LogOut className="size-4" /> Sign out

@@ -17,6 +17,7 @@
     <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></symbol>
     <symbol id="i-logout" viewBox="0 0 24 24"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></symbol>
     <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
   </svg>
 
@@ -54,6 +55,10 @@
           <label class="field"><span>Password</span>
             <span class="pw"><input type="password" name="password" autocomplete="current-password" required>
               <button type="button" class="pw-toggle" aria-label="Show password" aria-pressed="false"><svg class="ico"><use href="#i-eye"/></svg></button></span></label>
+          <fieldset class="domains">
+            <legend>Domain <small>where you want to work now</small></legend>
+            <div class="domain-list" data-domains="radio"></div>
+          </fieldset>
           <div class="error" role="alert" hidden></div>
           <button type="submit" class="btn" data-busy="Signing in…">Sign in</button>
           <p class="switch" data-signup-only>New here? <a href="#signup">Create an account</a></p>
@@ -71,6 +76,10 @@
             <span class="pw"><input type="password" name="password" autocomplete="new-password" required aria-describedby="pw-rule">
               <button type="button" class="pw-toggle" aria-label="Show password" aria-pressed="false"><svg class="ico"><use href="#i-eye"/></svg></button></span>
             <small class="hint" id="pw-rule"></small></label>
+          <fieldset class="domains">
+            <legend>Domains you need <small>tick one or both; you can switch between them later</small></legend>
+            <div class="domain-list" data-domains="checkbox"></div>
+          </fieldset>
           <div class="error" role="alert" hidden></div>
           <button type="submit" class="btn" data-busy="Creating account…">Create account</button>
           <p class="switch">Already have an account? <a href="#">Sign in</a></p>
@@ -80,10 +89,11 @@
     </main>
   </div>
 
-  <!-- Signed in: one button per module -->
+  <!-- Signed in: only when switching domain (or opening a domain the account does not include) -->
   <main class="choose" id="view-choose" hidden>
-    <h1 id="welcome">Welcome</h1>
-    <p class="lead">Choose where you want to work.</p>
+    <h1 id="welcome">Switch domain</h1>
+    <p class="lead" id="choose-lead">Choose where you want to work.</p>
+    <div class="error page-error" id="choose-error" role="alert" hidden></div>
     <div class="modules" id="modules"></div>
   </main>
 

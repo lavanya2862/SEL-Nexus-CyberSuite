@@ -102,12 +102,13 @@ class UserStore:
         tmp.write_text(json.dumps(users, indent=2), encoding="utf-8")
         tmp.replace(self.path)
 
-    def create(self, email: str, name: str, password: str) -> dict:
+    def create(self, email: str, name: str, password: str, domains: list[str]) -> dict:
         with self._lock:
             users = self._load()
             if email in users:
                 raise AuthError("An account with this email already exists. Sign in instead.", 409)
-            users[email] = {"email": email, "name": name, "password": hash_password(password), "created_at": _now_iso()}
+            users[email] = {"email": email, "name": name, "password": hash_password(password), "domains": domains,
+                            "created_at": _now_iso()}
             self._save(users)
             return users[email]
 
@@ -138,10 +139,11 @@ class Sessions:
     def _sign(self, body: str) -> str:
         return _b64(hmac.new(self.key, body.encode(), hashlib.sha256).digest())
 
-    def issue(self, email: str, name: str) -> str:
+    def issue(self, email: str, name: str, domains: list[str], domain: str) -> str:
+        """`domains`: the CyberSuite domains (modules) this account may open; `domain`: the one chosen at sign-in."""
         now = int(time.time())
-        body = _b64(json.dumps({"sub": email, "name": name, "via": "local", "iat": now,
-                                "exp": now + self.hours * 3600}, separators=(",", ":")).encode())
+        body = _b64(json.dumps({"sub": email, "name": name, "via": "local", "domains": domains, "domain": domain,
+                                "iat": now, "exp": now + self.hours * 3600}, separators=(",", ":")).encode())
         return f"{body}.{self._sign(body)}"
 
     def read(self, token: str | None) -> dict | None:
@@ -156,12 +158,15 @@ class Sessions:
             return None
         if not isinstance(data, dict) or int(data.get("exp", 0)) < time.time():
             return None
-        return {"email": data.get("sub"), "name": data.get("name"), "via": data.get("via"), "expires": data.get("exp")}
+        return {"email": data.get("sub"), "name": data.get("name"), "via": data.get("via"), "expires": data.get("exp"),
+                "domains": data.get("domains"), "domain": data.get("domain")}
 
 
 class Accounts:
-    def __init__(self, folder: Path, session_hours: int, signup_open: bool, allowed_email_domains: tuple[str, ...]):
+    def __init__(self, folder: Path, session_hours: int, signup_open: bool, allowed_email_domains: tuple[str, ...],
+                 domain_names: dict[str, str]):
         self.folder = folder
+        self.domain_names = domain_names   # id -> name of every CyberSuite domain (module), in menu order
         self.signup_open = signup_open
         self.allowed_email_domains = allowed_email_domains
         self.users = UserStore(folder)
@@ -197,8 +202,27 @@ class Accounts:
         problem = password_problem(password)
         if problem:
             raise AuthError(problem)
-        user = self.users.create(email, name, password)
-        return {"email": user["email"], "name": user["name"]}
+        wanted = body.get("domains")
+        domains = [d for d in self.domain_names if isinstance(wanted, list) and d in wanted]
+        if not domains:
+            raise AuthError("Choose at least one domain you need access to.")
+        domain = body.get("domain") if body.get("domain") in domains else domains[0]
+        user = self.users.create(email, name, password, domains)
+        return {"email": user["email"], "name": user["name"], "domains": domains, "domain": domain}
+
+    def user_domains(self, user: dict) -> list[str]:
+        """The domains an account may open. Accounts made before domains existed keep access to every domain."""
+        saved = user.get("domains")
+        return [d for d in self.domain_names if d in saved] if isinstance(saved, list) else list(self.domain_names)
+
+    def check_domain(self, domain: object, domains: list[str]) -> str:
+        if domain not in self.domain_names:
+            raise AuthError("Choose the domain you want to open.")
+        if domain not in domains:
+            have = " or ".join(self.domain_names[d] for d in domains) or "no domain"
+            raise AuthError(f"Your account does not include {self.domain_names[domain]}. Choose {have}, "
+                            "or ask the CyberSuite owner for access.", 403)
+        return str(domain)
 
     def login(self, body: dict) -> dict:
         email, password = normalise_email(body.get("email")), str(body.get("password") or "")
@@ -209,7 +233,20 @@ class Accounts:
         if not user:
             self._failed(email)
             raise AuthError("Wrong email or password.", 401)
-        return {"email": user["email"], "name": user["name"]}
+        domains = self.user_domains(user)
+        domain = self.check_domain(body.get("domain"), domains)
+        return {"email": user["email"], "name": user["name"], "domains": domains, "domain": domain}
+
+    def switch(self, current: dict | None, body: dict) -> dict:
+        """Move a signed-in person to another of their domains (no password needed)."""
+        if not current:
+            raise AuthError("Sign in first.", 401)
+        stored = self.users._load().get(current["email"])
+        if not stored:
+            raise AuthError("Sign in first.", 401)
+        domains = self.user_domains(stored)
+        domain = self.check_domain(body.get("domain"), domains)
+        return {"email": current["email"], "name": current["name"], "domains": domains, "domain": domain}
 
     def log(self, event: str, email: str, ok: bool, ip: str | None, detail: str = "") -> None:
         path = self.folder / "signins.jsonl"

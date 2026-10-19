@@ -4,7 +4,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
-export interface User { email: string; name: string; via: string; expires: number | null }
+export interface User { email: string; name: string; via: string; expires: number | null; domains?: string[] | null; domain?: string | null }
 
 interface AuthState {
   user: User | null

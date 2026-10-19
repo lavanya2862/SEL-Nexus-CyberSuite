@@ -239,8 +239,8 @@ function ProfileBox({ compact }: { compact?: boolean }) {
     if (loginUrl) goToSharedLogin(loginUrl)
     else navigate('/login', { replace: true })
   }
-  // the shared CyberSuite sign-in page doubles as the module chooser
-  const modules = loginUrl ? () => { window.location.href = `${loginUrl}/` } : null
+  // the shared CyberSuite sign-in page lists the person's domains to switch between
+  const modules = loginUrl ? () => { window.location.href = `${loginUrl}/?switch=1` } : null
   if (compact) {
     return (
       <div className="flex flex-col items-center gap-1.5 border-t border-hairline py-3">
@@ -250,7 +250,7 @@ function ProfileBox({ compact }: { compact?: boolean }) {
           </TooltipTrigger>
           <TooltipContent side="right">{user.name}<span className="text-ink-3"> · {user.email}</span></TooltipContent>
         </Tooltip>
-        {modules && <RailButton label="All CyberSuite modules" onClick={modules}><Grip className="size-4" /></RailButton>}
+        {modules && <RailButton label="Switch domain" onClick={modules}><Grip className="size-4" /></RailButton>}
         <RailButton label="Sign out" onClick={out}><LogOut className="size-4" /></RailButton>
       </div>
     )
@@ -269,10 +269,10 @@ function ProfileBox({ compact }: { compact?: boolean }) {
           {modules && (
             <button
               onClick={modules}
-              title="Back to the CyberSuite module chooser"
+              title="Switch to another CyberSuite domain"
               className="flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-hairline-strong text-sm font-medium text-ink-2 transition-colors hover:border-blue/60 hover:bg-blue/10 hover:text-ink"
             >
-              <Grip className="size-4" /> Modules
+              <Grip className="size-4" /> Switch
             </button>
           )}
           <button

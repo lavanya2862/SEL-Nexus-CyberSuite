@@ -11,6 +11,11 @@ echo Stopping any sign-in page that is already running...
 powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
 timeout /t 1 /nobreak >nul
 
+if not exist "%SUITE%login\.venv\Scripts\python.exe" (
+  echo Setting up the sign-in page, first time only...
+  python -m venv "%SUITE%login\.venv" && "%SUITE%login\.venv\Scripts\python.exe" -m pip install --quiet --disable-pip-version-check -r "%SUITE%login\requirements.txt"
+)
+
 echo Starting the sign-in page...
 start "SEL Nexus CyberSuite sign-in (keep open)" /min /d "%SUITE%login" "%SUITE%login\.venv\Scripts\python.exe" server.py
 powershell -NoProfile -Command "$ok=$false; for ($i=0; $i -lt 40 -and -not $ok; $i++) { try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/api/health -TimeoutSec 2 | Out-Null; $ok=$true } catch { Start-Sleep -Milliseconds 500 } }; if (-not $ok) { exit 1 }"

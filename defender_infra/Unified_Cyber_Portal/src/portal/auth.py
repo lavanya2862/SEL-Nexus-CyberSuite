@@ -27,6 +27,7 @@ from typing import Any
 from portal.config import Settings
 
 COOKIE = "portal_session"
+DOMAIN = "defender_infra"   # this portal's id on the shared CyberSuite sign-in page
 PASSWORD_RULE = "At least 8 characters, with an upper-case letter, a lower-case letter, a number and a symbol"
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _SCRYPT = {"n": 2**14, "r": 8, "p": 1, "dklen": 32}
@@ -162,7 +163,8 @@ class Sessions:
             return None
         if not isinstance(data, dict) or int(data.get("exp", 0)) < time.time():
             return None
-        return {"email": data.get("sub"), "name": data.get("name"), "via": data.get("via"), "expires": data.get("exp")}
+        return {"email": data.get("sub"), "name": data.get("name"), "via": data.get("via"), "expires": data.get("exp"),
+                "domains": data.get("domains"), "domain": data.get("domain")}
 
 
 class CognitoVerifier:
@@ -226,7 +228,11 @@ class Auth:
     def current_user(self, cookie: str | None) -> dict | None:
         if self.mode == "off":
             return {"email": "local", "name": "Local user", "via": "off", "expires": None}
-        return self.sessions.read(cookie) if self.sessions else None
+        user = self.sessions.read(cookie) if self.sessions else None
+        # shared CyberSuite sign-in: an account made with a domain choice may only open the domains it picked
+        if user and self.settings.login_url and isinstance(user.get("domains"), list) and DOMAIN not in user["domains"]:
+            return None
+        return user
 
     # ---- checks shared by both modes
     def _check_email(self, email: str) -> None:

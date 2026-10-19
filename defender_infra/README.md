@@ -18,5 +18,7 @@ page (`../login`, http://127.0.0.1:8000), which also leads to the other module, 
    (`PORTAL_LOGIN_URL`) and its accounts (`PORTAL_AUTH_DIR`).
 3. Double-click **../Start_All.cmd** to start the whole suite and open the sign-in page. **Start_Defender_Infra.cmd**
    starts only this module (and the sign-in page if it isn't running). **Stop_Defender_Infra.cmd** stops this module.
+   The first start sets up each tool's `.venv` (a `.pth` file puts its `src` on the path, so Python 3.11 works too) and
+   builds the portal website, and points the portal at the shared sign-in page (`PORTAL_LOGIN_URL`, `PORTAL_AUTH_DIR`).
 
 Secrets (`.env`), data, logs and local accounts are never committed. Without a filled-in `.env`, a tool has nothing to show.

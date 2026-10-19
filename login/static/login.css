@@ -172,3 +172,34 @@ a.module:hover .go { background: var(--blue-hi); }
   .module:nth-child(2) { animation-delay: 70ms; }
 }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* ---- domain picker on the sign-in and sign-up forms: one card per CyberSuite domain */
+.domains { margin: 0; padding: 0; border: 0; min-width: 0; }
+.domains legend { padding: 0; margin-bottom: 8px; font-size: 14px; font-weight: 500; }
+.domains legend small { margin-left: 6px; font-weight: 400; color: var(--ink-3); }
+.domain-list { display: grid; gap: 10px; }
+@media (min-width: 520px) { .domain-list { grid-template-columns: 1fr 1fr; } }
+.domain {
+  position: relative; display: flex; align-items: flex-start; gap: 12px; padding: 14px; border-radius: 12px; cursor: pointer;
+  border: 1px solid var(--hairline-strong); background: var(--field); transition: border-color 160ms, background-color 160ms, box-shadow 200ms;
+}
+.domain:hover { border-color: color-mix(in oklab, var(--hairline-strong), var(--ink-3) 35%); }
+.domain input { position: absolute; opacity: 0; pointer-events: none; }
+.domain .tile { width: 34px; height: 34px; flex-shrink: 0; }
+.domain b { display: block; font-size: 14px; font-weight: 600; line-height: 1.3; }
+.domain small { display: block; margin-top: 2px; font-size: 12.5px; line-height: 1.4; color: var(--ink-3); }
+.domain .mark {
+  margin-left: auto; width: 18px; height: 18px; flex-shrink: 0; border-radius: 50%; border: 1.5px solid var(--hairline-strong);
+  display: grid; place-items: center; transition: background-color 160ms, border-color 160ms;
+}
+.domain input[type="checkbox"] ~ .mark { border-radius: 5px; }
+.domain .mark .ico { width: 12px; height: 12px; stroke-width: 3; color: #fff; opacity: 0; }
+.domain:has(input:checked) { border-color: var(--blue); background: rgb(29 92 255 / 0.08); box-shadow: 0 0 0 3px rgb(29 92 255 / 0.12); }
+.domain:has(input:checked) .mark { background: var(--blue); border-color: var(--blue); }
+.domain:has(input:checked) .mark .ico { opacity: 1; }
+.domain:has(input:focus-visible) { outline: 2px solid var(--sky); outline-offset: 2px; }
+.domain:has(input:disabled) { cursor: default; opacity: 0.55; }
+.module .here {
+  align-self: flex-start; display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border-radius: 9999px;
+  border: 1px solid var(--blue); color: var(--sky); font-size: 13px; font-weight: 600;
+}

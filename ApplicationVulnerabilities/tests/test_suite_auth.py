@@ -15,11 +15,13 @@ def _b64(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode().rstrip("=")
 
 
-def _cookie(key: bytes, exp_in: int = 3600) -> str:
-    """A cookie exactly as login/accounts.py issues it."""
+def _cookie(key: bytes, exp_in: int = 3600, domains: list[str] | None = None) -> str:
+    """A cookie exactly as login/accounts.py issues it (`domains` absent = an account from before domains existed)."""
     now = int(time.time())
-    body = _b64(json.dumps({"sub": "ana@example.com", "name": "Ana", "via": "local", "iat": now, "exp": now + exp_in},
-                           separators=(",", ":")).encode())
+    payload = {"sub": "ana@example.com", "name": "Ana", "via": "local", "iat": now, "exp": now + exp_in}
+    if domains is not None:
+        payload |= {"domains": domains, "domain": domains[0]}
+    body = _b64(json.dumps(payload, separators=(",", ":")).encode())
     return f"{body}.{_b64(hmac.new(key, body.encode(), hashlib.sha256).digest())}"
 
 
@@ -69,3 +71,13 @@ def test_without_suite_login_everyone_is_the_local_user(tmp_path, monkeypatch):
     client = TestClient(app)
     assert client.get("/api/v1/auth/me").json()["user"]["via"] == "off"
     assert client.get("/api/v1/dashboard").status_code == 200
+
+
+def test_only_accounts_with_this_domain_get_in(tmp_path, monkeypatch):
+    client, key = _client(tmp_path, monkeypatch)
+    client.cookies.set("portal_session", _cookie(key, domains=["defender_infra"]))
+    assert client.get("/api/v1/dashboard").status_code == 401
+    assert client.get("/runs", follow_redirects=False).status_code == 303
+    client.cookies.set("portal_session", _cookie(key, domains=["defender_infra", "application_vulnerabilities"]))
+    assert client.get("/api/v1/dashboard").status_code == 200
+    assert client.get("/api/v1/auth/me").json()["user"]["domains"] == ["defender_infra", "application_vulnerabilities"]

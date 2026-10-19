@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 
 COOKIE = "portal_session"
+DOMAIN = "application_vulnerabilities"  # this module's id on the sign-in page; accounts without it are refused
 
 
 def _unb64(text: str) -> bytes:
@@ -68,4 +69,5 @@ class SuiteSessions:
             return None
         if not isinstance(data, dict) or int(data.get("exp", 0)) < time.time():
             return None
-        return {"email": data.get("sub"), "name": data.get("name"), "via": data.get("via"), "expires": data.get("exp")}
+        return {"email": data.get("sub"), "name": data.get("name"), "via": data.get("via"), "expires": data.get("exp"),
+                "domains": data.get("domains"), "domain": data.get("domain")}

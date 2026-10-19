@@ -27,7 +27,7 @@ from .logging_setup import setup_logging
 from .models import Finding, JobOptions, RemediationReport
 from .sandbox import sandbox_available
 from .scanners import capabilities
-from .suite_auth import COOKIE as SUITE_COOKIE, SuiteSessions
+from .suite_auth import COOKIE as SUITE_COOKIE, DOMAIN as SUITE_DOMAIN, SuiteSessions
 
 log = logging.getLogger(__name__)
 # The React web app (web/), built with `npm run build`. Same look as the suite's Defender & Infrastructure portal.
@@ -145,7 +145,11 @@ def _suite_user(request: Request) -> dict | None:
     s = get_settings()
     if not s.suite_login_url:
         return {"email": "local", "name": "Local user", "via": "off", "expires": None}
-    return _suite_sessions(s.suite_auth_dir).read(request.cookies.get(SUITE_COOKIE))
+    user = _suite_sessions(s.suite_auth_dir).read(request.cookies.get(SUITE_COOKIE))
+    # accounts made with a domain choice may only open the domains they picked (older accounts have no list: all)
+    if user and isinstance(user.get("domains"), list) and SUITE_DOMAIN not in user["domains"]:
+        return None
+    return user
 
 
 _OPEN_PATHS = ("/health", "/ready", "/metrics", "/favicon.svg")
