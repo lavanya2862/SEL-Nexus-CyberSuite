@@ -212,14 +212,27 @@ class GitHubClient:
         resp.raise_for_status()
         return resp.json()
 
-    def find_workflow_run(self, repo: RepoRef, workflow_path: str, branch: str, head_sha: str) -> dict | None:
-        """The run of ``workflow_path`` that a push of ``head_sha`` to ``branch`` started (None until it appears)."""
+    def workflow_runs(self, repo: RepoRef, workflow_path: str, branch: str, head_sha: str) -> list[dict]:
+        """Runs of ``workflow_path`` for ``head_sha`` on ``branch``, newest first."""
         data = self._actions_json(f"/repos/{repo.owner}/{repo.name}/actions/runs", branch=branch, head_sha=head_sha,
                                   per_page=20)
-        for run in data.get("workflow_runs") or []:
-            if run.get("path", "").split("@")[0] == workflow_path:
+        return [run for run in data.get("workflow_runs") or [] if run.get("path", "").split("@")[0] == workflow_path]
+
+    def find_workflow_run(self, repo: RepoRef, workflow_path: str, branch: str, head_sha: str,
+                          exclude: set[int] | frozenset[int] = frozenset()) -> dict | None:
+        """The newest run of ``workflow_path`` for ``head_sha`` that is not in ``exclude`` (None until it appears)."""
+        for run in self.workflow_runs(repo, workflow_path, branch, head_sha):
+            if run["id"] not in exclude:
                 return run
         return None
+
+    def dispatch_workflow(self, repo: RepoRef, workflow_path: str, branch: str) -> None:
+        """Start the workflow again on ``branch`` (used when there is nothing new to push)."""
+        name = workflow_path.rsplit("/", 1)[-1]
+        resp = self._request("POST", f"/repos/{repo.owner}/{repo.name}/actions/workflows/{name}/dispatches",
+                             json={"ref": branch})
+        if not resp.is_success:
+            raise RepoAccessError(f"Could not start the test workflow again (HTTP {resp.status_code}): {resp.text[:300]}")
 
     def get_workflow_run(self, repo: RepoRef, run_id: int) -> dict:
         return self._actions_json(f"/repos/{repo.owner}/{repo.name}/actions/runs/{run_id}")

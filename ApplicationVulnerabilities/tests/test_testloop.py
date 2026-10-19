@@ -84,7 +84,7 @@ def test_ai_fix_changes_the_code(tmp_path, monkeypatch):
 
 def test_ai_fix_that_skips_a_test_is_rejected(tmp_path, monkeypatch):
     repo = make_git_repo(tmp_path / "r", APP)
-    _llm(monkeypatch, [SKIP_FIX, SKIP_FIX])
+    _llm(monkeypatch, [SKIP_FIX] * 3)  # every try skips the test
     out = testloop.ai_fix(repo, {"test": "python -m pytest"}, testloop.clean_log(FAILED_LOG), [])
     assert not out["ok"] and "skips tests" in out["error"]
     assert "pytest.mark.skip" not in (repo / "tests/test_calc.py").read_text()  # the edit was undone
@@ -106,7 +106,7 @@ class FakeGitHub:
     def __exit__(self, *exc):
         return False
 
-    def find_workflow_run(self, repo, path, branch, sha):
+    def find_workflow_run(self, repo, path, branch, sha, exclude=frozenset()):
         assert path == testloop.WORKFLOW_PATH
         run_id = len(FakeGitHub.runs) + 1
         FakeGitHub.runs[run_id] = {"id": run_id, "status": "completed", "conclusion": FakeGitHub.results.pop(0),
@@ -134,7 +134,7 @@ def loop(tmp_path, monkeypatch):
         testloop.create_branch(workdir, branch)
 
     monkeypatch.setattr(testloop, "_prepare", prepare)
-    monkeypatch.setattr(testloop, "_push", lambda repo, workdir, branch: pushes.append(testloop.head_sha(workdir)))
+    monkeypatch.setattr(testloop, "_start_run", lambda repo, workdir, branch, sha, st: (pushes.append(sha), set())[1])
     monkeypatch.setattr(testloop, "GitHubClient", FakeGitHub)
     monkeypatch.setattr(testloop, "_load", lambda job_id: (
         {"id": job_id, "repo_url": "https://github.com/o/r", "commit": "abc", "status": "completed", "summary": {}},
@@ -198,3 +198,63 @@ def test_only_completed_runs_can_be_tested():
 
 def test_github_tests_option_does_not_change_the_cache_key():
     assert JobOptions(github_tests=True).cache_key_material() == JobOptions().cache_key_material()
+
+
+# --- the code under test reaches the AI even when the failure log never names it -----------------------------
+
+def test_the_ai_sees_the_code_the_failing_tests_import(tmp_path):
+    files = {"app/__init__.py": "", "app/routes/__init__.py": "",
+             "app/routes/utilities.py": "def ping(host):\n    return host\n",
+             "app/big.py": "x = 1\n" * 15000,  # makes the repository too big to show whole
+             "tests/test_security.py": "from app.routes import utilities\n\n\ndef test_ping():\n    assert utilities.ping('a;b') is None\n"}
+    repo = make_git_repo(tmp_path / "r", files)
+    log = "FAILED tests/test_security.py::test_ping - assert 'a;b' is None\ntests/test_security.py:5: AssertionError\n"
+    chosen = testloop.files_for_fix(repo, log)
+    assert chosen[0] == "tests/test_security.py" and "app/routes/utilities.py" in chosen and "app/big.py" not in chosen
+
+
+def test_small_repositories_are_shown_whole(tmp_path):
+    repo = make_git_repo(tmp_path / "r", APP)
+    assert set(testloop.files_for_fix(repo, testloop.clean_log(FAILED_LOG))) >= {"app/calc.py", "tests/test_calc.py", "requirements.txt"} - {"requirements.txt"}
+
+
+def test_a_misquoted_file_is_shown_to_the_ai_and_retried(tmp_path, monkeypatch):
+    repo = make_git_repo(tmp_path / "r", APP)
+    wrong = {"explanation": "guess", "edits": [{"file": "app/calc.py", "search": "return a-b  # guessed", "replace": "return a + b"}]}
+    prompts = []
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL", "gpt-test")
+    config.reset_settings_cache()
+    replies = [wrong, GOOD_FIX]
+    monkeypatch.setattr(testloop, "chat", lambda system, messages: (prompts.append(messages[-1]["content"]), json.dumps(replies.pop(0)))[1])
+    out = testloop.ai_fix(repo, {"test": "python -m pytest"}, testloop.clean_log(FAILED_LOG), [])
+    assert out["ok"] and "Here is app/calc.py exactly as it is now" in prompts[1] and "return a - b" in prompts[1]
+
+
+def test_partial_edits_are_kept_on_the_last_try(tmp_path, monkeypatch):
+    repo = make_git_repo(tmp_path / "r", APP)
+    mixed = {"explanation": "fix add; also bump a dependency",
+             "edits": [{"file": "app/calc.py", "search": "return a - b", "replace": "return a + b"},
+                       {"file": "requirements.txt", "search": "idna==3.6", "replace": "idna==3.7"}]}
+    _llm(monkeypatch, [mixed] * 3)
+    out = testloop.ai_fix(repo, {"test": "python -m pytest"}, testloop.clean_log(FAILED_LOG), [])
+    assert out["ok"] and out["files"] == ["app/calc.py"] and "left out: requirements.txt" in out["explanation"]
+
+
+def test_run_again_with_nothing_new_starts_the_workflow_directly(monkeypatch):
+    calls = []
+
+    class GH(FakeGitHub):
+        def workflow_runs(self, repo, path, branch, sha):
+            return [{"id": 7}]
+
+        def dispatch_workflow(self, repo, path, branch):
+            calls.append(("dispatch", branch))
+
+    monkeypatch.setattr(testloop, "GitHubClient", GH)
+    monkeypatch.setattr(testloop, "resolve_remote_ref", lambda repo, branch: "abc")
+    monkeypatch.setattr(testloop, "_push", lambda *a: calls.append("push"))
+    st = type("St", (), {"log": lambda self, m, level="info": None})()
+    assert testloop._start_run(None, None, "b", "abc", st) == {7} and calls == [("dispatch", "b")]
+    calls.clear()
+    assert testloop._start_run(None, None, "b", "new-sha", st) == set() and calls == ["push"]

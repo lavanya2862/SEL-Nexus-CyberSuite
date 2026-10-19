@@ -179,13 +179,58 @@ def referenced_files(root: Path, log_text: str, limit: int = 6) -> list[str]:
     for pattern in _FILE_REFS:
         for m in pattern.finditer(log_text):
             raw = m.group(1)
-            if "site-packages" in raw or "node_modules" in raw or raw.startswith(("/usr/", "/opt/")):
+            if "site-packages" in raw or "node_modules" in raw or "hostedtoolcache" in raw or raw.startswith(("/usr/", "/opt/")):
                 continue
             target = resolve_in_repo(root, raw.lstrip("/") if raw.startswith("/") else raw)
             if target:
                 rel = target.relative_to(root.resolve()).as_posix()
                 counts[rel] = counts.get(rel, 0) + 1
     return [f for f, _ in sorted(counts.items(), key=lambda kv: -kv[1])][:limit]
+
+
+_PY_IMPORT = re.compile(r"^\s*(?:from\s+([\w.]+)\s+import\s+([\w, ()]+)|import\s+([\w.]+))", re.M)
+_SOURCE_SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".go", ".java", ".kt", ".rb", ".rs", ".php", ".cs",
+                    ".html", ".vue", ".svelte", ".sql", ".toml", ".cfg", ".ini", ".json", ".yml", ".yaml"}
+_LOCK_FILES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock"}
+_MANIFEST = re.compile(r"(^|/)(requirements[\w.-]*\.txt|Pipfile|go\.mod|pom\.xml|Gemfile|Cargo\.toml|build\.gradle(\.kts)?)$")
+
+
+def _imported_files(root: Path, rel: str) -> list[str]:
+    """Repository modules a Python file imports (``from app.routes import utilities`` -> app/routes/utilities.py)."""
+    if not rel.endswith(".py"):
+        return []
+    try:
+        text = (root / rel).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    found: list[str] = []
+    for m in _PY_IMPORT.finditer(text):
+        module = (m.group(1) or m.group(3)).replace(".", "/")
+        names = [n.strip().split(" ")[0] for n in (m.group(2) or "").replace("(", "").replace(")", "").split(",") if n.strip()]
+        for base in [module, *(f"{module}/{n}" for n in names)]:
+            for cand in (f"{base}.py", f"{base}/__init__.py"):
+                if (root / cand).is_file() and cand not in found:
+                    found.append(cand)
+    return found
+
+
+def files_for_fix(root: Path, log_text: str, budget: int = 60000) -> list[str]:
+    """The files the AI sees: the whole source when the repository is small, otherwise the files the failure points at
+    plus what they import (the code under test rarely appears in the failure log itself). Referenced files come first."""
+    sources = []
+    for p in iter_files(root, max_files=2000, max_bytes=200_000):
+        rel = p.relative_to(root).as_posix()
+        if ((p.suffix.lower() in _SOURCE_SUFFIXES or _MANIFEST.search(rel)) and p.name not in _LOCK_FILES
+                and not rel.startswith((".github/", ".git/"))):
+            sources.append(rel)
+    referenced = referenced_files(root, log_text)
+    total = sum((root / rel).stat().st_size for rel in sources)
+    if total <= budget:
+        return referenced + [s for s in sorted(sources) if s not in referenced]
+    chosen = list(referenced)
+    for rel in referenced:
+        chosen += [imp for imp in _imported_files(root, rel) if imp not in chosen]
+    return chosen
 
 
 # --- 3. The AI fix -------------------------------------------------------------------------------------------------
@@ -207,14 +252,14 @@ If the failure cannot be fixed in the repository (missing service, network, secr
 
 def _fix_prompt(root: Path, setup: dict, log_text: str, history: list[str]) -> str:
     failing = failed_tests(log_text)
-    files = referenced_files(root, log_text)
+    files = files_for_fix(root, log_text)
     parts = [f"Test command: {setup['test']}",
              "Failing tests:\n" + ("\n".join(f"- {t}" for t in failing) if failing else "- (see the output)"),
              f"Test output (trimmed):\n```\n{redact(failure_excerpt(log_text))}\n```"]
     if history:
         parts.append("Earlier fix attempts that did not make the tests pass (do not repeat them):\n"
                      + "\n".join(f"- {h}" for h in history))
-    budget = 40000
+    budget, shown = 60000, set()
     for rel in files:
         try:
             content = (root / rel).read_text(encoding="utf-8")
@@ -222,44 +267,80 @@ def _fix_prompt(root: Path, setup: dict, log_text: str, history: list[str]) -> s
             continue
         content = redact(content[:12000])
         if len(content) > budget:
-            break
+            continue
         budget -= len(content)
+        shown.add(rel)
         parts.append(f"File {rel}:\n```\n{content}\n```")
     others = [p.relative_to(root).as_posix() for p in iter_files(root, max_files=400)
-              if p.relative_to(root).as_posix() not in files and not p.relative_to(root).as_posix().startswith(".git/")]
-    parts.append("Other files in the repository (ask for none; work with what you have):\n" + "\n".join(others[:200]))
+              if p.relative_to(root).as_posix() not in shown and not p.relative_to(root).as_posix().startswith(".git/")]
+    parts.append("Other files in the repository (to fix one of them, edit it anyway: you will be shown its exact "
+                 "contents and asked again):\n" + "\n".join(others[:200]))
     return "\n\n".join(parts)
 
 
-def ai_fix(root: Path, setup: dict, log_text: str, history: list[str], tries: int = 2) -> dict:
+def _show_files(root: Path, files: list[str]) -> str:
+    """The exact current contents of files whose edits did not apply (the AI had not seen them, or misquoted them)."""
+    out = []
+    for rel in dict.fromkeys(files):
+        try:
+            content = (root / rel).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError, ValueError):
+            continue
+        out.append(f"\nHere is {rel} exactly as it is now; copy the search text from it:\n```\n{redact(content[:15000])}\n```")
+    return "".join(out)
+
+
+def _apply_each(root: Path, edits: list) -> tuple[list[str], list[tuple[str, str]]]:
+    """Apply edits one by one: (changed files, [(file, why it did not apply)]). One misquoted edit no longer sinks the
+    others, which matters with smaller models that bundle several edits."""
+    files: list[str] = []
+    failed: list[tuple[str, str]] = []
+    for edit in edits:
+        try:
+            files += [f for f in apply_edits(root, [edit]) if f not in files]
+        except EditError as exc:
+            failed.append((edit.file, str(exc)))
+    return files, failed
+
+
+def ai_fix(root: Path, setup: dict, log_text: str, history: list[str], tries: int = 3) -> dict:
     """Ask the AI for a fix and apply it to the working tree (not committed). Returns
-    {"ok", "files", "explanation", "touched_tests", "error"}."""
+    {"ok", "files", "explanation", "touched_tests", "error"}. If some edits keep failing to apply, the last try keeps
+    the ones that did (the next test run shows what is still failing)."""
     messages = [{"role": "user", "content": _fix_prompt(root, setup, log_text, history)}]
     error = ""
-    for _ in range(tries):
+    for attempt in range(1, tries + 1):
         reply = chat(SYSTEM_PROMPT, messages)
         data = extract_json(reply)
+        failed: list[tuple[str, str]] = []
         try:
             if data is None:
                 raise EditError("The reply was not the requested JSON object.")
             if str(data.get("status", "")).lower() == "cannot_fix":
                 return {"ok": False, "error": f"The AI says this cannot be fixed in the code: {str(data.get('explanation', ''))[:400]}"}
-            files = apply_edits(root, parse_edits(data))
+            files, failed = _apply_each(root, parse_edits(data))
             if not files:
-                raise EditError("The reply contained no edits.")
+                raise EditError("; ".join(msg for _, msg in failed) or "The reply contained no edits.")
+            if failed and attempt < tries:
+                raise EditError("Some edits did not apply: " + "; ".join(msg for _, msg in failed))
             ok, problem = static_check(root, files)
             if not ok:
                 raise EditError(f"The edit breaks the code: {problem}")
             problems = diff_guard(git(["diff"], root).stdout)
             if problems:
                 raise EditError("The edit was rejected by the security-regression guard: " + "; ".join(problems))
-            return {"ok": True, "files": files, "explanation": str(data.get("explanation", ""))[:1000],
+            explanation = str(data.get("explanation", ""))[:1000]
+            if failed:
+                explanation += f" ({len(failed)} edit(s) could not be applied and were left out: " \
+                               f"{', '.join(dict.fromkeys(f for f, _ in failed))}.)"
+            return {"ok": True, "files": files, "explanation": explanation,
                     "touched_tests": any(TEST_PATH.search(f) for f in files)}
         except (EditError, OSError, UnicodeDecodeError) as exc:
             discard_changes(root)
             error = str(exc)
             messages += [{"role": "assistant", "content": reply[:8000]},
-                         {"role": "user", "content": f"That could not be used: {error}\nReturn the corrected JSON object only."}]
+                         {"role": "user", "content": f"That could not be used: {error}{_show_files(root, [f for f, _ in failed])}\n"
+                                                     "Return the corrected JSON object with ALL edits only."}]
     return {"ok": False, "error": error}
 
 
@@ -342,14 +423,28 @@ def _push(repo: RepoRef, workdir: Path, branch: str) -> None:
         raise RepoAccessError(f"Push to {branch} failed: {msg[-1200:]}")
 
 
-def _wait_for_run(repo: RepoRef, branch: str, sha: str, st: _State, entry: dict) -> dict:
+def _start_run(repo: RepoRef, workdir: Path, branch: str, sha: str, st: _State) -> set[int]:
+    """Push the branch, which starts the workflow. When GitHub already has this exact commit ("Run again" with nothing
+    new), a push would start nothing, so the workflow is started directly. Returns the runs to ignore (older runs of
+    the same commit)."""
+    if resolve_remote_ref(repo, branch) != sha:
+        _push(repo, workdir, branch)
+        return set()
+    with GitHubClient() as gh:
+        seen = {r["id"] for r in gh.workflow_runs(repo, WORKFLOW_PATH, branch, sha)}
+        gh.dispatch_workflow(repo, WORKFLOW_PATH, branch)
+    st.log("nothing new to push, so GitHub Actions was asked to run the tests again")
+    return seen
+
+
+def _wait_for_run(repo: RepoRef, branch: str, sha: str, st: _State, entry: dict, exclude: set[int]) -> dict:
     s = get_settings()
     with GitHubClient() as gh:
         run = None
         deadline = time.monotonic() + 180
         while run is None:
             st.check_cancel()
-            run = gh.find_workflow_run(repo, WORKFLOW_PATH, branch, sha)
+            run = gh.find_workflow_run(repo, WORKFLOW_PATH, branch, sha, exclude)
             if run is None:
                 if time.monotonic() > deadline:
                     raise RepoAccessError("GitHub did not start the test workflow within 3 minutes. Check that GitHub "
@@ -421,13 +516,13 @@ def run_loop(job_id: str, st: _State) -> None:
             st.check_cancel()
             sha = head_sha(workdir)
             st.update(phase=f"Pushing {branch} to GitHub")
-            _push(repo, workdir, branch)
+            seen = _start_run(repo, workdir, branch, sha, st)
             st.update(branch_pushed=True)
             entry = {"n": len(st.data["runs"]) + 1, "sha": sha, "status": "queued", "conclusion": None, "failed": [],
                      "fix": None}
             st.data["runs"].append(entry)
             st.update(phase="Waiting for GitHub Actions to start the tests")
-            run = _wait_for_run(repo, branch, sha, st, entry)
+            run = _wait_for_run(repo, branch, sha, st, entry, seen)
             conclusion = run.get("conclusion")
             if conclusion == "success":
                 st.finish("passed", "All tests passed on GitHub Actions" + (f" after {attempt} AI fix(es)." if attempt else "."))
