@@ -2,7 +2,7 @@
 
 Three AI-assisted security tools built on Microsoft Defender for Endpoint, plus one portal that brings them together.
 This is the **Defender & Infrastructure** module of SEL Nexus CyberSuite. People sign in on the suite's shared sign-in
-page (`../login`, http://127.0.0.1:8000), which also leads to the other module, Code Vulnerabilities.
+page (`../login`, http://127.0.0.1:8000), which also leads to the other module, Application Vulnerabilities.
 
 | Folder | What it does |
 |---|---|

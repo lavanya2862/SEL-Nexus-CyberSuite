@@ -1,6 +1,6 @@
 # SEL Nexus CyberSuite sign-in page
 
-The one place people sign in. After sign-in it shows a button per module (Defender & Infrastructure, Code
+The one place people sign in. After sign-in it shows a button per module (Defender & Infrastructure, Application
 Vulnerabilities). It also holds the suite's accounts.
 
 ## Set up (once)
@@ -24,7 +24,7 @@ Usually you don't run it by hand: `..\Start_All.cmd` starts it with every module
 |---|---|
 | `LOGIN_PORT` | Port of this page (8000) |
 | `DEFENDER_INFRA_URL` | Where the Defender & Infrastructure button goes |
-| `CODE_VULN_URL` | Where the Code Vulnerabilities button goes. Empty = shown as "Not connected yet" |
+| `APP_VULN_URL` | Where the Application Vulnerabilities button goes (http://127.0.0.1:8500). Empty = shown as "Not connected yet" |
 | `LOGIN_SIGNUP` | `off` = nobody can create a new account |
 | `LOGIN_ALLOWED_EMAIL_DOMAINS` | Only these email domains may sign up |
 | `LOGIN_SESSION_HOURS` | How long a sign-in lasts (12) |

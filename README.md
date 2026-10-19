@@ -6,7 +6,7 @@ One sign-in page in front of the suite's modules. People sign in once and choose
 |---|---|---|
 | [login](login/README.md) | Shared sign-in page and module chooser. Holds the one account list for the whole suite | http://127.0.0.1:8000 |
 | [defender_infra](defender_infra/README.md) | **Defender & Infrastructure**: threat intelligence, vulnerabilities, fixes and alert triage from Microsoft Defender | http://127.0.0.1:8800 |
-| [code_vulnerabilities](code_vulnerabilities/README.md) | **Code Vulnerabilities**: security flaws in our application source code (placeholder, project still to be added) | not connected yet |
+| [ApplicationVulnerabilities](ApplicationVulnerabilities/README.md) | **Application Vulnerabilities**: AI agents find security flaws in our application source code, fix them on a branch, validate the fixes and open a pull request for approval | http://127.0.0.1:8500 |
 
 ## Start and stop
 

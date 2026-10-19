@@ -59,9 +59,9 @@ def load_settings() -> dict:
             {"id": "defender_infra", "name": "Defender & Infrastructure",
              "description": "Threat intelligence, vulnerabilities, fixes and alert triage from Microsoft Defender.",
              "url": env.get("DEFENDER_INFRA_URL", "http://127.0.0.1:8800").rstrip("/")},
-            {"id": "code_vulnerabilities", "name": "Code Vulnerabilities",
-             "description": "Security flaws found in our application source code, and how to fix them.",
-             "url": env.get("CODE_VULN_URL", "").rstrip("/")},
+            {"id": "application_vulnerabilities", "name": "Application Vulnerabilities",
+             "description": "Security flaws in our application source code, fixed by AI agents and validated before a pull request.",
+             "url": env.get("APP_VULN_URL", "http://127.0.0.1:8500").rstrip("/")},
         ],
     }
 

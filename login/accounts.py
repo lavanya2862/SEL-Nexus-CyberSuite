@@ -2,7 +2,7 @@
 
 One account list for the whole suite, kept in data/auth/users.json (passwords stored only as scrypt hashes). After a
 good sign-in the browser gets a signed, HttpOnly `portal_session` cookie. Browsers share cookies between ports on the
-same host, so every module on 127.0.0.1 (Defender & Infrastructure on :8800, Code Vulnerabilities later) receives the
+same host, so every module on 127.0.0.1 (Defender & Infrastructure on :8800, Application Vulnerabilities on :8500) receives the
 same cookie and checks it with the same key in data/auth/session.key.
 
 The file formats match defender_infra/Unified_Cyber_Portal/src/portal/auth.py, which reads the same folder

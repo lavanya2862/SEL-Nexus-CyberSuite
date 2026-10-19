@@ -3,7 +3,7 @@ title SEL Nexus CyberSuite
 rem Starts the whole SEL Nexus CyberSuite and opens the sign-in page in the browser:
 rem   login\                  shared sign-in page        http://127.0.0.1:8000
 rem   defender_infra\         Defender & Infrastructure  http://127.0.0.1:8800
-rem   code_vulnerabilities\   Code Vulnerabilities       started by its Start_Code_Vulnerabilities.cmd, once that exists
+rem   ApplicationVulnerabilities\  Application Vulnerabilities  http://127.0.0.1:8500
 set "SUITE=%~dp0"
 set CC_NO_BROWSER=1
 
@@ -24,10 +24,10 @@ echo.
 echo ---- Defender ^& Infrastructure
 call "%SUITE%defender_infra\Start_Defender_Infra.cmd"
 
-if exist "%SUITE%code_vulnerabilities\Start_Code_Vulnerabilities.cmd" (
+if exist "%SUITE%ApplicationVulnerabilities\Start_Application_Vulnerabilities.cmd" (
   echo.
-  echo ---- Code Vulnerabilities
-  call "%SUITE%code_vulnerabilities\Start_Code_Vulnerabilities.cmd"
+  echo ---- Application Vulnerabilities
+  call "%SUITE%ApplicationVulnerabilities\Start_Application_Vulnerabilities.cmd"
 )
 
 start "" http://127.0.0.1:8000

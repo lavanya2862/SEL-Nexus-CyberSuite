@@ -1,0 +1,61 @@
+# Production-style topology:
+#   api     – stateless HTTP API + web UI (scale behind a load balancer)
+#   worker  – job workers; scale with: docker compose up -d --scale worker=4
+#   db      – PostgreSQL job store / queue (FOR UPDATE SKIP LOCKED)
+#
+#   cp .env.example .env   # set LLM_*, GITHUB_TOKEN, API_KEYS
+#   docker compose up -d --build
+#   open http://localhost:8000
+
+x-app: &app
+  build: .
+  image: ai-remediation-pipeline:latest
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://remediation:remediation@db:5432/remediation
+    DATA_DIR: /data
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: remediation
+      POSTGRES_PASSWORD: remediation
+      POSTGRES_DB: remediation
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U remediation"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    <<: *app
+    environment:
+      DATABASE_URL: postgresql+psycopg://remediation:remediation@db:5432/remediation
+      DATA_DIR: /data
+      EMBEDDED_WORKER: "false"
+    ports:
+      - "8000:8000"
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "remediation.worker"]
+    healthcheck:
+      disable: true
+    environment:
+      DATABASE_URL: postgresql+psycopg://remediation:remediation@db:5432/remediation
+      DATA_DIR: /data
+      WORKER_CONCURRENCY: "2"
+    deploy:
+      replicas: 2
+    stop_grace_period: 60s
+
+volumes:
+  pgdata:

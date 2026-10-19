@@ -1,0 +1,112 @@
+# AI Vulnerability Detection, Remediation & Validation — GitHub Actions workflow
+#
+# Copy this file into the repository you want to protect as .github/workflows/ai-remediation.yml.
+#
+#   1. CodeQL (primary SAST) and Trivy (dependencies, secrets, misconfigurations) scan the code
+#      using their official actions.
+#   2. The remediation pipeline imports both reports (Analysis Agent), generates fixes on an isolated
+#      branch (Remediation Agent), validates them (Validation Agent) and writes the report (Reporting).
+#   3. A pull request is opened for human review. If validation fails, the PR is opened as a DRAFT
+#      labelled "needs-investigation". Nothing is merged automatically.
+#
+# Setup:
+#   * Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests".
+#   * Secret LLM_API_KEY and variable LLM_MODEL (optional LLM_BASE_URL, e.g. https://api.anthropic.com/v1)
+#     to enable AI-generated code patches. Without them, dependency upgrades and deterministic fixes still run.
+#   * Variable CODEQL_LANGUAGES (default: python,javascript-typescript).
+#   * Note: PRs opened with GITHUB_TOKEN do not trigger other workflows; use a fine-grained PAT stored as
+#     REMEDIATION_TOKEN if your CI must run on the remediation PR.
+
+name: AI security remediation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 1"   # weekly, Monday 03:00 UTC
+  push:
+    branches: [main]
+
+permissions:
+  contents: write          # push the ai-remediation/* branch
+  pull-requests: write     # open the pull request
+  security-events: write   # upload SARIF to code scanning
+  actions: read
+
+concurrency:
+  group: ai-remediation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- Vulnerability Analysis: CodeQL (primary SAST) ----------------------------------------
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ vars.CODEQL_LANGUAGES || 'python,javascript-typescript' }}
+          build-mode: none
+          queries: security-extended
+      - name: CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          output: codeql-results
+          category: codeql
+
+      # ---- Vulnerability Analysis: Trivy (dependencies, secrets, misconfigurations) -------------
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          format: json
+          output: trivy-results.json
+          exit-code: "0"
+
+      # ---- Remediation, validation, reporting, PR -----------------------------------------------
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the remediation pipeline
+        # Point this at wherever you host the pipeline (a fork, internal mirror or package index).
+        run: pip install "git+https://github.com/${{ vars.REMEDIATION_PIPELINE_REPO || 'your-org/ai-remediation-pipeline' }}.git"
+
+      - name: Remediate and validate
+        id: remediate
+        env:
+          GITHUB_TOKEN: ${{ secrets.REMEDIATION_TOKEN || secrets.GITHUB_TOKEN }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_MODEL: ${{ vars.LLM_MODEL }}
+          LLM_BASE_URL: ${{ vars.LLM_BASE_URL || 'https://api.openai.com/v1' }}
+          ENABLE_CODEQL: "false"      # results are imported from the CodeQL step above
+          DATA_DIR: ${{ runner.temp }}/remediation
+        run: |
+          remediation scan "${{ github.server_url }}/${{ github.repository }}" \
+            --ref "${{ github.ref_name }}" \
+            --codeql-sarif codeql-results/*.sarif \
+            --trivy-json trivy-results.json \
+            --create-pr --pr-on-flagged draft \
+            --out remediation-report
+
+      - name: Upload consolidated SARIF to code scanning
+        if: always() && hashFiles('remediation-report/findings.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: remediation-report/findings.sarif
+          category: ai-remediation
+
+      - name: Publish report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: remediation-report
+          path: remediation-report
+
+      - name: Job summary
+        if: always()
+        run: |
+          if [ -f remediation-report/report.md ]; then cat remediation-report/report.md >> "$GITHUB_STEP_SUMMARY"; fi

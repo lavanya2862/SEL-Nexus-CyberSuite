@@ -1,0 +1,34 @@
+name: Remediation Pipeline Tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --build-arg INSTALL_SEMGREP=false -t ai-remediation-pipeline:ci .
+      - name: Smoke test container
+        run: |
+          docker run -d --name app -p 8000:8000 ai-remediation-pipeline:ci
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:8000/health && break; sleep 2; done
+          curl -fs http://127.0.0.1:8000/api/v1/capabilities
+          docker rm -f app

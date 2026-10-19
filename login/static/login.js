@@ -2,7 +2,7 @@
 // A module that finds nobody signed in sends people here with ?next=<its address>; after sign-in they go straight back.
 (() => {
   const $ = (sel) => document.querySelector(sel)
-  const ICONS = { defender_infra: 'i-server', code_vulnerabilities: 'i-code' }
+  const ICONS = { defender_infra: 'i-server', application_vulnerabilities: 'i-code' }
   let config = null
 
   async function api(path, body) {
@@ -55,7 +55,7 @@
     card.className = m.url ? 'module' : 'module off'
     if (m.url) card.href = m.url
     else card.setAttribute('aria-disabled', 'true')
-    const tile = m.id === 'code_vulnerabilities' ? 'tile tile-violet' : 'tile'
+    const tile = m.id === 'application_vulnerabilities' ? 'tile tile-violet' : 'tile'
     card.innerHTML = `<span class="${tile}"><svg class="ico"><use href="#${ICONS[m.id] || 'i-shield'}"/></svg></span><h2></h2><p></p>` +
       (m.url ? '<span class="go">Open <svg class="ico"><use href="#i-arrow"/></svg></span>' : '<span class="soon">Not connected yet</span>')
     card.querySelector('h2').textContent = m.name

@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-remediation-pipeline"
+version = "2.0.0"
+description = "Give it a GitHub repository link: it clones, scans, fixes and validates security issues."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1.0",
+  "uvicorn[standard]>=0.30,<1.0",
+  "pydantic>=2.8,<3.0",
+  "pydantic-settings>=2.4,<3.0",
+  "python-dotenv>=1.0,<2.0",
+  "SQLAlchemy>=2.0,<3.0",
+  "httpx>=0.27,<1.0",
+  "packaging>=23",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1,<4.0"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+remediation = "remediation.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["remediation*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"

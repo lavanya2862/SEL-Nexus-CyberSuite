@@ -5,6 +5,6 @@ set CC_NO_BROWSER=1
 powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
 echo The sign-in page is stopped.
 call "%SUITE%defender_infra\Stop_Defender_Infra.cmd"
-if exist "%SUITE%code_vulnerabilities\Stop_Code_Vulnerabilities.cmd" call "%SUITE%code_vulnerabilities\Stop_Code_Vulnerabilities.cmd"
+if exist "%SUITE%ApplicationVulnerabilities\Stop_Application_Vulnerabilities.cmd" call "%SUITE%ApplicationVulnerabilities\Stop_Application_Vulnerabilities.cmd"
 echo SEL Nexus CyberSuite is stopped.
 timeout /t 3 >nul
