@@ -202,6 +202,43 @@ class GitHubClient:
             raise RepoAccessError(f"GitHub rejected the token (HTTP {resp.status_code}).")
         return {"login": resp.json().get("login"), "scopes": resp.headers.get("x-oauth-scopes")}
 
+    # --- GitHub Actions (the Test & Fix loop, testloop.py) ---------------------------------------
+
+    def _actions_json(self, path: str, **params) -> dict:
+        resp = self._request("GET", path, params=params or None)
+        if resp.status_code in (401, 403, 404):
+            raise RepoAccessError(f"GitHub Actions is not readable with this token (HTTP {resp.status_code}). "
+                                  "The token needs Actions: read on the repository.")
+        resp.raise_for_status()
+        return resp.json()
+
+    def find_workflow_run(self, repo: RepoRef, workflow_path: str, branch: str, head_sha: str) -> dict | None:
+        """The run of ``workflow_path`` that a push of ``head_sha`` to ``branch`` started (None until it appears)."""
+        data = self._actions_json(f"/repos/{repo.owner}/{repo.name}/actions/runs", branch=branch, head_sha=head_sha,
+                                  per_page=20)
+        for run in data.get("workflow_runs") or []:
+            if run.get("path", "").split("@")[0] == workflow_path:
+                return run
+        return None
+
+    def get_workflow_run(self, repo: RepoRef, run_id: int) -> dict:
+        return self._actions_json(f"/repos/{repo.owner}/{repo.name}/actions/runs/{run_id}")
+
+    def workflow_run_logs(self, repo: RepoRef, run_id: int, limit: int = 60000) -> str:
+        """Plain-text logs of the run's failed jobs (newest lines last), trimmed to ``limit`` characters."""
+        jobs = self._actions_json(f"/repos/{repo.owner}/{repo.name}/actions/runs/{run_id}/jobs", per_page=50)
+        parts = []
+        for job in jobs.get("jobs") or []:
+            if job.get("conclusion") not in ("failure", "timed_out", "cancelled"):
+                continue
+            # GitHub answers with a redirect to short-lived log storage; httpx drops the token on that hop.
+            resp = self._request("GET", f"/repos/{repo.owner}/{repo.name}/actions/jobs/{job['id']}/logs",
+                                 follow_redirects=True)
+            if resp.is_success:
+                parts.append(f"===== job: {job.get('name')} ({job.get('conclusion')}) =====\n{resp.text}")
+        text = "\n".join(parts)
+        return text[-limit:]
+
 
 def _auth_config(token: str | None) -> list[str]:
     if not token:

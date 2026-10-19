@@ -121,7 +121,7 @@ function Forms({ view }: { view: SettingsView }) {
         description="Needed for private repositories, and to push the fix branch and open pull requests."
         action={st.github_token.configured ? <StatusTag tone="good" label="Token set" /> : <StatusTag tone="warn" label="No token" />}>
         <div className="flex flex-col gap-4">
-          <Notice tone="info" title="Which token?">A fine-grained personal access token with <b>Contents: read &amp; write</b> and <b>Pull requests: read &amp; write</b> on the repositories you want fixed.</Notice>
+          <Notice tone="info" title="Which token?">A fine-grained personal access token on the repositories you want fixed, with <b>Contents: read &amp; write</b> and <b>Pull requests: read &amp; write</b>. For <b>Run tests on GitHub</b> also <b>Workflows: read &amp; write</b> (it adds the test workflow) and <b>Actions: read</b> (it follows the test runs). A classic token needs the <span className="font-mono">repo</span> and <span className="font-mono">workflow</span> scopes.</Notice>
           <Field label={<>Personal access token <Source e={st.github_token} /></>}>
             <input type="password" autoComplete="off" value={gh} onChange={(e) => setGh(e.target.value)} placeholder={st.github_token.configured ? `${st.github_token.value} (leave empty to keep)` : 'github_pat_…'} className={inputCls} />
           </Field>

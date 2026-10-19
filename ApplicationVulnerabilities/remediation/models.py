@@ -196,6 +196,8 @@ class JobOptions(BaseModel):
     install_command: str | None = Field(default=None, max_length=500)
     verify_with_rescan: bool = True
     create_pr: bool = False
+    github_tests: bool = Field(default=False, description="After the run, test the fix branch on GitHub Actions and let "
+                                                          "the AI fix failing tests (testloop.py).")
     pr_on_flagged: Literal["draft", "skip"] = "draft"
     use_cache: bool = True
 
@@ -207,7 +209,7 @@ class JobOptions(BaseModel):
         return sorted({v.strip().lower() for v in value if v and v.strip()}) or None
 
     def cache_key_material(self) -> dict[str, Any]:
-        data = self.model_dump(exclude={"use_cache", "create_pr"})
+        data = self.model_dump(exclude={"use_cache", "create_pr", "github_tests"})
         return data
 
 

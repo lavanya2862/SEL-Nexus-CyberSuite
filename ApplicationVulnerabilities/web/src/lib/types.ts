@@ -19,6 +19,38 @@ export interface JobSummary {
   approval_status?: 'awaiting_approval' | 'publishing' | 'pr_opened' | 'failed' | string
   publish_error?: string | null
   branch?: string | null
+  tests?: TestLoop
+}
+
+/** The Test & Fix loop on GitHub Actions (remediation/testloop.py), kept in the run's summary. */
+export interface TestRun {
+  n: number
+  sha: string
+  run_id?: number
+  url?: string
+  status: string
+  conclusion: string | null
+  failed: string[]
+  started_at?: string
+  finished_at?: string
+  fix: { files: string[]; explanation: string; commit: string | null; touched_tests: boolean } | null
+  fix_error?: string
+}
+
+export interface TestLoop {
+  status: 'starting' | 'running' | 'passed' | 'failed' | 'no_tests' | 'error' | 'cancelled' | 'interrupted'
+  phase?: string
+  message?: string
+  attempt: number
+  max_attempts: number
+  branch?: string
+  branch_pushed?: boolean
+  workflow?: string
+  test_command?: string
+  language?: string
+  runs: TestRun[]
+  started_at?: string
+  finished_at?: string | null
 }
 
 export interface Step { name: string; status: StageStatus; detail?: string }

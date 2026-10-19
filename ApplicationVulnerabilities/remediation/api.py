@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 
-from . import __version__, jobqueue
+from . import __version__, jobqueue, testloop
 from .config import RUNTIME_KEYS, SECRET_KEYS, Settings, get_settings, load_runtime_overrides, save_runtime_overrides
 from .db import Job, JobArtifact, JobEvent, as_aware, engine, session_scope
 from .github import GitHubClient, RepoAccessError, RepoURLError, parse_repo_url
@@ -102,6 +102,7 @@ async def lifespan(app: FastAPI):
     setup_logging()
     s = get_settings()
     engine()
+    testloop.recover_interrupted()
     if not s.api_key_set:
         log.warning("API_KEYS is empty: the API is unauthenticated. Only expose it on a trusted network.")
     if s.embedded_worker:
@@ -398,15 +399,20 @@ _publish_lock = threading.Lock()
 def _publish_job(job_id: str, repo_url: str) -> None:
     import json as _json
 
-    from .publish import publish_from_artifacts
+    from .publish import publish_from_artifacts, publish_tested_branch
     from .report import build_artifacts
 
     def log_fn(msg: str) -> None:
         jobqueue.add_event(job_id, msg)
     try:
         report = RemediationReport.model_validate_json(_artifact(job_id, "report.json").content)
-        mbox = _artifact(job_id, "fixes.mbox").content
-        url, draft = publish_from_artifacts(repo_url, report, mbox, log_fn)
+        tests = (_get_job(job_id).summary or {}).get("tests") or {}
+        if tests.get("branch_pushed") and tests.get("branch"):
+            # the Test & Fix loop already pushed (and tested) the fix branch: open the PR from it as it is
+            url, draft = publish_tested_branch(repo_url, report, tests, log_fn)
+        else:
+            mbox = _artifact(job_id, "fixes.mbox").content
+            url, draft = publish_from_artifacts(repo_url, report, mbox, log_fn)
         report.pull_request_url, report.pull_request_draft, report.approval_status = url, draft, "pr_opened"
         for st in report.stages:
             if st.id == "approval":
@@ -438,7 +444,10 @@ def publish(job_id: str, _: str = Depends(require_api_key)):
     summary = job.summary or {}
     if summary.get("pull_request_url"):
         return {"status": "exists", "pull_request_url": summary["pull_request_url"]}
-    if not summary.get("fixes_applied"):
+    tests = summary.get("tests") or {}
+    if tests.get("status") in testloop.ACTIVE:
+        raise HTTPException(409, "The tests are still running on the fix branch. Approve when they have finished.")
+    if not summary.get("fixes_applied") and not _test_fixes(summary):
         raise HTTPException(409, "This run has no fixes to publish.")
     if not get_settings().github_token:
         raise HTTPException(422, "No GitHub token configured. Add one under Settings → GitHub, then approve again.")
@@ -451,6 +460,39 @@ def publish(job_id: str, _: str = Depends(require_api_key)):
     threading.Thread(target=_publish_job, args=(job_id, job.repo_url), name=f"publish-{job_id[:8]}",
                      daemon=True).start()
     return {"status": "publishing"}
+
+
+# --- Test & Fix loop: the repository's tests on GitHub Actions, failures fixed by AI (testloop.py) ----------
+
+def _test_fixes(summary: dict) -> int:
+    return sum(1 for r in ((summary.get("tests") or {}).get("runs") or []) if r.get("fix"))
+
+
+@app.post("/api/v1/jobs/{job_id}/tests", status_code=202)
+def start_tests(job_id: str, _: str = Depends(require_api_key)):
+    """Push the run's fix branch with a test workflow; GitHub Actions runs every test, the AI fixes failures and
+    pushes again, up to TEST_FIX_ATTEMPTS times."""
+    job = _get_job(job_id)
+    if job.status != "completed":
+        raise HTTPException(409, "Only completed runs can be tested.")
+    summary = job.summary or {}
+    if summary.get("pull_request_url") and not (summary.get("tests") or {}).get("branch_pushed"):
+        jobqueue.add_event(job_id, "Tests: the pull request is already open; testing its branch")
+    if not get_settings().github_token:
+        raise HTTPException(422, "No GitHub token configured. Add one under Settings → GitHub: it pushes the fix "
+                                 "branch so GitHub Actions can test it.")
+    if summary.get("approval_status") == "publishing":
+        raise HTTPException(409, "The pull request is being opened right now. Try again in a moment.")
+    if not testloop.start(job_id):
+        return {"status": "running"}
+    return {"status": "started"}
+
+
+@app.post("/api/v1/jobs/{job_id}/tests/cancel")
+def cancel_tests(job_id: str, _: str = Depends(require_api_key)):
+    _get_job(job_id)
+    testloop.cancel(job_id)
+    return {"status": "cancelling" if testloop.is_running(job_id) else "idle"}
 
 
 # --- Runtime settings (LLM + GitHub) ---------------------------------------------------------
@@ -645,11 +687,20 @@ def attention(_: str = Depends(require_api_key)):
         summ = job["summary"] or {}
         findings = _json_artifact(job["id"], "findings.json") or []
         report = _json_artifact(job["id"], "report.json")
-        if summ.get("fixes_applied") and not summ.get("pull_request_url"):
+        if (summ.get("fixes_applied") or _test_fixes(summ)) and not summ.get("pull_request_url"):
             failed = [c for c in (report or {}).get("validation_checks", []) if c["status"] == "failed"]
             approvals.append({**job, "failed_checks": [{"name": c["name"], "detail": c["detail"][:240]} for c in failed]})
         needed += fixes_needed(job, findings)
         errors += run_errors(job, report, findings)
+        tests = summ.get("tests") or {}
+        if tests.get("status") in ("failed", "error"):
+            errors.append({"job_id": job["id"], "repo": job["repo"], "when": tests.get("finished_at"),
+                           "severity": "high" if tests["status"] == "failed" else "medium",
+                           "kind": "Tests fail on GitHub Actions" if tests["status"] == "failed" else "Test run could not finish",
+                           "message": tests.get("message") or "",
+                           "action": "Open the run's GitHub tests tab, look at the last run on GitHub, fix what the AI "
+                                     "could not, then run the tests again.",
+                           "link": f"/runs/{job['id']}/tests"})
     seen_failed = set()
     for job in jobs:
         if job["status"] == "failed" and job["repo"] not in seen_failed and not any(

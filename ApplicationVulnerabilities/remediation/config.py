@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     sandbox_memory: str = "2g"
     test_timeout_seconds: int = 900
 
+    # --- Test & Fix loop on GitHub Actions (testloop.py) --------------------------------------
+    test_fix_attempts: int = 3            # AI fixes before a person takes over
+    test_run_timeout_minutes: int = 30    # how long to wait for one GitHub Actions test run
+    test_poll_seconds: float = 10.0       # how often to ask GitHub how the run is doing
+
     # --- API ---------------------------------------------------------------------------------
     api_keys: str = ""  # comma separated; empty disables auth (local/trusted use only)
     cors_origins: str = ""
@@ -211,6 +216,10 @@ def save_runtime_overrides(updates: dict) -> dict:
     except OSError:
         pass
     tmp.replace(path)
+    # Two saves within the file system's timestamp resolution keep the same mtime, so the mtime-keyed cache would
+    # still return the previous values; drop it so the next get_settings() reads this file.
+    global _runtime_cache
+    _runtime_cache = None
     return current
 
 

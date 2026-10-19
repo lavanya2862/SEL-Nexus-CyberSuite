@@ -61,6 +61,16 @@ class DbReporter:
         return self._cancelled
 
 
+def _after_run(job_id: str, options: JobOptions) -> None:
+    """The "Run tests on GitHub" scan option: start the Test & Fix loop as soon as the run has completed."""
+    if options.github_tests:
+        from . import testloop
+        try:
+            testloop.start(job_id)
+        except Exception:  # noqa: BLE001 - the run itself succeeded; the loop reports its own problems
+            log.exception("could not start the test loop for %s", job_id)
+
+
 class Worker:
     def __init__(self, concurrency: int | None = None, worker_id: str | None = None):
         s = get_settings()
@@ -153,10 +163,12 @@ class Worker:
                                  "reusing its results.")
                     jobqueue.complete(job.id, slot_id, cached.summary or {}, jobqueue.copy_artifacts(cached.id), sha,
                                       cached_from=cached.id)
+                    _after_run(job.id, options)
                     return
             pipeline = RepositoryPipeline(job.repo_url, options, reporter, run_id=job.id)
             result = pipeline.run()
             jobqueue.complete(job.id, slot_id, result.summary(), result.artifacts, result.report.commit)
+            _after_run(job.id, options)
         except JobCancelled as exc:
             jobqueue.fail(job.id, slot_id, "Lost lease to another worker." if lost.is_set() else str(exc),
                           status="cancelled")

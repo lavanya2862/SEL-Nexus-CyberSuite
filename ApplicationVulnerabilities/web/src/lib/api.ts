@@ -64,6 +64,9 @@ export const artifactUrl = (jobId: string, name: string, download = true) =>
 
 export const isLive = (j?: Pick<Job, 'status'> | null) => !!j && (j.status === 'running' || j.status === 'queued')
 
+/** The Test & Fix loop is pushing, waiting for GitHub Actions or asking the AI for a fix. */
+export const testsActive = (j?: Pick<Job, 'summary'> | null) => ['starting', 'running'].includes(j?.summary?.tests?.status ?? '')
+
 /* ───────── hooks ───────── */
 
 export const useCaps = () =>
@@ -94,7 +97,7 @@ export function useJob(id: string | undefined) {
     enabled: !!id,
     refetchInterval: (q) => {
       const j = q.state.data
-      return isLive(j) || j?.summary?.approval_status === 'publishing' ? 2_000 : false
+      return isLive(j) || j?.summary?.approval_status === 'publishing' || testsActive(j) ? 2_000 : false
     },
   })
 }

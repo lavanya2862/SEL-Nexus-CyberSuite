@@ -109,6 +109,30 @@ status dot (working, done, warning). The bell in the top bar sums up what needs 
 details in a side drawer: the code, why it ranks where it does, and the fix with its diff and checks. The **Security
 Assistant** (chat button, bottom right) answers questions about the run or finding you are looking at.
 
+## Tests on GitHub Actions, fixed by AI
+
+**Run tests on GitHub** on a run (or the switch on New scan) starts the Test & Fix loop (`remediation/testloop.py`):
+
+1. The run's fix branch is put on GitHub (rebuilt from the run's fix commits, or the branch already there) with
+   `.github/workflows/sel-nexus-tests.yml`, a workflow made for the repository's language that runs **every** test
+   (pytest, npm test, go test, mvn/gradle, cargo, rake).
+2. The push starts the workflow. The suite follows the run through the GitHub Actions API.
+3. If a test fails, the AI reads the failure log and the files it points at, fixes the code (or a test that is itself
+   wrong, flagged for review), and the change is checked: it must parse, and the security-regression guard rejects
+   fixes that skip or delete tests. The fix is committed and pushed, which runs the workflow again.
+4. It stops when all tests pass, or after `TEST_FIX_ATTEMPTS` (3) fixes; then the run shows under **Errors**.
+
+The run's **⑤ GitHub tests** tab shows each test run (with its link on GitHub) and each AI fix, live. Approving the run
+opens the pull request from that tested branch, with the test results in its description; it opens as a draft when
+the tests still fail. The GitHub token needs **Workflows: read & write** and **Actions: read** besides Contents and Pull
+requests (classic token: `repo` and `workflow`).
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `TEST_FIX_ATTEMPTS` | 3 | AI fixes before a person takes over |
+| `TEST_RUN_TIMEOUT_MINUTES` | 30 | How long to wait for one GitHub Actions run |
+| `TEST_POLL_SECONDS` | 10 | How often to ask GitHub how the run is doing |
+
 ## Validation in detail
 
 | Layer | What it checks | Fails when |
@@ -144,12 +168,14 @@ remediation scan https://github.com/org/repo --codeql-sarif results/*.sarif --tr
 | `GET` | `/api/v1/jobs/{id}/artifacts/{report.md,report.json,findings.sarif,findings.json,fixes.patch,fixes.mbox}` | downloads |
 | `POST` | `/api/v1/jobs/{id}/publish` | **human approval**: replay the fix commits onto a fresh clone, push, open the PR |
 | `POST` | `/api/v1/jobs/{id}/cancel`, `/retry` | control |
+| `POST` | `/api/v1/jobs/{id}/tests`, `/tests/cancel` | start / stop the Test & Fix loop on GitHub Actions (progress in the job's `summary.tests`) |
 | `GET` | `/api/v1/dashboard` | aggregated posture |
 | `POST` | `/api/v1/assistant/chat` | `{"messages": [...], "job_id": "...", "finding_id": "..."}` |
 | `GET`/`PUT` | `/api/v1/settings`, `POST /settings/test-llm`, `/settings/test-github` | runtime configuration (localhost or API key only) |
 
 Job options: `ref`, `min_severity`, `max_findings`, `scanners`, `auto_fix`, `use_llm`, `fix_dependencies`, `run_tests`,
-`test_command`, `install_command`, `verify_with_rescan`, `create_pr`, `pr_on_flagged` (`draft`|`skip`), `use_cache`.
+`test_command`, `install_command`, `verify_with_rescan`, `create_pr`, `pr_on_flagged` (`draft`|`skip`), `use_cache`,
+`github_tests` (start the Test & Fix loop when the run completes).
 Interactive docs are at `/docs`.
 
 ## Production and scaling

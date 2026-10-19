@@ -12,7 +12,8 @@ import {
 } from '@/components/kit'
 import { PipelineFlow, StageDetail } from '@/components/Pipeline'
 import { FindingsTable } from '@/components/Tables'
-import { api, artifactUrl, isLive, post, useCaps, useJob, useJobAgents, useJobEvents, useJobResults } from '@/lib/api'
+import { RunTestsButton, TestsTab } from '@/components/TestLoop'
+import { api, artifactUrl, isLive, post, testsActive, useCaps, useJob, useJobAgents, useJobEvents, useJobResults } from '@/lib/api'
 import { ago } from '@/lib/format'
 import { AGENT_IDS, METHOD, SEVERITIES, dur, mergedStages, sevLabel, splitFixTitle, where } from '@/lib/labels'
 import { useApprove, usePanels } from '@/lib/panels'
@@ -20,9 +21,9 @@ import { useTheme } from '@/lib/theme'
 import { useToast } from '@/lib/toast'
 import type { AgentId, AgentView, Finding, Job, Report } from '@/lib/types'
 
-type Tab = 'summary' | AgentId | 'findings' | 'logs'
+type Tab = 'summary' | AgentId | 'tests' | 'findings' | 'logs'
 const TABS: [Tab, string][] = [['summary', 'Summary'], ['analysis', '① Analysis'], ['remediation', '② Remediation'], ['validation', '③ Validation'],
-  ['reporting', '④ Reporting'], ['findings', 'All findings'], ['logs', 'Activity log']]
+  ['reporting', '④ Reporting'], ['tests', '⑤ GitHub tests'], ['findings', 'All findings'], ['logs', 'Activity log']]
 
 export function RunDetail() {
   const { id, tab } = useParams()
@@ -53,13 +54,14 @@ function RunView({ job, urlTab }: { job: Job; urlTab?: Tab }) {
 
   // Without a tab in the address: the summary once finished; while running, the agent that is working (else the log).
   const runningAgent = running && (AGENT_IDS as string[]).includes(running.id) ? (running.id as AgentId) : null
-  const available = completed ? TABS : TABS.filter(([k]) => k !== 'summary' && k !== 'findings')
+  const available = completed ? TABS : TABS.filter(([k]) => k !== 'summary' && k !== 'findings' && k !== 'tests')
   const tab: Tab = urlTab && available.some(([k]) => k === urlTab) ? urlTab : completed ? 'summary' : runningAgent ?? 'logs'
   const failedChecks = report.data?.validation_checks.filter((c) => c.status === 'failed').length ?? 0
   const tabs: [Tab, React.ReactNode][] = available.map(([k, l]) => [k, (
     <>{l}{k === 'findings' && findings.data ? <Chip>{findings.data.length}</Chip> : null}
       {k === 'remediation' && report.data?.fixes.length ? <Chip>{report.data.fixes.length}</Chip> : null}
-      {k === 'validation' && failedChecks ? <span className="rounded-md bg-[#d03b3b] px-1.5 py-0.5 text-[11px] font-semibold text-white">{failedChecks}</span> : null}</>
+      {k === 'validation' && failedChecks ? <span className="rounded-md bg-[#d03b3b] px-1.5 py-0.5 text-[11px] font-semibold text-white">{failedChecks}</span> : null}
+      {k === 'tests' && job.summary?.tests ? <TestsBadge status={job.summary.tests.status} /> : null}</>
   )])
 
   return (
@@ -76,6 +78,7 @@ function RunView({ job, urlTab }: { job: Job; urlTab?: Tab }) {
         <Tabs<Tab> tabs={tabs} value={tab} onChange={(t) => navigate(`/runs/${job.id}/${t}`, { replace: true })} />
         {completed && (report.error || findings.error) ? <ErrorBox error={report.error ?? findings.error} />
           : tab === 'logs' ? <LogTab job={job} />
+          : tab === 'tests' ? <TestsTab job={job} />
             : tab === 'summary' ? (report.data && findings.data ? <SummaryTab job={job} report={report.data} findings={findings.data} agents={agents.data?.agents} /> : <Loading />)
               : tab === 'findings' ? (findings.data ? <Card title="All findings" description="Every unique issue in this run, highest risk first."><FindingsTable items={findings.data} jobId={job.id} /></Card> : <Loading />)
                 : <AgentTab id={tab} job={job} view={agents.data?.agents[tab]} report={report.data} findings={findings.data} />}
@@ -120,6 +123,7 @@ function RunHeader({ job, report }: { job: Job; report?: Report }) {
         </div>
         <div className="flex flex-wrap gap-2">
           {s.pull_request_url && <LinkBtn href={s.pull_request_url} external kind="good"><GitPullRequestArrow className="size-4" /> {s.pull_request_draft ? 'View draft PR' : 'View pull request'}</LinkBtn>}
+          <RunTestsButton job={job} />
           <Btn kind="quiet" onClick={() => openChat({ type: 'run', jobId: job.id, label: job.repo })}><Sparkles className="size-4" /> Ask AI about this run</Btn>
           {!done && <Btn kind="quiet" onClick={() => act('cancel')}><Square className="size-3.5" /> Cancel</Btn>}
           {done && <Btn kind="quiet" onClick={() => act('retry')}><RotateCcw className="size-3.5" /> Re-run</Btn>}
@@ -142,7 +146,9 @@ function ApprovalBox({ job }: { job: Job }) {
   const s = job.summary ?? {}
   const caps = useCaps()
   const approve = useApprove()
-  if (job.status !== 'completed' || !s.fixes_applied) return null
+  const tests = s.tests
+  const testFixes = (tests?.runs ?? []).filter((r) => r.fix).length
+  if (job.status !== 'completed' || (!s.fixes_applied && !testFixes)) return null
   const flagged = s.validation_status === 'flagged'
   if (s.pull_request_url) {
     return (
@@ -154,17 +160,23 @@ function ApprovalBox({ job }: { job: Job }) {
   }
   const token = !!caps.data?.github_token_configured
   const publishing = s.approval_status === 'publishing' || approve.isPending
+  const testing = testsActive(job)
   return (
     <Notice tone={flagged ? 'warn' : 'info'} title={flagged ? 'Your decision: validation flagged this change set' : 'Your decision: approve the fixes'}
       action={
         <div className="flex flex-wrap gap-2">
           <LinkBtn href={artifactUrl(job.id, 'fixes.patch')}><Download className="size-3.5" /> Download patch</LinkBtn>
-          <Btn kind={flagged ? 'warn' : 'good'} disabled={!token || publishing} onClick={() => approve.mutate(job.id)}>
+          <Btn kind={flagged ? 'warn' : 'good'} disabled={!token || publishing || testing} onClick={() => approve.mutate(job.id)}
+            title={testing ? 'Wait for the GitHub tests to finish' : undefined}>
             {publishing ? <><Loader2 className="size-4 animate-spin" /> Publishing…</> : flagged ? 'Approve & open draft PR' : <><Check className="size-4" /> Approve &amp; open PR</>}
           </Btn>
         </div>
       }>
-      {s.fixes_applied} fix commit(s) are ready{flagged ? '; a validation check failed (see ③ Validation). Approving opens a draft pull request labelled needs-investigation.' : ' and validated. Review them under ② Remediation, then approve to push the branch and open a pull request.'}
+      {s.fixes_applied ?? 0} fix commit(s) are ready{flagged ? '; a validation check failed (see ③ Validation). Approving opens a draft pull request labelled needs-investigation.' : ' and validated. Review them under ② Remediation, then approve to push the branch and open a pull request.'}
+      {tests && <div className="mt-1">{testing ? 'The tests are running on GitHub; approve when they have finished.'
+        : tests.status === 'passed' ? `GitHub tests pass on ${tests.branch}${testFixes ? ` after ${testFixes} AI fix(es)` : ''}: approving opens the pull request from that branch.`
+          : tests.status === 'failed' ? 'GitHub tests still fail: approving opens a draft pull request for investigation.' : null}</div>}
+      {!tests && <div className="mt-1">Tip: <b>Run tests on GitHub</b> first to check the fixes against the repository’s own tests.</div>}
       {s.approval_status === 'failed' && s.publish_error && <div className="mt-1 text-[#d03b3b]">Last attempt failed: {s.publish_error}</div>}
       {!token && <div className="mt-1">A GitHub token is required: <Link to="/settings" className="text-sky underline">add one in Settings</Link>.</div>}
     </Notice>
@@ -462,3 +474,9 @@ function LogTab({ job }: { job: Job }) {
   )
 }
 
+
+function TestsBadge({ status }: { status: string }) {
+  const color = status === 'passed' ? '#15803d' : status === 'failed' || status === 'error' ? '#d03b3b' : status === 'running' || status === 'starting' ? 'var(--blue)' : 'var(--ink-3)'
+  const label = status === 'passed' ? 'pass' : status === 'failed' ? 'fail' : status === 'running' || status === 'starting' ? 'running' : status.replace('_', ' ')
+  return <span className="rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-white" style={{ background: color }}>{label}</span>
+}

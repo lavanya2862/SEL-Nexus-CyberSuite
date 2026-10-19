@@ -42,7 +42,8 @@ export function HowItWorks() {
       <PageHeader title="How it works" description="How the four AI agents find, fix, validate and report the vulnerabilities in a repository, and where a person decides." />
       <Card title="From GitHub link to pull request" description="Every run goes through these six steps, in this order.">
         <PipelineFlow stages={mergedStages([]).map((s) => ({ ...s, status: 'completed' }))} />
-        <div className="mt-4"><Notice tone="info" title="A person always decides">Validated fixes become a pull request only after you approve them. If validation fails, the change set is flagged: it opens as a draft pull request labelled <span className="font-mono">needs-investigation</span> (or is held back), and it is never merged automatically.</Notice></div>
+        <div className="mt-4"><Notice tone="info" title="Optional: test on GitHub, fix with AI">Press <b>Run tests on GitHub</b> on a run (or tick it on New scan). The fix branch is pushed with a test workflow, GitHub Actions runs every test in the repository, and when a test fails the AI reads the failure, fixes the code (or a test that is itself wrong), and pushes again, which runs the tests again. It stops when everything passes or after 3 fixes. Fixes that skip or delete tests are rejected.</Notice></div>
+        <div className="mt-3"><Notice tone="info" title="A person always decides">Validated fixes become a pull request only after you approve them. If validation fails, the change set is flagged: it opens as a draft pull request labelled <span className="font-mono">needs-investigation</span> (or is held back), and it is never merged automatically.</Notice></div>
       </Card>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {agents.map((a) => (

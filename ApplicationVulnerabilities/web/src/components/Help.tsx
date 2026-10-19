@@ -20,6 +20,7 @@ const TERMS: [string, string][] = [
   ['Validation', 'Proving the fixes work: the code still parses, no security controls were removed, tests still pass, and a fresh scan no longer reports the issue.'],
   ['Flagged', 'One of the validation checks failed. The fixes can still be approved, but the pull request opens as a draft for investigation.'],
   ['Pull request (PR)', 'A request on GitHub to merge the fix branch. A person reviews and merges it; nothing is merged automatically.'],
+  ['GitHub Actions', 'GitHub’s own machines that run a repository’s tests. Run tests on GitHub pushes the fix branch there; failing tests are fixed by the AI and run again, up to 3 times.'],
   ['SARIF', 'A standard file of scan results that GitHub code scanning can import.'],
   ['Patch', 'One file with all the code changes. Apply it yourself with “git apply” if you prefer not to open a pull request.'],
 ]

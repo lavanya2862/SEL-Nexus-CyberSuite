@@ -50,7 +50,7 @@ const NAV = GROUPS.flatMap((g) => g.items)
 // Breadcrumb names for the tabs inside a run
 const TAB_NAMES: Record<string, string> = {
   summary: 'Summary', analysis: '① Analysis', remediation: '② Remediation', validation: '③ Validation', reporting: '④ Reporting',
-  findings: 'All findings', logs: 'Activity log',
+  tests: '⑤ GitHub tests', findings: 'All findings', logs: 'Activity log',
 }
 
 const NAV_KEY = 'appvuln-nav-collapsed'
