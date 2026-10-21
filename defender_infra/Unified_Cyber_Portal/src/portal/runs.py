@@ -59,7 +59,7 @@ class Step:
 # Members must follow the pipeline's own order (they are matched against the log one after another).
 def uc3_steps() -> list[Step]:
     return [
-        Step("download", "Extract", "Collect every weakness from Microsoft Defender"),
+        Step("download", "Download from Defender", "The full list of weaknesses, plus what Defender changed since the last run"),
         Step("check", "Validate", "Save today's copy and check nothing is missing"),
         Step("score", "Score and report", "Rate each problem and prepare the report numbers"),
         Step("advice", "Advice agent", "AI writes the steps to fix every problem"),
@@ -105,6 +105,7 @@ def uc4_steps() -> list[Step]:
 
 
 STEPS = {"uc1": uc1_steps, "uc3": uc3_steps, "uc4": uc4_steps, "attack": attack_steps}
+AGENT_NAMES = {"uc1": "Threat Intel Agent", "uc3": "Vulnerability Agent", "uc4": "Alert Triage Agent", "attack": "Attack Detection Agent"}
 UC4_AFTER_TRIAGE = {"auto_resolve", "respond", "defender_view", "writeback", "actions", "ledger", "accuracy", "metrics", "export"}
 VERDICT_WORDS = {"likely_true_positive": "real threat", "likely_false_positive": "false alarm",
                  "benign_positive": "false positive", "needs_investigation": "needs a person"}
@@ -125,6 +126,30 @@ def ingest_words(text: str) -> str:
 
 
 REPORT_READY = "Report updated with today's numbers"
+
+
+def defender_new(info: dict) -> tuple[int, int] | None:
+    """(new, fixed) vulnerabilities this run, from Defender's own change list (UC3 extract counts).
+    Both 0 when Defender has not refreshed its data; None for runs from before UC3 counted them."""
+    if "new" not in info:
+        return None
+    if info.get("defender_refreshed") is False:
+        return 0, 0
+    return int(info.get("new") or 0), int(info.get("fixed") or 0)
+
+
+def download_words(info: dict) -> str:
+    """ "4,524 vulnerabilities in Defender · none new in this run" or "… · 2 new in this run · 13 fixed" """
+    rows = info.get("vulnerability_rows")
+    if rows is None:
+        return ""
+    text = f"{int(rows):,} vulnerabilities in Defender"
+    counts = defender_new(info)
+    if counts is None:
+        return text
+    new, fixed = counts
+    text += f" · {new:,} new in this run" if new else " · none new in this run"
+    return text + (f" · {fixed:,} fixed" if fixed else "")
 
 
 def advice_status(info: dict, stopped: str = "") -> tuple[str, str]:
@@ -175,6 +200,29 @@ def _n(v) -> str:
     return f"{v:,}" if isinstance(v, int) else str(v)
 
 
+def _new_steps(d: dict) -> int:
+    """Fix steps written in this run only; steps kept from earlier runs are not shown again."""
+    return int(d.get("new_ai", 0) or 0) + int(d.get("new_standard", 0) or 0)
+
+
+def _searched(d: dict) -> str:
+    """The attack search in plain words: no counts of searches or rows, only whether some could not run."""
+    return "Looked through the last 30 days of activity" + (" · some searches could not run" if d.get("errors") else "")
+
+
+def threats_words(ex: dict) -> str:
+    """Only what this run found: "No new threats affect our computers" / "3 new threats affect our computers".
+    The running total is on the Threat news page; runs from before the new count say only that the check ran."""
+    if "new_threats_exposed" not in ex:
+        return "Checked against the software on our computers"
+    new = ex["new_threats_exposed"]
+    return f"{_plural(new, 'new threat')} affect our computers" if new else "No new threats affect our computers"
+
+
+def _alerts(n: int) -> str:
+    return f"{_plural(n, 'alert')} sent" if n else "no alerts needed"
+
+
 def feed_counts(feeds: dict) -> str:
     """e.g. "8 of 9 feeds OK · 1 skipped (no key)" """
     ok = sum(1 for v in feeds.values() if str(v).startswith("ok"))
@@ -206,21 +254,23 @@ def friendly(name: str, value) -> str | None:
         if name == "products":
             return "Linked CVEs to the products they affect"
         if name == "analyse":
-            return f"{_n(d['candidates'])} threats assessed · {_n(d.get('ai_done', 0))} by AI, {_n(d.get('rules_only', 0))} by rules"
+            return f"{_n(d['candidates'])} threats assessed"
         if name == "exposure":
             return f"{_n(d['threats_exposed'])} threats affect our {d.get('devices', '?')} computers"
         if name in ("score", "rescore"):
             return f"{d.get('Critical', 0)} critical · {d.get('High', 0)} high · {d.get('Medium', 0)} medium"
         if name == "hunt":
-            return f"{d['ok']} of {d['hunts']} hunts ran · {_n(d.get('rows', 0))} rows found"
+            return _searched(d)
         if name == "correlate":
             return f"{_n(d.get('exposure_findings', 0))} findings linked to evidence"
         if name == "alerts":
-            return f"{d['new_alerts']} new alerts"
+            return _alerts(d["new_alerts"]).capitalize()
         if name == "fix_advice":
-            return f"Fix steps for {_plural(d['threats'], 'threat')} · {d['by_ai']} by AI"
+            new = _new_steps(d)
+            return f"Fix steps written for {_plural(new, 'threat')}" if new else "No new fix steps needed"
         if name == "resolve":
-            return f"Resolution steps for {_plural(d['signs'], 'sign')} of attack · {d['by_ai']} by AI"
+            new = _new_steps(d)
+            return f"Fix steps written for {_plural(new, 'sign')} of attack" if new else "No new fix steps needed"
         if name == "report":
             return "Word and PDF report written"
         if name == "dashboard":
@@ -257,23 +307,21 @@ def group_summary(key: str, r: dict) -> str | None:
             feeds, an = get("collect"), get("analyse")
             news = sum(int(n) for v in feeds.values() for n in re.findall(r"\d+", str(v)))
             failed = [k for k, v in feeds.items() if not str(v).startswith(("ok", "skipped"))]
-            text = f"{_n(news)} news items · {_n(an['candidates'])} threats understood"
-            return text + (f" · feed failed: {', '.join(failed)}" if failed else "")
+            text = f"{_n(news)} news items checked"
+            return text + (f" · {_plural(len(failed), 'source')} could not be reached" if failed else "")
         if key == "affects":
-            ex = get("exposure")
-            return f"{_plural(ex['threats_exposed'], 'threat')} hit our computers"
+            return threats_words(get("exposure"))
         if key == "fixes":
-            fx = get("fix_advice")
-            return f"Fix steps for {_plural(fx['threats'], 'threat')} that affect us · {fx['by_ai']} by AI"
+            new = _new_steps(get("fix_advice"))
+            return f"Fix steps written for {_plural(new, 'threat')} that affect us" if new else "No new fix steps needed"
         if key == "search":
-            hu = get("hunt")
-            return f"{hu['ok']} of {hu['hunts']} searches ran · {_n(hu.get('rows', 0))} rows found"
+            return _searched(get("hunt"))
         if key == "resolve":
-            rs = get("resolve")
-            return f"Resolution steps for {_plural(rs['signs'], 'sign')} of attack · {rs['by_ai']} by AI"
+            new = _new_steps(get("resolve"))
+            return f"Fix steps written for {_plural(new, 'sign')} of attack" if new else "No new fix steps needed"
         if key == "publish":
             al = get("alerts")
-            return f"Attack detection page updated · {_plural(al['new_alerts'], 'new alert')}"
+            return f"Attack detection page updated · {_alerts(al['new_alerts'])}"
         if key in ("evidence", "attack"):
             # what this run added; the Attack detection page keeps every earlier sign as well
             co = get("correlate")
@@ -283,9 +331,9 @@ def group_summary(key: str, r: dict) -> str | None:
         if key == "outputs":
             al, rs = get("alerts"), get("resolve")
             text = "Report ready"
-            if rs.get("signs"):
-                text += f" · resolution steps for {_plural(rs['signs'], 'sign')} of attack"
-            return text + f" · {_plural(al['new_alerts'], 'new alert')}"
+            if _new_steps(rs):
+                text += f" · fix steps for {_plural(_new_steps(rs), 'sign')} of attack"
+            return text + f" · {_alerts(al['new_alerts'])}"
         # UC4
         if key == "act":
             ar, rs = get("auto_resolve"), get("respond")
@@ -369,8 +417,7 @@ class RunState:
             info = _literal(line.split("Extract finished:", 1)[1].strip())
             if isinstance(info, dict):
                 self.results["extract"] = info
-            rows = info.get("vulnerability_rows") if isinstance(info, dict) else None
-            self.steps[d].detail = f"{int(rows):,} vulnerability rows downloaded" if rows is not None else ""
+            self.steps[d].detail = download_words(info) if isinstance(info, dict) else ""
         elif "uc3.extract:" in line:
             self.steps[d].detail = line.split("uc3.extract:", 1)[1].strip()
         elif "Updating the data lake" in line:
@@ -540,7 +587,12 @@ class RunState:
 
         if self.uc == "uc3":
             ex = r.get("extract") or {}
-            add("Vulnerability rows downloaded", f"{ex['vulnerability_rows']:,}" if "vulnerability_rows" in ex else None, f"from {ex.get('machines', '?')} devices")
+            add("Vulnerabilities in Defender", f"{ex['vulnerability_rows']:,}" if "vulnerability_rows" in ex else None,
+                f"on {ex.get('machines', '?')} computers")
+            counts = defender_new(ex)
+            if counts is not None:
+                add("New in this run", f"{counts[0]:,}",
+                    f"{counts[1]:,} fixed since the last run" if counts[1] else "nothing fixed since the last run")
             sev = r.get("severity") or {}
             if sev:
                 add("Critical findings", f"{sev.get('Critical', 0):,}", f"{sev.get('High', 0):,} high · fix these first")
@@ -573,38 +625,32 @@ class RunState:
             add("Your feedback imported", fb.get("feedback") if fb else None, "agree / disagree clicks")
             return out
         if self.uc == "attack":
-            hu = r.get("hunt") if isinstance(r.get("hunt"), dict) else {}
-            add("Searches run in Defender", f"{hu.get('ok', 0)}/{hu.get('hunts', 0)}" if hu else None,
-                f"{hu.get('errors', 0)} errors · {hu.get('rows', 0)} rows found")
+            # only what this run added: earlier signs and their fix steps are on the Attack detection page
             co = r.get("correlate") if isinstance(r.get("correlate"), dict) else {}
             if co:
-                add("New signs of attack", co.get("new_hits", 0), f"{co.get('hit_findings', 0)} kept in total")
+                add("New signs of attack", co.get("new_hits", 0), "since the last run")
             rs = r.get("resolve") if isinstance(r.get("resolve"), dict) else {}
             if rs:
-                add("Resolution steps by AI", rs.get("by_ai", 0), f"of {rs.get('signs', 0)} signs of attack")
+                add("Fix steps written this run", _new_steps(rs), "for signs of attack")
             al = r.get("alerts") if isinstance(r.get("alerts"), dict) else {}
-            add("New alerts", al.get("new_alerts"))
+            add("Alerts sent", al.get("new_alerts"), "to the security team" if al.get("new_alerts") else "no one needed to be told")
             return out
         feeds = r.get("collect") if isinstance(r.get("collect"), dict) else {}
         new_items = sum(int(n) for v in feeds.values() for n in re.findall(r"\d+", str(v)))
-        add("New threat items collected", f"{new_items:,}" if feeds else None, feed_counts(feeds) if feeds else "")
-        an = r.get("analyse") if isinstance(r.get("analyse"), dict) else {}
-        add("Threats assessed", an.get("candidates"), f"{an.get('ai_done', 0)} read by AI, {an.get('rules_only', 0)} by rules")
+        ok = sum(1 for v in feeds.values() if str(v).startswith("ok"))
+        failed = sum(1 for v in feeds.values() if not str(v).startswith(("ok", "skipped")))
+        add("News items checked", f"{new_items:,}" if feeds else None,
+            f"from {_plural(ok, 'public source')}" + (f" · {failed} could not be reached" if failed else ""))
         ex = r.get("exposure") if isinstance(r.get("exposure"), dict) else {}
-        add("Threats affecting our devices", ex.get("threats_exposed"), f"on {ex.get('devices', '?')} devices")
-        sc = r.get("rescore") if isinstance(r.get("rescore"), dict) else r.get("score") if isinstance(r.get("score"), dict) else {}
-        if sc:
-            add("Critical / High threats", f"{sc.get('Critical', 0)} / {sc.get('High', 0)}", "after linking the evidence")
+        add("New threats affecting us", ex.get("new_threats_exposed"), "since the last run")
         fx = r.get("fix_advice") if isinstance(r.get("fix_advice"), dict) else {}
         if fx:
-            add("Threats with fix steps", fx.get("threats"), f"{fx.get('by_ai', 0)} written by AI")
-        hu = r.get("hunt") if isinstance(r.get("hunt"), dict) else {}
-        add("Searches for attacks", f"{hu.get('ok', 0)}/{hu.get('hunts', 0)}" if hu else None, f"{hu.get('errors', 0)} errors · {hu.get('rows', 0)} rows found")
+            add("Fix steps written this run", _new_steps(fx), "for threats that affect us")
         co = r.get("correlate") if isinstance(r.get("correlate"), dict) else {}
         if co:
-            add("New signs of attack", co.get("new_hits", co.get("hit_findings", 0)), f"{co.get('hit_findings', 0)} kept in total")
+            add("New signs of attack", co.get("new_hits", co.get("hit_findings", 0)), "since the last run")
         al = r.get("alerts") if isinstance(r.get("alerts"), dict) else {}
-        add("New alerts", al.get("new_alerts"))
+        add("Alerts sent", al.get("new_alerts"), "to the security team" if al.get("new_alerts") else "no one needed to be told")
         return out
 
     def report_file(self) -> str | None:
@@ -750,6 +796,11 @@ class RunManager:
             current = self.latest(uc)
             if current and current.status == "running":
                 return False, current, "already running"
+            # uc1 and attack both run in UC1's folder and open its one DuckDB file, which only one process may hold
+            for other, other_root in self.uc_dirs.items():
+                if other != uc and other_root == root and self.running(other):
+                    return False, current, (f"The {AGENT_NAMES[other]} is still running and uses the same database. "
+                                            f"Run the {AGENT_NAMES[uc]} again when it has finished.")
             run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uc
             run_dir = self.runs_dir / run_id
             run_dir.mkdir(parents=True, exist_ok=True)

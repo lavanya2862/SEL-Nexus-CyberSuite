@@ -24,7 +24,7 @@ const RESULTS: Record<UcKey, { to: string; label: string }> = {
 export function Runs() {
   const params = useParams()
   const navigate = useNavigate()
-  const { runs, offline, start, starting } = useRuns()
+  const { runs, offline, start, starting, refused } = useRuns()
   // default tab: whichever pipeline is running, else UC3
   const uc: UcKey = UC_KEYS.includes(params.uc as UcKey)
     ? (params.uc as UcKey)
@@ -72,6 +72,13 @@ export function Runs() {
             <b>Lost contact with the portal.</b> A run keeps going in the background and is recorded; this page catches up as soon as the
             portal answers again. The timer is paused until then.
           </span>
+        </div>
+      )}
+
+      {refused?.uc === uc && refused.message !== 'already running' && (
+        <div className="flex items-start gap-3 rounded-xl border px-4 py-3 text-sm animate-in fade-in" style={{ borderColor: statusColor.warning }}>
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" style={{ color: statusColor.warning }} />
+          <span><b>Not started.</b> {refused.message}</span>
         </div>
       )}
 

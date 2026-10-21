@@ -80,8 +80,12 @@ def _uc3_part(uc3: UC3, now: datetime) -> dict:
         from {{fact_vulnerability}} v join {{dim_cve}} c using (cve_id)
         where v.snapshot_date = (select max(snapshot_date) from {{fact_vulnerability}}) and c.kev_ransomware
         group by 1""", "fact_vulnerability", "dim_cve")
+    fixed = uc3.query("""select opco, count(*) fixed, min(fixed_date)::varchar since
+        from {fact_remediation} group by 1""", "fact_remediation")
     for row in opco_totals:
         row["ransomware"] = next((r["ransomware"] for r in ransom if r["opco"] == row["opco"]), 0)
+        f = next((r for r in fixed if r["opco"] == row["opco"]), {})
+        row["fixed"], row["fixed_since"] = f.get("fixed", 0), f.get("since")
     names = uc3.app_names()
     apps = uc3.query(f"""select software_vendor || ':' || software_name as app_key, software_name, opco, count(*) findings,
             count(*) filter (where priority = 'P1') p1, count(distinct cve_id) filter (where in_cisa_kev) kev
@@ -99,6 +103,7 @@ def _uc3_part(uc3: UC3, now: datetime) -> dict:
         "health": health,
         "totals": {**(totals[0] if totals else {}), **(cves[0] if cves else {}),
                    "devices": len(devices), "remediated": remediated[0]["count"] if remediated else 0,
+                   "fixed_since": min((r["since"] for r in fixed if r["since"]), default=None),
                    "changes": {c["status"]: c["count"] for c in changes}},
         "trend": trend, "trend_opco": trend_opco, "priority": priority, "opco": opco, "opco_totals": opco_totals,
         "apps": apps, "quality": quality, "devices": devices,

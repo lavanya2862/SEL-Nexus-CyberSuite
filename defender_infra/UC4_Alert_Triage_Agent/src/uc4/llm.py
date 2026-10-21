@@ -47,23 +47,41 @@ class GeminiLLM(LLM):
         self.limiter = RateLimiter(settings.gemini_rpm, sleep=sleep)
         self.exhausted: str | None = None
         self._last_slowdown = 0.0
+        self.keys = settings.gemini_keys      # GEMINI_API_KEY, GEMINI_API_KEY_2, ...: the next takes over when one runs out
+        self.key_index = 0
 
     def _get_client(self):
         if self._client is None:
             from google import genai
-            self._client = genai.Client(api_key=self.settings.gemini_api_key)
+            self._client = genai.Client(api_key=self.keys[self.key_index])
         return self._client
+
+    def _next_key(self, used: int, why: str) -> bool:
+        """Move on from key number `used` (0-based) to the next one; False when it was the last."""
+        with self._lock:
+            if self.key_index != used:
+                return True
+            if used + 1 >= len(self.keys):
+                return False
+            self.key_index = used + 1
+            self._client = None                 # rebuilt with the new key on the next call
+        log.warning("Gemini key %d of %d %s; switching to key %d", used + 1, len(self.keys), why, used + 2)
+        return True
 
     def model(self) -> str:
         if self._model:
             return self._model
+        while True:                                   # a key that can't even list models: try the next one
+            used = self.key_index
+            try:
+                names = sorted(m.name.removeprefix("models/") for m in self._get_client().models.list())
+                break
+            except Exception as exc:  # noqa: BLE001
+                if not self._next_key(used, f"could not list models ({_short(exc)[:80]})"):
+                    raise AIUnavailable(f"Could not list Gemini models: {_short(exc)}") from exc
         with self._lock:
             if self._model:
                 return self._model
-            try:
-                names = sorted(m.name.removeprefix("models/") for m in self._get_client().models.list())
-            except Exception as exc:  # noqa: BLE001
-                raise AIUnavailable(f"Could not list Gemini models: {_short(exc)}") from exc
             for wanted in self.settings.gemini_models:
                 match = [n for n in names if n == wanted] or sorted(n for n in names if n.startswith(wanted + "-"))
                 if match:
@@ -92,6 +110,7 @@ class GeminiLLM(LLM):
         last = None
         for attempt in range(1, 6):
             self.limiter.wait()
+            used = self.key_index
             try:
                 resp = self._get_client().models.generate_content(model=model, contents=prompt, config=config)
                 self._count(purpose, True)
@@ -100,12 +119,18 @@ class GeminiLLM(LLM):
                 self._count(purpose, False)
                 last = exc
                 code = getattr(exc, "code", None)
+                if (code in (401, 403) or (code == 400 and "API key" in str(exc))) \
+                        and self._next_key(used, f"was refused ({code})"):
+                    continue
                 if code in (400, 401, 403, 404):
                     raise AIUnavailable(f"Gemini refused the request ({code}): {_short(exc)}") from exc
                 if code == 429:
                     detail = str(exc)
+                    if "PerDay" in detail and self._next_key(used, "used up its daily quota"):
+                        continue
                     if "PerDay" in detail:
-                        self.exhausted = "Gemini daily quota used up; remaining incidents retry next run"
+                        on_all = f" on all {len(self.keys)} keys" if len(self.keys) > 1 else ""
+                        self.exhausted = f"Gemini daily quota used up{on_all}; remaining incidents retry next run"
                         raise AIUnavailable(self.exhausted) from exc
                     with self._lock:
                         if self.limiter.interval < 6.0 and time.monotonic() - self._last_slowdown > 15:

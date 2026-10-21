@@ -104,11 +104,13 @@ export interface Summary {
       ransomware?: number
       devices: number
       remediated: number
+      fixed_since?: string | null
       changes: Record<string, number>
     }
     trend: { date: string; total: number; p1: number; exploitable: number }[]
     trend_opco: { date: string; opco: string; total: number }[]
-    opco_totals: { opco: string; findings: number; p1: number; critical: number; kev: number; ransomware: number; devices: number }[]
+    opco_totals: { opco: string; findings: number; p1: number; critical: number; kev: number; ransomware: number; devices: number
+                   fixed?: number; fixed_since?: string | null }[]
     apps: { software_name: string; app: string; opco: string; findings: number; p1: number; kev: number }[]
     quality: { check_name: string; status: string; message: string }[]
     priority: { priority: string; count: number }[]

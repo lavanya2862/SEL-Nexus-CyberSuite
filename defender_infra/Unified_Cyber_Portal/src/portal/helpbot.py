@@ -86,6 +86,12 @@ def _secrets() -> dict[str, str]:
     return {**_load_env_file(PORTAL_DIR / "config" / "portal.secrets.env"), **os.environ}
 
 
+def _keys(env: dict[str, str]) -> list[str]:
+    """GEMINI_API_KEY, then GEMINI_API_KEY_2 ... _9: the next one is tried when one is used up or refused."""
+    names = ["GEMINI_API_KEY"] + [f"GEMINI_API_KEY_{n}" for n in range(2, 10)]
+    return list(dict.fromkeys(v.strip() for v in (env.get(n) or "" for n in names) if v.strip()))
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -110,7 +116,7 @@ def cap() -> int:
 
 
 def status() -> dict:
-    return {"ai_ready": bool(_secrets().get("GEMINI_API_KEY")), "asked_today": asked_today(), "cap": cap()}
+    return {"ai_ready": bool(_keys(_secrets())), "asked_today": asked_today(), "cap": cap()}
 
 
 def _fence(value) -> str:
@@ -180,16 +186,23 @@ def build_context(settings, summary: dict, runs: dict, history: list[dict], scre
     return "\n".join(lines)
 
 
-def _gemini(system: str, prompt: str, key: str, models: list[str]) -> dict:
+def _gemini(system: str, prompt: str, keys: list[str], models: list[str]) -> dict:
     body = {"systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0, "maxOutputTokens": 700, "responseMimeType": "application/json"}}
-    last = ""
+    last, k = "", 0
     for model in models:
-        try:
-            r = httpx.post(API.format(model=model), json=body, headers={"x-goog-api-key": key}, timeout=45)
-        except httpx.HTTPError as exc:
-            raise HelpError(f"Couldn't reach the AI service ({type(exc).__name__}). Check the internet connection.") from exc
+        while True:
+            try:
+                r = httpx.post(API.format(model=model), json=body, headers={"x-goog-api-key": keys[k]}, timeout=45)
+            except httpx.HTTPError as exc:
+                raise HelpError(f"Couldn't reach the AI service ({type(exc).__name__}). Check the internet connection.") from exc
+            # this key is used up or refused: the next key (GEMINI_API_KEY_2, _3 ...) takes over
+            if (r.status_code in (401, 403, 429) or (r.status_code == 400 and "API key" in r.text)) and k + 1 < len(keys):
+                log.warning("Help: Gemini key %d of %d answered %d; switching to key %d", k + 1, len(keys), r.status_code, k + 2)
+                k += 1
+                continue
+            break
         if r.status_code == 404:                      # model not offered to this key: try the next one
             last = f"model {model} not available"
             continue
@@ -223,8 +236,8 @@ def ask(settings, summary: dict, runs: dict, run_history: list[dict], body: dict
     if len(question) > MAX_QUESTION:
         raise HelpError(f"Please keep the question under {MAX_QUESTION} characters.")
     env = _secrets()
-    key = env.get("GEMINI_API_KEY")
-    if not key:
+    keys = _keys(env)
+    if not keys:
         raise HelpError("The AI isn't set up for the portal yet (no Gemini key), so only the two ready answers work.")
     with _lock:
         if asked_today() >= cap():
@@ -240,7 +253,7 @@ def ask(settings, summary: dict, runs: dict, run_history: list[dict], body: dict
 
     models = [m for m in (env.get("GEMINI_MODEL") or "gemini-3.5-flash-lite",
                           env.get("GEMINI_FALLBACK_MODEL") or "gemini-3.1-flash-lite") if m]
-    raw = _gemini(SYSTEM, prompt, key, models)
+    raw = _gemini(SYSTEM, prompt, keys, models)
     answer = str(raw.get("answer") or "").strip()
     if not answer:
         raise HelpError("The AI gave an empty answer. Try asking in a different way.")

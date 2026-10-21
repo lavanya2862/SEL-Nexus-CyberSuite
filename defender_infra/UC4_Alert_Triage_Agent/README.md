@@ -30,6 +30,7 @@ What `.env` needs:
 |---|---|
 | `UC4_TENANT_ID`, `UC4_CLIENT_ID`, `UC4_CLIENT_SECRET` | An Entra ID app registration with Microsoft Graph application permissions `SecurityIncident.Read.All`, `SecurityAlert.Read.All`, `ThreatHunting.Read.All` and WindowsDefenderATP `Machine.Read.All` (admin consent granted) |
 | `GEMINI_API_KEY` | Free key from Google AI Studio |
+| `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3` … (optional) | Spare Gemini keys: when one key uses up its daily quota the next takes over. Each must be from a different Google Cloud project (keys in one project share its quota) |
 | `ABUSECH_AUTH_KEY`, `OTX_API_KEY`, `ABUSEIPDB_API_KEY`, `GREYNOISE_API_KEY` | Free threat-intel keys (all optional) |
 
 Optional actions are **off** by default and need extra permissions when switched on:

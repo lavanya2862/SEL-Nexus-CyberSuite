@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -28,8 +28,14 @@ class Settings:
     cert_path: Path | None = None
     client_secret: str | None = None
     gemini_api_key: str | None = None          # optional: AI fix guide (uc3.ai); without it cards show data only
+    gemini_extra_keys: tuple[str, ...] = field(default=(), repr=False)   # GEMINI_API_KEY_2, _3 ...
     gemini_models: tuple[str, ...] = ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite")
     gemini_rpm: int = 10
+
+    @property
+    def gemini_keys(self) -> tuple[str, ...]:
+        """GEMINI_API_KEY, then the spare keys: the next one takes over when one uses up its daily quota."""
+        return tuple(dict.fromkeys(k for k in (self.gemini_api_key, *self.gemini_extra_keys) if k))
 
     @property
     def has_credentials(self) -> bool:
@@ -66,6 +72,11 @@ def _env(name: str) -> str | None:
     return value or None
 
 
+def _extra_gemini_keys() -> tuple[str, ...]:
+    """GEMINI_API_KEY_2 ... GEMINI_API_KEY_9: spare keys, used in order when the one before runs out for the day."""
+    return tuple(k for n in range(2, 10) if (k := _env(f"GEMINI_API_KEY_{n}")))
+
+
 def _resolve(path_str: str) -> Path:
     path = Path(path_str)
     return path if path.is_absolute() else (PROJECT_ROOT / path).resolve()
@@ -88,6 +99,7 @@ def load_settings(env_file: Path | None = None, require_credentials: bool = True
         cert_path=_resolve(cert_path) if cert_path else None,
         client_secret=_env("UC3_CLIENT_SECRET"),
         gemini_api_key=_env("GEMINI_API_KEY"),
+        gemini_extra_keys=_extra_gemini_keys(),
         gemini_models=tuple(m for m in (_env("GEMINI_MODEL") or "gemini-3.5-flash-lite",
                                         _env("GEMINI_FALLBACK_MODEL") or "gemini-3.1-flash-lite") if m),
         gemini_rpm=max(1, int(_env("GEMINI_RPM") or 10)),

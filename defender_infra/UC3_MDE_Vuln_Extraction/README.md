@@ -23,6 +23,7 @@ What `.env` needs:
 |---|---|
 | `UC3_TENANT_ID`, `UC3_CLIENT_ID`, `UC3_CLIENT_SECRET` | A read-only Entra ID app registration with the WindowsDefenderATP application permissions `Vulnerability.Read.All`, `Machine.Read.All`, `Software.Read.All` (admin consent granted). A certificate (`UC3_CERT_THUMBPRINT` / `UC3_CERT_PATH`) can replace the secret |
 | `GEMINI_API_KEY` (optional) | Free key from Google AI Studio, for the AI fix text. Only app names, versions, CVE numbers and counts are sent, never device or user names |
+| `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3` … (optional) | Spare Gemini keys: when one key uses up its daily quota the next takes over. Each must be from a different Google Cloud project (keys in one project share its quota) |
 
 ## Commands
 

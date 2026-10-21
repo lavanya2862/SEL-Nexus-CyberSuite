@@ -95,6 +95,7 @@ def compute(store: Store) -> dict:
     cve_info = {c["cve_id"]: c for c in store.query("SELECT cve_id, products, published_at FROM cves WHERE products IS NOT NULL")}
     wait_from = now - timedelta(days=EARLY_DAYS)
 
+    before = {r["threat_id"] for r in store.query("SELECT DISTINCT threat_id FROM exposure WHERE match_type = 'cve'")}
     store.execute("DELETE FROM exposure")
     rows = []
     for tid, lk in by_threat.items():
@@ -148,7 +149,9 @@ def compute(store: Store) -> dict:
                                  "found_at": now})
     rows = list({(r["threat_id"], r["device_id"], r["match_type"], r["detail"]): r for r in rows}.values())
     store.upsert("exposure", rows)
-    return {"exposure_rows": len(rows), "threats_exposed": len({r["threat_id"] for r in rows if r["match_type"] == "cve"}),
+    exposed = {r["threat_id"] for r in rows if r["match_type"] == "cve"}
+    return {"exposure_rows": len(rows), "threats_exposed": len(exposed),
+            "new_threats_exposed": len(exposed - before),       # not on our computers' list in the last run
             "not_in_defender_yet": len({(r["device_id"], r["detail"]) for r in rows if r["match_type"] == "early"}),
             "devices": len({r["device_id"] for r in rows if r["match_type"] != "watchlist"})}
 
