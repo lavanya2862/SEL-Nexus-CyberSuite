@@ -70,6 +70,12 @@ export interface Uc3Data {
   kql: { rows_exist: number; rows_returned: number; coverage: number; measured_at: string } | null
   devices: Uc3Device[]
   f: { cols: string[]; rows: unknown[][] }
+  /** The latest run's download: the full list, plus Defender's own change list since the run before (absent in older data) */
+  download?: {
+    run_date: string; started_at: string | null; export_generated_time: string | null; previous_export_time: string | null
+    changes_since: string | null
+    counts: { machines?: number; vulnerability_rows?: number; new?: number; fixed?: number; updated?: number; previous_rows?: number | null; defender_refreshed?: boolean; export_reused?: boolean }
+  } | null
   /** Vulnerabilities Defender reported as fixed (newest first); absent in data built before 13 Oct */
   fixed?: { cols: string[]; rows: unknown[][] }
   kev: { cve: string; name: string; added: string; rw: boolean }[]

@@ -26,24 +26,39 @@ class AIUnavailable(RuntimeError):
 
 class GeminiClient:
     def __init__(self, settings: Settings, session=None, sleep=time.sleep, clock=time.monotonic):
-        if not settings.gemini_api_key:
+        if not settings.gemini_keys:
             raise AIUnavailable("GEMINI_API_KEY is not set in .env")
         self.settings = settings
+        self.keys = settings.gemini_keys      # GEMINI_API_KEY, GEMINI_API_KEY_2, ...: the next takes over when one runs out
+        self.key_index = 0
         self.session = session or requests.Session()
-        self.session.headers.update({"x-goog-api-key": settings.gemini_api_key})
+        self.session.headers.update({"x-goog-api-key": self.keys[0]})
         self.sleep, self.clock = sleep, clock
         self.interval = 60.0 / settings.gemini_rpm
         self._next = 0.0
         self._model: str | None = None
         self.calls = 0
 
+    def _next_key(self, why: str) -> bool:
+        """Move on to the next key; False when the current one was the last."""
+        if self.key_index + 1 >= len(self.keys):
+            return False
+        self.key_index += 1
+        self.session.headers["x-goog-api-key"] = self.keys[self.key_index]
+        log.warning("Gemini key %d of %d %s; switching to key %d", self.key_index, len(self.keys), why,
+                    self.key_index + 1)
+        return True
+
     def model(self) -> str:
         if self._model:
             return self._model
-        try:
-            response = self.session.get(f"{API}/models", params={"pageSize": 1000}, timeout=30)
-        except requests.RequestException as exc:
-            raise AIUnavailable(f"Gemini unreachable: {_short(exc)}") from exc
+        while True:                                   # a key that is refused: try the next one
+            try:
+                response = self.session.get(f"{API}/models", params={"pageSize": 1000}, timeout=30)
+            except requests.RequestException as exc:
+                raise AIUnavailable(f"Gemini unreachable: {_short(exc)}") from exc
+            if response.status_code == 200 or not self._next_key(f"was refused ({response.status_code})"):
+                break
         if response.status_code != 200:
             raise AIUnavailable(f"Gemini refused the key ({response.status_code}): {_short(response.text)}")
         names = sorted(m["name"].removeprefix("models/") for m in response.json().get("models", []))
@@ -92,10 +107,17 @@ class GeminiClient:
                         raise AIUnavailable("Gemini answer was not valid JSON")
                     continue
             detail = response.text
-            if response.status_code in (400, 401, 403, 404):
-                raise AIUnavailable(f"Gemini refused the request ({response.status_code}): {_short(detail)}")
-            if response.status_code == 429 and "PerDay" in detail:
-                raise AIUnavailable("Gemini daily free quota used up; the remaining apps are explained on the next run")
+            code = response.status_code
+            if (code in (401, 403) or (code == 400 and "API key" in detail)) and self._next_key(f"was refused ({code})"):
+                continue
+            if code in (400, 401, 403, 404):
+                raise AIUnavailable(f"Gemini refused the request ({code}): {_short(detail)}")
+            if code == 429 and "PerDay" in detail:
+                if self._next_key("used up its daily quota"):
+                    continue
+                on_all = f" on all {len(self.keys)} keys" if len(self.keys) > 1 else ""
+                raise AIUnavailable(f"Gemini daily free quota used up{on_all}; "
+                                    "the remaining apps are explained on the next run")
             if attempt == attempts:
                 raise AIUnavailable(f"Gemini failed after {attempts} attempts ({response.status_code})")
             if response.status_code == 429:

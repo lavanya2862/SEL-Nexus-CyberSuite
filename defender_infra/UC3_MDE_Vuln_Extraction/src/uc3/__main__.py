@@ -77,8 +77,10 @@ def cmd_check(_args: argparse.Namespace) -> int:
         record("FAIL", "Parquet + DuckDB", repr(exc))
 
     if settings is not None:
-        record("OK" if settings.gemini_api_key else "WARN", "Gemini key (optional)",
-               "set - AI fix guide on" if settings.gemini_api_key else "GEMINI_API_KEY not set - fix cards without AI text")
+        keys = len(settings.gemini_keys)
+        record("OK" if keys else "WARN", "Gemini key (optional)",
+               (f"{keys} keys set - AI fix guide on, the next key takes over when one runs out" if keys > 1
+                else "set - AI fix guide on") if keys else "GEMINI_API_KEY not set - fix cards without AI text")
 
     libreoffice = next((p for p in LIBREOFFICE_PATHS if p.is_file()), None) or shutil.which("soffice")
     record("OK" if libreoffice else "WARN", "LibreOffice",

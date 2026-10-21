@@ -638,7 +638,7 @@ function Uc1Panel({ s }: { s: Summary }) {
       <div className="grid grid-cols-3 gap-3">
         <Stat value={num(u.new_threats)} label="threats (30 days)" />
         <Stat value={num(u.affecting)} label="affect our devices" />
-        <Stat value={`${u.hunts_ok}/${u.hunts_total}`} label="hunts ran clean" />
+        <Stat value={num(u.urgent)} label="urgent, fix these first" />
       </div>
       <div>
         <div className="flex flex-wrap gap-3 text-xs text-[var(--g-ink-3)]">

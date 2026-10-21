@@ -30,6 +30,7 @@ What `.env` needs:
 |---|---|
 | `DEFENDER_TENANT_ID`, `DEFENDER_CLIENT_ID`, `DEFENDER_CLIENT_SECRET` | An Entra ID app registration with the WindowsDefenderATP application permissions `Machine.Read.All`, `Vulnerability.Read.All`, `AdvancedQuery.Read.All`, `Alert.Read.All` (admin consent granted) |
 | `GEMINI_API_KEY` | Free key from Google AI Studio |
+| `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3` … (optional) | Spare Gemini keys: when one key uses up its daily quota the next takes over. Each must be from a different Google Cloud project (keys in one project share its quota) |
 | `NVD_API_KEY`, `ABUSECH_AUTH_KEY`, `OTX_API_KEY` | Free keys from NVD, abuse.ch and AlienVault OTX (OTX is optional) |
 | Fix loop (optional) | Azure role **Virtual Machine Contributor** on `FIX_RESOURCE_GROUP` (Run Command), and/or `Machine.LiveResponse` + `Library.Manage` (Live Response) |
 

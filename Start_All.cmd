@@ -6,6 +6,9 @@ rem   defender_infra\         Defender & Infrastructure  http://127.0.0.1:8800
 rem   ApplicationVulnerabilities\  Application Vulnerabilities  http://127.0.0.1:8500
 set "SUITE=%~dp0"
 set CC_NO_BROWSER=1
+rem The Python that makes each .venv: the py launcher when there is one, because "python" can be the Microsoft Store shortcut
+set "PY=python"
+where py >nul 2>nul && set "PY=py -3"
 
 echo Stopping any sign-in page that is already running...
 powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
@@ -13,7 +16,7 @@ timeout /t 1 /nobreak >nul
 
 if not exist "%SUITE%login\.venv\Scripts\python.exe" (
   echo Setting up the sign-in page, first time only...
-  python -m venv "%SUITE%login\.venv" && "%SUITE%login\.venv\Scripts\python.exe" -m pip install --quiet --disable-pip-version-check -r "%SUITE%login\requirements.txt"
+  %PY% -m venv "%SUITE%login\.venv" && "%SUITE%login\.venv\Scripts\python.exe" -m pip install --quiet --disable-pip-version-check -r "%SUITE%login\requirements.txt"
 )
 
 echo Starting the sign-in page...

@@ -31,10 +31,9 @@ class GeminiClient:
     def __init__(self, settings: Settings, store: Store | None = None, client=None, sleep=time.sleep):
         if not settings.has_gemini and client is None:
             raise AIUnavailable("GEMINI_API_KEY is not set in .env")
-        if client is None:
-            from google import genai
-            client = genai.Client(api_key=settings.gemini_api_key)
-        self.client = client
+        self.keys = settings.gemini_keys      # GEMINI_API_KEY, GEMINI_API_KEY_2, ...: the next takes over when one runs out
+        self.key_index = 0
+        self.client = client if client is not None else self._new_client(self.keys[0])
         self.settings = settings
         self.store = store
         self.sleep = sleep
@@ -46,6 +45,29 @@ class GeminiClient:
         self._consecutive_429 = 0
         self._last_slowdown = 0.0
 
+    # ---------- keys ----------
+    @staticmethod
+    def _new_client(key: str):
+        from google import genai
+        return genai.Client(api_key=key)
+
+    def _next_key(self, used: int, why: str) -> bool:
+        """Move on from key number `used` (0-based) to the next one; False when it was the last.
+        Parallel workers that hit the same key's limit together move on only once."""
+        with self._lock:
+            if self.key_index != used:
+                return True
+            if used + 1 >= len(self.keys):
+                return False
+            self.key_index = used + 1
+            self.client = self._new_client(self.keys[self.key_index])
+            self._consecutive_429 = 0
+        log.warning("Gemini key %d of %d %s; switching to key %d", used + 1, len(self.keys), why, used + 2)
+        return True
+
+    def _all_keys(self) -> str:
+        return f" on all {len(self.keys)} keys" if len(self.keys) > 1 else ""
+
     # ---------- model ----------
     def available_models(self) -> list[str]:
         return sorted(m.name.removeprefix("models/") for m in self.client.models.list())
@@ -53,13 +75,17 @@ class GeminiClient:
     def model(self) -> str:
         if self._model:
             return self._model
+        while True:                                   # a key that can't even list models: try the next one
+            used = self.key_index
+            try:
+                names = self.available_models()
+                break
+            except Exception as exc:  # noqa: BLE001
+                if not self._next_key(used, f"could not list models ({_short(exc)[:80]})"):
+                    raise AIUnavailable(f"Could not list Gemini models: {_short(exc)}") from exc
         with self._lock:
             if self._model:
                 return self._model
-            try:
-                names = self.available_models()
-            except Exception as exc:  # noqa: BLE001
-                raise AIUnavailable(f"Could not list Gemini models: {_short(exc)}") from exc
             for wanted in self.settings.gemini_models:
                 exact = [n for n in names if n == wanted]
                 close = [n for n in names if n.startswith(wanted + "-")]
@@ -100,6 +126,7 @@ class GeminiClient:
                 raise AIUnavailable(self.exhausted)
             self._check_cap()
             self.limiter.wait()
+            used = self.key_index
             try:
                 response = self.client.models.generate_content(model=model, contents=prompt, config=config)
                 self._count(purpose, True)
@@ -109,16 +136,22 @@ class GeminiClient:
             except errors.APIError as exc:
                 self._count(purpose, False)
                 code = getattr(exc, "code", None)
+                if (code in (401, 403) or (code == 400 and "API key" in str(exc))) \
+                        and self._next_key(used, f"was refused ({code})"):
+                    continue
                 if code in (400, 401, 403, 404):
                     raise AIUnavailable(f"Gemini refused the request ({code}): {_short(exc)}") from exc
                 if code == 429:
                     detail = str(exc)
                     quota = ", ".join(sorted(set(re.findall(r"quotaId'?:\s*'?([A-Za-z0-9_-]+)", detail)))) or "unknown"
+                    if "PerDay" in detail and self._next_key(used, f"used up its daily quota ({quota})"):
+                        continue
                     with self._lock:
                         self._consecutive_429 += 1
                         first = self._consecutive_429 == 1
                         if "PerDay" in detail:
-                            self.exhausted = f"Gemini daily quota used up ({quota}); remaining items retry next run"
+                            self.exhausted = (f"Gemini daily quota used up{self._all_keys()} ({quota}); "
+                                              "remaining items retry next run")
                         elif ("PerMinute" in detail and self.limiter.interval < 6.0
                               and time.monotonic() - self._last_slowdown > 15):
                             # adapt to the key's real per-minute limit (free tier is far below 500/min);

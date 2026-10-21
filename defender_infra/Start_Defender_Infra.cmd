@@ -8,6 +8,9 @@ rem The first start sets things up by itself: a Python environment (.venv) per t
 rem Each tool still needs its own .env (copy config\settings.example.env) to show data.
 set "DI=%~dp0"
 cd /d "%DI%Unified_Cyber_Portal"
+rem The Python that makes each .venv: the py launcher when there is one, because "python" can be the Microsoft Store shortcut
+set "PY=python"
+where py >nul 2>nul && set "PY=py -3"
 
 echo Stopping any other copy that is running...
 powershell -NoProfile -Command "foreach ($p in 8800,8700,8900) { Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }"
@@ -58,7 +61,7 @@ rem (a .pth file, so it also works on Python 3.11)
 :setup
 if exist "%DI%%~1\.venv\Scripts\python.exe" exit /b 0
 echo Setting up %~1, first time only...
-python -m venv "%DI%%~1\.venv" || exit /b 1
+%PY% -m venv "%DI%%~1\.venv" || exit /b 1
 "%DI%%~1\.venv\Scripts\python.exe" -m pip install --quiet --disable-pip-version-check -r "%DI%%~1\requirements.txt" || exit /b 1
 (echo %DI%%~1\src)>"%DI%%~1\.venv\Lib\site-packages\%~2.pth"
 exit /b 0

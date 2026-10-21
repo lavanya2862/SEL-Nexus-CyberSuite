@@ -128,7 +128,23 @@ def build_payload(settings: Settings) -> dict:
         "status": read_status(settings),
         "fixes": fixes,
         "posture": _posture_meta(settings, con, rep),
+        "download": _last_download(settings),
     }
+
+
+def _last_download(settings: Settings) -> dict | None:
+    """The latest run's download from Defender: the full list, plus what Defender itself changed since the run before."""
+    manifests = sorted(settings.raw_dir.glob("????-??-??/manifest.json"))
+    if not manifests:
+        return None
+    m = json.loads(manifests[-1].read_text())
+    counts = m.get("counts") or {}
+    changes = manifests[-1].parent / "changes.json.gz"
+    if "new" not in counts and changes.is_file():     # downloads from before the counts were kept
+        from uc3.extract import _count_changes
+        counts = {**counts, **_count_changes(changes)}
+    return {k: m.get(k) for k in ("run_date", "started_at", "export_generated_time", "previous_export_time", "changes_since")} \
+        | {"counts": counts}
 
 
 def _posture_meta(settings: Settings, con, rep: Path) -> dict | None:

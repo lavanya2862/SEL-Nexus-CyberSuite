@@ -4,7 +4,7 @@ import { ArrowUpRight, Bug, CalendarX2, Download, Search, SlidersHorizontal, Zap
 import { Chart, axisStyle } from '@/components/Chart'
 import { Empty, HopLink, Panel, SevTag, Tabs, Tag } from '@/components/kit'
 import { useKevThreatHref } from '@/lib/uc1'
-import { num, shortDate } from '@/lib/format'
+import { dateTime, num, shortDate } from '@/lib/format'
 import { chartTokens, inkOn, statusColor, useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import {
@@ -88,8 +88,6 @@ function Kpi({ label, value, hint, hue }: { label: string; value: number; hint: 
 }
 
 function Overview({ data, v }: { data: Uc3Data; v: Uc3View }) {
-  const { theme } = useTheme()
-  const t = chartTokens[theme]
   const kevHref = useKevThreatHref()
   const rows = v.rows
   const crit = rows.filter((f) => f.sev === 'Critical').length
@@ -160,18 +158,8 @@ function Overview({ data, v }: { data: Uc3Data; v: Uc3View }) {
             }}
           />
         </Card>
-          <Card title="What changed in the latest delta" description={lastDay ? `Events Defender recorded on ${shortDate(lastDay)}` : 'No change events yet'}>
-            <div className="grid grid-cols-3 gap-3">
-              {([['New', 'appeared', t.severity.High], ['Fixed', 'disappeared', statusColor.good], ['Updated', 'changed', 'var(--sky)']] as const).map(([st, l, c]) => (
-                <div key={st} className="rounded-xl bg-well p-4">
-                  <div className="tabular text-2xl leading-none" style={{ color: st === 'Fixed' ? c : undefined }}>{num(changeCount(st))}</div>
-                  <div className="mt-2 flex items-center gap-1.5 text-xs text-ink-3"><span className="size-1.5 rounded-full" style={{ background: c }} />{st}</div>
-                  <div className="text-[11px] text-ink-3">{l}</div>
-                </div>
-              ))}
-            </div>
-            <p className="mt-3 text-xs text-ink-3">The Trends tab shows every day since the first run.</p>
-          </Card>
+          <DefenderChanges data={data} fallback={(st) => changeCount(st)} fallbackDay={lastDay} />
+
         </div>
       </div>
 
@@ -209,6 +197,45 @@ function Overview({ data, v }: { data: Uc3Data; v: Uc3View }) {
 
       </div>
     </div>
+  )
+}
+
+/* ───────── what Defender itself changed since the last run (its own change list, downloaded with the full list) ───────── */
+
+function DefenderChanges({ data, fallback, fallbackDay }: { data: Uc3Data; fallback: (st: string) => number; fallbackDay?: string }) {
+  const { theme } = useTheme()
+  const t = chartTokens[theme]
+  const dl = data.download
+  const c = dl?.counts ?? {}
+  const known = dl && c.new !== undefined   // older data: no per-run counts, so fall back to the events of the last day
+  const stale = known && c.defender_refreshed === false
+  const count = (st: 'New' | 'Fixed' | 'Updated') => (known ? (stale ? 0 : c[st.toLowerCase() as 'new'] ?? 0) : fallback(st))
+  const when = dl?.started_at ? dateTime(dl.started_at) : null
+  return (
+    <Card
+      title="What Defender changed since the last run"
+      description={known
+        ? `From Defender’s own change list, downloaded ${when ?? shortDate(dl!.run_date)} · already applied to every page`
+        : fallbackDay ? `Changes Defender recorded on ${shortDate(fallbackDay)}` : 'No change events yet'}
+    >
+      <div className="grid grid-cols-3 gap-3">
+        {([['New', 'appeared on our computers', t.severity.High], ['Fixed', 'gone from our computers', statusColor.good], ['Updated', 'details changed (e.g. severity)', 'var(--sky)']] as const).map(([st, l, col]) => (
+          <div key={st} className="rounded-xl bg-well p-4">
+            <div className="tabular text-2xl leading-none" style={{ color: st === 'Fixed' && count(st) ? col : undefined }}>{num(count(st))}</div>
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-ink-3"><span className="size-1.5 rounded-full" style={{ background: col }} />{st}</div>
+            <div className="text-[11px] leading-snug text-ink-3">{l}</div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs leading-relaxed text-ink-3">
+        {stale ? <><b className="text-ink-2">No changes:</b> Defender has not refreshed its data since the last run. </>
+          : known && !count('New') && !count('Fixed') && !count('Updated') ? <><b className="text-ink-2">No changes</b> in Defender since the last run. </> : null}
+        {c.vulnerability_rows != null && (c.export_reused
+          ? <>Full list (<b className="text-ink-2">{num(c.vulnerability_rows)}</b> rows) not downloaded again: Defender has not rebuilt it since the last run, so that copy was reused. </>
+          : <>Every new Defender export is downloaded in full: <b className="text-ink-2">{num(c.vulnerability_rows)}</b> rows this time{typeof c.previous_rows === 'number' ? <>, {num(c.previous_rows)} the run before</> : null}. </>)}
+        {known && 'Counts are for all computers and severities.'} The Trends tab shows every day.
+      </p>
+    </Card>
   )
 }
 

@@ -51,6 +51,23 @@ def _write_jsonl_gz(path: Path, pages) -> int:
     return rows
 
 
+def _count_changes(path: Path) -> dict:
+    """Defender's change list by kind: {"new": n, "fixed": n, "updated": n} (its statuses New / Fixed / Updated)."""
+    counts = {"new": 0, "fixed": 0, "updated": 0}
+    with gzip.open(path, "rt", encoding="utf-8") as fh:
+        for line in fh:
+            status = str(json.loads(line).get("status") or "").lower()
+            if status in counts:
+                counts[status] += 1
+    return counts
+
+
+def _last_rows(settings: Settings) -> int | None:
+    """Rows in the last finished download (its manifest), for state files written before we kept the number."""
+    manifests = sorted(settings.raw_dir.glob("????-??-??/manifest.json"))
+    return json.loads(manifests[-1].read_text())["counts"].get("vulnerability_rows") if manifests else None
+
+
 def _state_path(settings: Settings) -> Path:
     return settings.raw_dir / "state.json"
 
@@ -60,12 +77,44 @@ def _load_state(settings: Settings) -> dict:
     return json.loads(path.read_text()) if path.is_file() else {}
 
 
-def _download_export(client: DefenderClient, folder: Path) -> dict:
-    """Request the full export and download every part; retry once with fresh links if they expire."""
+def _previous_export(settings: Settings, generated_time: str | None) -> tuple[Path, list] | None:
+    """The newest finished download of this same Defender export (same generatedTime) with all its files on disk."""
+    if not generated_time:
+        return None
+    for manifest_path in sorted(settings.raw_dir.glob("????-??-??/manifest.json"), reverse=True):
+        try:
+            manifest = json.loads(manifest_path.read_text())
+        except (OSError, ValueError):
+            continue
+        if manifest.get("export_generated_time") != generated_time:
+            continue
+        folder = manifest_path.parent / "vulnerabilities"
+        files = manifest.get("files") or []
+        if files and all((folder / f["name"]).is_file() and (folder / f["name"]).stat().st_size == f["bytes"]
+                         for f in files):
+            return folder, files
+    return None
+
+
+def _download_export(client: DefenderClient, folder: Path, settings: Settings) -> dict:
+    """Request the full export and download every part; retry once with fresh links if they expire.
+
+    Defender rebuilds the export only a few times a day. When it hands back the same export (same generatedTime) as
+    a finished earlier run, that run's files are copied instead of downloaded again.
+    """
     for attempt in range(1, EXPORT_ATTEMPTS + 1):
         shutil.rmtree(folder, ignore_errors=True)
         folder.mkdir(parents=True)
         export = client.get_json(EXPORT, {"sasValidHours": 1})
+        previous = _previous_export(settings, export.get("generatedTime"))
+        if previous:
+            source, files = previous
+            for f in files:
+                shutil.copy2(source / f["name"], folder / f["name"])
+            log.info("Defender has not made a new export since %s; reusing the files from %s",
+                     export["generatedTime"], source.parent.name)
+            return {"generated_time": export["generatedTime"], "files": files, "attempts": attempt,
+                    "reused_from": source.parent.name}
         files = []
         try:
             for i, url in enumerate(export.get("exportFiles", [])):
@@ -107,7 +156,7 @@ def run_extract(settings: Settings, run_date: date | None = None, client: Defend
     machines = _write_jsonl_gz(work_dir / "machines.json.gz", client.iter_pages(MACHINES))
 
     log.info("Requesting the full vulnerability export")
-    export = _download_export(client, work_dir / "vulnerabilities")
+    export = _download_export(client, work_dir / "vulnerabilities", settings)
     generated = _parse_time(export["generated_time"]) if export["generated_time"] else started_at
 
     log.info("Asking Defender for its own row count")
@@ -122,6 +171,13 @@ def run_extract(settings: Settings, run_date: date | None = None, client: Defend
     log.info("Downloading changes since %s", since.isoformat())
     changes = _write_jsonl_gz(work_dir / "changes.json.gz", client.iter_pages(
         CHANGES, {"sinceTime": since.strftime("%Y-%m-%dT%H:%M:%SZ"), "pageSize": PAGE_SIZE}))
+    # What Defender itself changed since the last run (its own change list), and whether it made a new full export
+    # at all: Defender rebuilds the export a few times a day, so a run soon after the last one gets the same data.
+    by_kind = _count_changes(work_dir / "changes.json.gz")
+    rows = sum(f["rows"] for f in export["files"])
+    refreshed = not export["generated_time"] or export["generated_time"] != state.get("last_generated_time")
+    log.info("Defender changes since the last run: %d new, %d fixed, %d updated%s", by_kind["new"], by_kind["fixed"],
+             by_kind["updated"], "" if refreshed else " (Defender has not made a new export since the last run)")
 
     manifest = {
         "run_date": run_date.isoformat(),
@@ -130,13 +186,19 @@ def run_extract(settings: Settings, run_date: date | None = None, client: Defend
         "duration_seconds": round(time.perf_counter() - started, 1),
         "export_generated_time": export["generated_time"],
         "export_attempts": export["attempts"],
+        "export_reused_from": export.get("reused_from"),        # earlier run whose files were copied, if any
         "retries": client.retries,
         "changes_since": since.isoformat(timespec="seconds"),
         "counts": {
             "machines": machines,
-            "vulnerability_rows": sum(f["rows"] for f in export["files"]),
+            "vulnerability_rows": rows,
             "change_rows": changes,
+            **by_kind,                                                   # new / fixed / updated, as Defender reports them
+            "previous_rows": state.get("last_vulnerability_rows") or _last_rows(settings),   # the last run's full download
+            "defender_refreshed": refreshed,
+            "export_reused": bool(export.get("reused_from")),          # files copied from an earlier run, not downloaded
         },
+        "previous_export_time": state.get("last_generated_time"),
         **source,
         "posture": posture,
         "files": export["files"],
@@ -146,6 +208,7 @@ def run_extract(settings: Settings, run_date: date | None = None, client: Defend
     work_dir.rename(final_dir)
     if export["generated_time"]:
         state["last_generated_time"] = export["generated_time"]
+        state["last_vulnerability_rows"] = rows
         _state_path(settings).write_text(json.dumps(state, indent=2))
     log.info("Extract finished: %s", manifest["counts"])
     return manifest

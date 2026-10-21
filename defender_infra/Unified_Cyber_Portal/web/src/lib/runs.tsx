@@ -97,6 +97,8 @@ interface RunCtx {
   offline: boolean
   start: (uc: UcKey) => void
   starting: UcKey | null
+  /** the portal's reason when it refused the last start (e.g. another agent holds the same database) */
+  refused: { uc: UcKey; message: string } | null
   /** opens the full-screen run page (kept under its old name so every caller keeps working) */
   openDrawer: (focus?: UcKey) => void
   /** runs started from this browser tab, so the page may offer to jump to the results */
@@ -143,6 +145,7 @@ export function RunProvider({ children }: { children: ReactNode }) {
       mutation.mutate(uc)
     },
     starting: mutation.isPending ? (mutation.variables ?? null) : null,
+    refused: mutation.data && !mutation.data.started && mutation.variables ? { uc: mutation.variables, message: mutation.data.message } : null,
     openDrawer: (f) => navigate(f ? `/runs/${f}` : '/runs'),
     startedHere,
   }

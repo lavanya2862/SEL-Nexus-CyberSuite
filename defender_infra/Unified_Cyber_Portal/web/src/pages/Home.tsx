@@ -43,8 +43,10 @@ export function useView(s: Summary) {
     const all = opco === 'all'
     const ot = s.uc3.opco_totals.find((o) => o.opco === opco)
     const totals = all
-      ? { findings: s.uc3.totals.total ?? 0, p1: s.uc3.totals.p1 ?? 0, kev: s.uc3.totals.kev ?? 0, ransomware: s.uc3.totals.ransomware ?? 0 }
-      : { findings: ot?.findings ?? 0, p1: ot?.p1 ?? 0, kev: ot?.kev ?? 0, ransomware: ot?.ransomware ?? 0 }
+      ? { findings: s.uc3.totals.total ?? 0, p1: s.uc3.totals.p1 ?? 0, kev: s.uc3.totals.kev ?? 0, ransomware: s.uc3.totals.ransomware ?? 0,
+          fixed: s.uc3.totals.remediated ?? 0, fixedSince: s.uc3.totals.fixed_since ?? null }
+      : { findings: ot?.findings ?? 0, p1: ot?.p1 ?? 0, kev: ot?.kev ?? 0, ransomware: ot?.ransomware ?? 0,
+          fixed: ot?.fixed ?? 0, fixedSince: ot?.fixed_since ?? null }
     const trend = all
       ? s.uc3.trend.map((r) => ({ date: r.date, total: r.total }))
       : s.uc3.trend_opco.filter((r) => r.opco === opco).map((r) => ({ date: r.date, total: r.total }))
@@ -114,7 +116,7 @@ function HomeView({ s }: { s: Summary }) {
 
       <div className="card-row gap-5 [--card-min:280px]">
         <PriorityCard v={v} />
-        <ExploitedCard v={v} />
+        <FixedCard v={v} />
         <TrendCard v={v} />
       </div>
 
@@ -207,36 +209,35 @@ function PriorityCard({ v }: { v: View }) {
   )
 }
 
-function ExploitedCard({ v }: { v: View }) {
+function FixedCard({ v }: { v: View }) {
   const { theme } = useTheme()
-  const t = chartTokens[theme]
-  const top = v.kevApps.slice(0, 4)
+  const { fixed, findings: open, fixedSince } = v.totals
+  const pct = fixed + open ? Math.round((fixed / (fixed + open)) * 100) : 0
   return (
     <Panel className="flex flex-col p-6">
       <div className="flex items-start justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm">Known exploited holes <InfoTip text="Different holes on our computers that are on the CISA KEV list: there is proof attackers have used them against organisations somewhere in the world. It does not mean they were used against us. The ring shows which apps they are in." /></h3>
-        <Chip tone="signal">{v.totals.ransomware} ransomware</Chip>
+        <h3 className="flex items-center gap-1.5 text-sm">Problems fixed <InfoTip text="Problems Defender found on our computers that are now gone, counted since we started tracking. The ring shows fixed against still open." /></h3>
+        <Chip>{num(open)} still open</Chip>
       </div>
       <div className="mt-2 flex flex-1 items-end justify-between gap-4">
         <div className="flex min-w-0 flex-col">
-          <div className="text-[34px] leading-none tracking-tight tabular">{num(v.totals.kev)}</div>
-          <ul className="mt-4 grid grid-cols-[auto_auto] gap-x-4 gap-y-1.5 text-xs text-ink-2">
-            {top.map((a, i) => (
-              <li key={a.app} className="flex min-w-0 items-center gap-1.5">
-                <span className="size-1.5 shrink-0 rounded-full" style={{ background: t.series[i] }} />
-                <span className="whitespace-nowrap">{shortApp(a.app)}</span>
-              </li>
-            ))}
+          <div className="text-[34px] leading-none tracking-tight tabular" style={{ color: fixed ? statusColor.good : undefined }}>{num(fixed)}</div>
+          {/* the start date needs the portal's newer summary; without it, show the count alone */}
+          {(fixedSince || !fixed) && <div className="mt-2 text-xs text-ink-3">{fixed ? `since ${shortDate(fixedSince!)}` : 'nothing fixed yet'}</div>}
+          <ul className="mt-4 flex flex-col gap-1.5 text-xs text-ink-2">
+            <li className="flex items-center gap-1.5"><span className="size-1.5 rounded-full" style={{ background: statusColor.good }} />{pct}% of everything found is fixed</li>
+            <li className="flex items-center gap-1.5"><span className="size-1.5 rounded-full" style={{ background: chartTokens[theme].axis }} />{100 - pct}% still to do</li>
           </ul>
         </div>
         <div className="size-[92px] shrink-0">
           <Chart
             height={92}
             build={(tk) => ({
-              tooltip: { trigger: 'item', formatter: '{b}: {c} exploited CVE(s)' },
+              tooltip: { trigger: 'item', formatter: '{b}: {c}' },
               series: [{
                 type: 'pie', radius: ['78%', '96%'], padAngle: 3, itemStyle: { borderRadius: 4 }, label: { show: false },
-                data: v.kevApps.map((a, i) => ({ name: a.app, value: a.kev, itemStyle: { color: i < 4 ? tk.series[i] : tk.axis } })),
+                data: [{ name: 'Fixed', value: fixed, itemStyle: { color: statusColor.good } },
+                       { name: 'Still open', value: open, itemStyle: { color: tk.axis } }],
               }],
             })}
           />
@@ -688,7 +689,7 @@ function Uc1Panel({ s }: { s: Summary }) {
       <div className="grid grid-cols-3 gap-4 border-y border-hairline py-4">
         <Stat value={num(u.new_threats)} label="threats collected (30 days)" />
         <Stat value={num(u.affecting)} label="affect our devices" />
-        <Stat value={`${u.hunts_ok}/${u.hunts_total}`} label="hunts ran clean" />
+        <Stat value={num(u.urgent)} label="urgent, fix these first" />
       </div>
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">

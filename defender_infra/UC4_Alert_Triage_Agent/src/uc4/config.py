@@ -36,6 +36,16 @@ def _int(name: str, default: int) -> int:
         raise ConfigError(f"{name} must be a whole number") from exc
 
 
+def _extra_gemini_keys() -> tuple[str, ...]:
+    """GEMINI_API_KEY_2 ... GEMINI_API_KEY_9: spare keys, used in order when the one before runs out for the day."""
+    return tuple(k for n in range(2, 10) if (k := _env(f"GEMINI_API_KEY_{n}")))
+
+
+def _key_count(settings: "Settings") -> str:
+    n = len(settings.gemini_keys)
+    return f" ({n} keys: the next takes over when one runs out)" if n > 1 else ""
+
+
 def _flag(name: str, default: bool = False) -> bool:
     value = _env(name)
     return default if value is None else value.lower() not in ("0", "false", "no", "off")
@@ -60,6 +70,7 @@ class Settings:
     client_id: str | None = None
     client_secret: str | None = field(default=None, repr=False)
     gemini_api_key: str | None = field(default=None, repr=False)
+    gemini_extra_keys: tuple[str, ...] = field(default=(), repr=False)   # GEMINI_API_KEY_2, _3 ...
     gemini_models: tuple[str, ...] = ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite")
     gemini_rpm: int = 15
     gemini_daily_cap: int = 1500
@@ -139,7 +150,12 @@ class Settings:
 
     @property
     def has_gemini(self) -> bool:
-        return bool(self.gemini_api_key)
+        return bool(self.gemini_keys)
+
+    @property
+    def gemini_keys(self) -> tuple[str, ...]:
+        """GEMINI_API_KEY, then the spare keys: the next one takes over when one uses up its daily quota."""
+        return tuple(dict.fromkeys(k for k in (self.gemini_api_key, *self.gemini_extra_keys) if k))
 
     def describe(self) -> list[tuple[str, bool, str]]:
         """(setting, is_set, why it matters) for every secret/key. Never includes values."""
@@ -147,7 +163,7 @@ class Settings:
             ("UC4_TENANT_ID", bool(self.tenant_id), "Microsoft login (incidents, searches, device info)"),
             ("UC4_CLIENT_ID", bool(self.client_id), "Microsoft login (incidents, searches, device info)"),
             ("UC4_CLIENT_SECRET", bool(self.client_secret), "Microsoft login (incidents, searches, device info)"),
-            ("GEMINI_API_KEY", bool(self.gemini_api_key), "AI verdicts (without it: rules-only triage)"),
+            ("GEMINI_API_KEY", self.has_gemini, "AI verdicts (without it: rules-only triage)" + _key_count(self)),
             ("ABUSECH_AUTH_KEY", bool(self.abusech_auth_key), "threat intel: URLhaus, ThreatFox, MalwareBazaar"),
             ("OTX_API_KEY", bool(self.otx_api_key), "optional threat intel: AlienVault OTX"),
             ("ABUSEIPDB_API_KEY", bool(self.abuseipdb_api_key), "optional threat intel: AbuseIPDB (IP reputation)"),
@@ -169,6 +185,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         client_id=_env("UC4_CLIENT_ID"),
         client_secret=_env("UC4_CLIENT_SECRET"),
         gemini_api_key=_env("GEMINI_API_KEY"),
+        gemini_extra_keys=_extra_gemini_keys(),
         gemini_models=models,
         gemini_rpm=_int("GEMINI_RPM", 15),
         gemini_daily_cap=_int("GEMINI_DAILY_CAP", 1500),

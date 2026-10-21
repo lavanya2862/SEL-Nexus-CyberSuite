@@ -96,8 +96,8 @@ export function Hunting() {
       {/* 3. what was checked */}
       <Panel className="p-5 text-sm text-ink-2">
         <b className="text-ink">What we checked.</b> We searched the last 30 days of activity on {num(data.devices.length)} computers for{' '}
-        {num(iocTotal)} warning signs from attacks in the news (bad websites, IP addresses and files), plus {data.hunts.length} known attacker tricks.
-        {errors > 0 && <> {errors} of these searches could not run; see the technical details.</>}
+        {num(iocTotal)} warning signs from attacks in the news (bad websites, IP addresses and files), plus the tricks attackers are known to use.
+        {errors > 0 && <> Some searches could not run; see the technical details.</>}
         <div className="mt-1 text-ink-3">Fixing vulnerabilities stops new break-ins. This check looks for anyone who already got in.</div>
       </Panel>
 

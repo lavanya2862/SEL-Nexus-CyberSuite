@@ -227,12 +227,21 @@ function chCvss(rows) {
     series: [{type: "bar", barWidth: "62%", data: bins.map(count), itemStyle: {color: css("--s1"), borderRadius: [4, 4, 0, 0]}}]}, true);
 }
 function changes() {
+  // The latest run's numbers from Defender's own change list (D.download); older data: the events of the last day
+  const dl = D.download, c = (dl && dl.counts) || {};
+  const known = dl && c.new !== undefined, stale = known && c.defender_refreshed === false;
   const rows = D.changes.filter(c => keepOpco(c[1]) && (c[3] === "None" || state.sev.has(c[3])));
   const last = rows.length ? rows.map(c => c[0]).sort().at(-1) : null;
-  const n = st => sum(rows.filter(c => c[0] === last && c[2] === st), c => c[4]);
-  $("chgDesc").textContent = last ? `Events Defender recorded on ${last}` : "No change events yet";
+  const n = st => known ? (stale ? 0 : c[st.toLowerCase()] || 0) : sum(rows.filter(c => c[0] === last && c[2] === st), c => c[4]);
+  $("chgDesc").textContent = known ? `From Defender's own change list, downloaded ${(dl.started_at || dl.run_date).slice(0, 16).replace("T", " ")} UTC · already applied`
+    : last ? `Changes Defender recorded on ${last}` : "No change events yet";
   $("chg").innerHTML = `<div><b>${fmt(n("New"))}</b><span>New</span></div><div><b style="color:var(--good-ink)">${fmt(n("Fixed"))}</b><span>Fixed</span></div><div><b>${fmt(n("Updated"))}</b><span>Updated</span></div>`;
-  $("chgNote").textContent = "See the Trends page for every day since the first run.";
+  const none = known && !n("New") && !n("Fixed") && !n("Updated");
+  $("chgNote").textContent = (stale ? "No changes: Defender has not refreshed its data since the last run. "
+    : none ? "No changes in Defender since the last run. " : "")
+    + (c.vulnerability_rows != null ? `Every run downloads the full list again: ${fmt(c.vulnerability_rows)} this time`
+       + (typeof c.previous_rows === "number" ? `, ${fmt(c.previous_rows)} the run before. ` : ". ") : "")
+    + "See the Trends page for every day.";
 }
 const ICON = {PASS: ["ok", "✓"], WARN: ["w", "!"], FAIL: ["f", "✕"], INFO: ["i", "i"]};
 const LABEL = {completeness: "Complete", coverage_vs_defender: "Coverage vs Defender", not_empty: "Data received", freshness: "Fresh",
