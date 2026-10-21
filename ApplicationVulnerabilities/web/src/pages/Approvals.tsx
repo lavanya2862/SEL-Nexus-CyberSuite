@@ -53,7 +53,8 @@ export function Approvals() {
               {s.approval_status === 'failed' && s.publish_error && <Notice tone="bad" title="The last attempt failed">{s.publish_error}</Notice>}
               <div className="flex flex-wrap items-center gap-2">
                 <LinkBtn to={`/runs/${j.id}/remediation`}>Review the fixes</LinkBtn>
-                <LinkBtn href={artifactUrl(j.id, 'fixes.patch')}><Download className="size-3.5" /> Download patch</LinkBtn>
+                <LinkBtn href={artifactUrl(j.id, 'fixes.pdf')}><Download className="size-3.5" /> Fixes (PDF)</LinkBtn>
+                <LinkBtn href={artifactUrl(j.id, 'fixes.patch')}><Download className="size-3.5" /> Patch</LinkBtn>
                 <Btn kind={flagged ? 'warn' : 'good'} disabled={!token || publishing} onClick={() => approve.mutate(j.id)}>
                   {publishing ? <><Loader2 className="size-4 animate-spin" /> Publishing…</> : flagged ? 'Approve & open draft PR' : <><Check className="size-4" /> Approve &amp; open PR</>}
                 </Btn>

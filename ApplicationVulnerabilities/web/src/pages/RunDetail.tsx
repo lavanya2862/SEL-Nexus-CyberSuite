@@ -13,7 +13,7 @@ import {
 import { PipelineFlow, StageDetail } from '@/components/Pipeline'
 import { FindingsTable } from '@/components/Tables'
 import { RunTestsButton, TestsTab } from '@/components/TestLoop'
-import { api, artifactUrl, isLive, post, testsActive, useCaps, useJob, useJobAgents, useJobEvents, useJobResults } from '@/lib/api'
+import { PDF_FILES, TOOL_FILES, api, artifactUrl, isLive, post, testsActive, useCaps, useJob, useJobAgents, useJobEvents, useJobResults } from '@/lib/api'
 import { ago } from '@/lib/format'
 import { AGENT_IDS, METHOD, SEVERITIES, dur, mergedStages, sevLabel, splitFixTitle, where } from '@/lib/labels'
 import { useApprove, usePanels } from '@/lib/panels'
@@ -165,7 +165,8 @@ function ApprovalBox({ job }: { job: Job }) {
     <Notice tone={flagged ? 'warn' : 'info'} title={flagged ? 'Your decision: validation flagged this change set' : 'Your decision: approve the fixes'}
       action={
         <div className="flex flex-wrap gap-2">
-          <LinkBtn href={artifactUrl(job.id, 'fixes.patch')}><Download className="size-3.5" /> Download patch</LinkBtn>
+          <LinkBtn href={artifactUrl(job.id, 'fixes.pdf')}><Download className="size-3.5" /> Fixes (PDF)</LinkBtn>
+          <LinkBtn href={artifactUrl(job.id, 'fixes.patch')}><Download className="size-3.5" /> Patch</LinkBtn>
           <Btn kind={flagged ? 'warn' : 'good'} disabled={!token || publishing || testing} onClick={() => approve.mutate(job.id)}
             title={testing ? 'Wait for the GitHub tests to finish' : undefined}>
             {publishing ? <><Loader2 className="size-4 animate-spin" /> Publishing…</> : flagged ? 'Approve & open draft PR' : <><Check className="size-4" /> Approve &amp; open PR</>}
@@ -332,7 +333,8 @@ function RemediationExtra({ job, report: r, findings }: { job: Job; report: Repo
         <StatusTag tone="good" label={`${by('rule')} safe rewrites`} />
         <StatusTag tone="info" label={`${by('llm')} AI patches`} />
         <span className="text-xs text-ink-3">Separate branch <span className="font-mono text-ink-2">{r.branch}</span> · based on <span className="font-mono">{(r.base_commit ?? '').slice(0, 10)}</span></span>
-        <LinkBtn href={artifactUrl(job.id, 'fixes.patch')} className="ml-auto"><Download className="size-3.5" /> Download full patch</LinkBtn>
+        <LinkBtn href={artifactUrl(job.id, 'fixes.pdf')} className="ml-auto"><Download className="size-3.5" /> Fixes (PDF)</LinkBtn>
+        <LinkBtn href={artifactUrl(job.id, 'fixes.patch')}><Download className="size-3.5" /> Full patch</LinkBtn>
       </div>
       {r.fixes.map((fix, i) => {
         const checks = r.validation_checks.filter((c) => c.fix_index === i)
@@ -445,9 +447,11 @@ function ReportingExtra({ job }: { job: Job }) {
   const md = useQuery({ queryKey: ['job', job.id, 'report.md', job.summary?.approval_status], queryFn: () => api<string>(artifactUrl(job.id, 'report.md', false)) })
   return (
     <div className="flex flex-col gap-5">
-      <Card title="Downloads" description="findings.sarif uploads to GitHub code scanning. fixes.patch applies with git apply.">
-        <div className="flex flex-wrap gap-2">
-          {['report.md', 'report.json', 'findings.sarif', 'findings.json', 'fixes.patch'].map((n) => <LinkBtn key={n} href={artifactUrl(job.id, n)}><Download className="size-3.5" /> {n}</LinkBtn>)}
+      <Card title="Downloads" description="PDF reports to read and share. findings.sarif uploads to GitHub code scanning; fixes.patch applies with git apply.">
+        <div className="flex flex-wrap items-center gap-2">
+          {PDF_FILES.map(([n]) => <LinkBtn key={n} href={artifactUrl(job.id, n)} kind="primary"><Download className="size-3.5" /> {n}</LinkBtn>)}
+          <span className="mx-1 h-6 w-px bg-hairline-strong" />
+          {TOOL_FILES.map(([n]) => <LinkBtn key={n} href={artifactUrl(job.id, n)}><Download className="size-3.5" /> {n}</LinkBtn>)}
         </div>
       </Card>
       <Panel className="p-6">{md.isLoading ? <Loading text="Loading the report…" /> : md.error ? <ErrorBox error={md.error} /> : <Markdown text={md.data ?? ''} />}</Panel>

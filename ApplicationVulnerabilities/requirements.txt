@@ -7,5 +7,7 @@ SQLAlchemy>=2.0,<3.0
 httpx>=0.27,<1.0
 packaging>=23
 PyYAML>=6.0
+# PDF reports for people (report.pdf, findings.pdf, fixes.pdf)
+reportlab>=4.2,<5.0
 # PostgreSQL driver (needed only when DATABASE_URL points at Postgres)
 psycopg[binary]>=3.1,<4.0

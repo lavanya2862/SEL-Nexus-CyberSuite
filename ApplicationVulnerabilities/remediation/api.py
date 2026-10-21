@@ -25,6 +25,7 @@ from .db import Job, JobArtifact, JobEvent, as_aware, engine, session_scope
 from .github import GitHubClient, RepoAccessError, RepoURLError, parse_repo_url
 from .logging_setup import setup_logging
 from .models import Finding, JobOptions, RemediationReport
+from .pdf_reports import PDF_NAMES, render_pdf
 from .sandbox import sandbox_available
 from .scanners import capabilities
 from .suite_auth import COOKIE as SUITE_COOKIE, DOMAIN as SUITE_DOMAIN, SuiteSessions
@@ -330,9 +331,17 @@ def get_findings(job_id: str, severity: str | None = None, scanner: str | None =
 
 @app.get("/api/v1/jobs/{job_id}/artifacts/{name}")
 def download_artifact(job_id: str, name: str, download: bool = False, _: str = Depends(require_api_key)):
-    if name not in ARTIFACT_NAMES:
+    if name not in ARTIFACT_NAMES and name not in PDF_NAMES:
         raise HTTPException(404, "Unknown artifact.")
     _get_job(job_id)
+    if name in PDF_NAMES:
+        # PDFs for people are built on request from the run's report and findings, so older runs get them too.
+        import json
+        report = RemediationReport.model_validate_json(_artifact(job_id, "report.json").content)
+        findings = [Finding.model_validate(f) for f in json.loads(_artifact(job_id, "findings.json").content)]
+        disposition = "attachment" if download else "inline"
+        headers = {"Content-Disposition": f'{disposition}; filename="{job_id[:12]}-{name}"'}
+        return Response(render_pdf(name, report, findings), media_type="application/pdf", headers=headers)
     art = _artifact(job_id, name)
     headers = {"Content-Disposition": f'attachment; filename="{job_id[:12]}-{name}"'} if download else {}
     return Response(art.content, media_type=art.content_type, headers=headers)

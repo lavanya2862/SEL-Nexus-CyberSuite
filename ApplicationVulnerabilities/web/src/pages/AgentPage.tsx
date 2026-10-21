@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowRight, Download, ExternalLink } from 'lucide-react'
 import { AgentPanel, AgentTile } from '@/components/Agents'
 import { AgentStatusTag, Card, DTable, Empty, ErrorBox, FixStatusTag, LinkBtn, Loading, PageHeader, Panel, RiskScore, SevTag, StatusTag, VerdictTag, inputCls } from '@/components/kit'
-import { artifactUrl, isLive, useAgentHistory, useJob, useJobAgents, useJobResults, useJobs } from '@/lib/api'
+import { PDF_FILES, TOOL_FILES, artifactUrl, isLive, useAgentHistory, useJob, useJobAgents, useJobResults, useJobs } from '@/lib/api'
 import { ago } from '@/lib/format'
 import { AGENTS, METHOD, detectedBy, splitFixTitle, where } from '@/lib/labels'
 import { usePanels } from '@/lib/panels'
@@ -169,7 +169,8 @@ function AgentDetail({ id, job }: { id: AgentId; job: Job }) {
   return (
     <Card title="What it handed over" description="Files to download, and the pull request." action={link('reporting', 'Read the report')}>
       <div className="flex flex-wrap gap-2">
-        {(job.artifacts ?? []).filter((x) => x.name !== 'fixes.mbox').map((x) => (
+        {PDF_FILES.map(([n]) => <LinkBtn key={n} href={artifactUrl(job.id, n)}><Download className="size-3.5" /> {n}</LinkBtn>)}
+        {(job.artifacts ?? []).filter((x) => TOOL_FILES.some(([n]) => n === x.name)).map((x) => (
           <LinkBtn key={x.name} href={artifactUrl(job.id, x.name)}><Download className="size-3.5" /> {x.name} <span className="text-ink-3">{Math.max(1, Math.round(x.size / 1024))} KB</span></LinkBtn>
         ))}
       </div>

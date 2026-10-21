@@ -53,7 +53,7 @@ Nothing is ever merged automatically. If validation fails, the change set is **f
      · security rescan (fixed findings gone, nothing new introduced)  →  PASSED | FLAGGED
      │
      ▼
- ④ Reporting Component ─ report.md/json · findings.sarif · fixes.patch · per-fix diffs
+ ④ Reporting Component ─ report.pdf · findings.pdf · fixes.pdf · findings.sarif · fixes.patch · report.json
      │
      ▼
  Human approval ─ PR for review (draft + needs-investigation when flagged) · never auto-merged
@@ -133,6 +133,20 @@ requests (classic token: `repo` and `workflow`).
 | `TEST_RUN_TIMEOUT_MINUTES` | 30 | How long to wait for one GitHub Actions run |
 | `TEST_POLL_SECONDS` | 10 | How often to ask GitHub how the run is doing |
 
+## What each run hands over
+
+| File | For | Format and why |
+|---|---|---|
+| `report.pdf` | People: managers, auditors, reviewers | PDF. The whole run: summary, pipeline, scanners, fixes, validation checks and findings |
+| `findings.pdf` | People: developers, security team | PDF. Every finding with its severity, location, code, description, CWE and references |
+| `fixes.pdf` | People: the reviewer who approves the PR | PDF. Every fix with its explanation, checks and code changes |
+| `findings.sarif` | GitHub code scanning | SARIF 2.1.0, the format code scanning accepts |
+| `fixes.patch` | Developers | Unified diff, so `git apply fixes.patch` works |
+| `report.json`, `findings.json` | The API and other tools | JSON. The PDFs are built from these, on request, so every run (older ones too) has them |
+
+The pull-request description stays Markdown because GitHub shows it that way. `report.md` is kept only to show the
+report inside the website, and `fixes.mbox` only to replay the fix commits when a run is approved.
+
 ## Validation in detail
 
 | Layer | What it checks | Fails when |
@@ -165,7 +179,7 @@ remediation scan https://github.com/org/repo --codeql-sarif results/*.sarif --tr
 | `GET` | `/api/v1/jobs`, `/api/v1/jobs/{id}` | status, live `stages` timeline, summary, artifacts |
 | `GET` | `/api/v1/jobs/{id}/events?after=` | agent activity log |
 | `GET` | `/api/v1/jobs/{id}/report`, `/findings?severity=` | results |
-| `GET` | `/api/v1/jobs/{id}/artifacts/{report.md,report.json,findings.sarif,findings.json,fixes.patch,fixes.mbox}` | downloads |
+| `GET` | `/api/v1/jobs/{id}/artifacts/{report.pdf,findings.pdf,fixes.pdf,findings.sarif,fixes.patch,report.json,findings.json}` | downloads (`?download=true` saves the file) |
 | `POST` | `/api/v1/jobs/{id}/publish` | **human approval**: replay the fix commits onto a fresh clone, push, open the PR |
 | `POST` | `/api/v1/jobs/{id}/cancel`, `/retry` | control |
 | `POST` | `/api/v1/jobs/{id}/tests`, `/tests/cancel` | start / stop the Test & Fix loop on GitHub Actions (progress in the job's `summary.tests`) |

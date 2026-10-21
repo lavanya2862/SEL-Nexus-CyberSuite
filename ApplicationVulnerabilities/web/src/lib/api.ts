@@ -62,6 +62,19 @@ export const put = <T>(path: string, body: unknown) => api<T>(path, { method: 'P
 export const artifactUrl = (jobId: string, name: string, download = true) =>
   `/api/v1/jobs/${encodeURIComponent(jobId)}/artifacts/${name}${download ? '?download=true' : ''}`
 
+/** What a run hands over to people: PDFs. [file, short name, what it holds] */
+export const PDF_FILES: [string, string, string][] = [
+  ['report.pdf', 'Report', 'The full report: summary, pipeline, fixes, checks and findings'],
+  ['findings.pdf', 'Findings', 'Every finding with its code, description and references'],
+  ['fixes.pdf', 'Fixes', 'Every fix with its explanation, checks and code changes'],
+]
+
+/** What a run hands over to tools, in the formats those tools read. */
+export const TOOL_FILES: [string, string, string][] = [
+  ['findings.sarif', 'SARIF', 'For GitHub code scanning'],
+  ['fixes.patch', 'Patch', 'All changes; apply with git apply'],
+]
+
 export const isLive = (j?: Pick<Job, 'status'> | null) => !!j && (j.status === 'running' || j.status === 'queued')
 
 /** The Test & Fix loop is pushing, waiting for GitHub Actions or asking the AI for a fix. */

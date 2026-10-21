@@ -122,6 +122,10 @@ def test_worker_processes_job_and_api_serves_results(fake_world):
         crit = c.get(f"/api/v1/jobs/{job.id}/findings", params={"severity": "critical"}).json()
         assert crit["count"] == 1 and crit["items"][0]["package_name"] == "pyyaml"
         assert "shlex" in c.get(f"/api/v1/jobs/{job.id}/artifacts/fixes.patch").text
+        for name in ("report.pdf", "findings.pdf", "fixes.pdf"):
+            pdf = c.get(f"/api/v1/jobs/{job.id}/artifacts/{name}", params={"download": "true"})
+            assert pdf.status_code == 200 and pdf.headers["content-type"] == "application/pdf", name
+            assert pdf.content.startswith(b"%PDF") and "attachment" in pdf.headers["content-disposition"]
         stages = [e["message"] for e in c.get(f"/api/v1/jobs/{job.id}/events").json()["items"]]
         assert any("Applied llm fix" in m for m in stages)
 

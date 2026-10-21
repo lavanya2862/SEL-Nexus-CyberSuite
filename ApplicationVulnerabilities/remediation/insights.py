@@ -260,8 +260,9 @@ def reporting_view(job: dict, report: dict | None, findings: list[dict], artifac
               _kv("Fixes", r.get("patches_applied", "–")), _kv("Findings", r.get("findings_input", "–"))]
     outputs, learnings = [], []
     if report:
+        outputs += [_kv(name, "PDF") for name in ("report.pdf", "findings.pdf", "fixes.pdf")]
         for a in artifacts:
-            if a["name"] in ("report.md", "findings.sarif", "fixes.patch"):
+            if a["name"] in ("findings.sarif", "fixes.patch"):
                 outputs.append(_kv(a["name"], f"{a['size'] / 1024:.0f} KB"))
         pr = s.get("pull_request_url") or r.get("pull_request_url")
         approval = s.get("approval_status") or r.get("approval_status")
@@ -277,8 +278,8 @@ def reporting_view(job: dict, report: dict | None, findings: list[dict], artifac
                                     "labelled needs-investigation.", "warn"))
         else:
             learnings.append(_l("There is nothing to merge in this run."))
-        learnings.append(_l("findings.sarif can be uploaded to GitHub code scanning; fixes.patch applies with "
-                            "git apply."))
+        learnings.append(_l("report.pdf, findings.pdf and fixes.pdf are for people. findings.sarif can be uploaded "
+                            "to GitHub code scanning; fixes.patch applies with git apply."))
     return _view("reporting", st, inputs, outputs, learnings)
 
 
