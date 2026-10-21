@@ -5,13 +5,16 @@ rem Normally called by ..\Start_All.cmd. Started on its own, it also starts the 
 rem is not running yet, because people sign in there.
 rem The first start sets things up by itself: a Python environment (.venv) and the web app (web\dist). Later starts are quick.
 cd /d "%~dp0"
+rem The Python that makes the .venv: the py launcher when there is one, because "python" can be the Microsoft Store shortcut
+set "PY=python"
+where py >nul 2>nul && set "PY=py -3"
 
 echo Stopping any other copy that is running...
 powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8500 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
 
 if not exist ".venv\Scripts\python.exe" (
   echo Setting up Python for Application Vulnerabilities, first time only...
-  python -m venv .venv || goto :failed
+  %PY% -m venv .venv || goto :failed
   ".venv\Scripts\python.exe" -m pip install --quiet -r requirements.txt || goto :failed
 )
 if not exist "web\dist\index.html" (
