@@ -1,9 +1,9 @@
 @echo off
 title SEL Nexus CyberSuite
 rem Starts the whole SEL Nexus CyberSuite and opens the sign-in page in the browser:
-rem   login\                  shared sign-in page        http://127.0.0.1:8000
-rem   defender_infra\         Defender & Infrastructure  http://127.0.0.1:8800
-rem   ApplicationVulnerabilities\  Application Vulnerabilities  http://127.0.0.1:8500
+rem   login\                    shared sign-in page       http://127.0.0.1:8000
+rem   InfrastructureSecurity\   Infrastructure Security   http://127.0.0.1:8800
+rem   ApplicationSecurity\      Application Security      http://127.0.0.1:8500
 set "SUITE=%~dp0"
 set CC_NO_BROWSER=1
 rem The Python that makes each .venv: the py launcher when there is one, because "python" can be the Microsoft Store shortcut
@@ -29,13 +29,13 @@ if errorlevel 1 (
 )
 
 echo.
-echo ---- Defender ^& Infrastructure
-call "%SUITE%defender_infra\Start_Defender_Infra.cmd"
+echo ---- Infrastructure Security
+call "%SUITE%InfrastructureSecurity\Start_Infrastructure_Security.cmd"
 
-if exist "%SUITE%ApplicationVulnerabilities\Start_Application_Vulnerabilities.cmd" (
+if exist "%SUITE%ApplicationSecurity\Start_Application_Security.cmd" (
   echo.
-  echo ---- Application Vulnerabilities
-  call "%SUITE%ApplicationVulnerabilities\Start_Application_Vulnerabilities.cmd"
+  echo ---- Application Security
+  call "%SUITE%ApplicationSecurity\Start_Application_Security.cmd"
 )
 
 start "" http://127.0.0.1:8000

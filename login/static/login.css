@@ -1,5 +1,5 @@
-/* SEL Nexus CyberSuite sign-in page. Same tokens as the Defender & Infrastructure portal's dark theme
-   (defender_infra/Unified_Cyber_Portal/web/src/index.css, .dark), so moving between them feels like one product. */
+/* SEL Nexus CyberSuite sign-in page. Same tokens as the Infrastructure Security portal's dark theme
+   (InfrastructureSecurity/Unified_Cyber_Portal/web/src/index.css, .dark), so moving between them feels like one product. */
 :root {
   --canvas: #05070d;
   --panel: #0e1424;
@@ -87,11 +87,6 @@ body {
 }
 .card-body { padding: 36px 24px 32px; }
 @media (min-width: 640px) { .card-body { padding: 48px 56px 44px; } }
-.card-foot {
-  display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; padding: 16px 24px;
-  border-top: 1px solid var(--hairline); font-size: 13px; color: var(--ink-3); text-align: center;
-}
-.card-foot .ico { width: 16px; height: 16px; }
 h1 { margin: 0; font-size: 30px; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; }
 .lead { margin: 10px 0 32px; font-size: 15px; line-height: 1.6; color: var(--ink-3); }
 

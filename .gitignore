@@ -1,4 +1,4 @@
-# What is NOT pushed to GitHub. Each module can add its own .gitignore (defender_infra/.gitignore does).
+# What is NOT pushed to GitHub. Each module can add its own .gitignore (InfrastructureSecurity/.gitignore does).
 
 # ---- Passwords, keys and accounts (the sign-in page's accounts, session key and sign-in log)
 login/data/

@@ -1,0 +1,465 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/inter";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+/* SEL Nexus CyberSuite world: a calm slate-navy operations room on a faint dot field. One blue carries actions, selection
+   and links; orange / rose / amber / teal are reserved for severity and state. Cards are bordered slate panels with a soft
+   long shadow. The "signal tile" (.tile-signal) is the one signature move: brand mark, active menu icon, bot button. */
+@theme inline {
+    --color-canvas: var(--canvas);
+    --color-panel: var(--panel);
+    --color-well: var(--well);
+    --color-field: var(--field);
+    --color-hairline: var(--hairline);
+    --color-hairline-strong: var(--hairline-strong);
+    --color-ink: var(--ink);
+    --color-ink-2: var(--ink-2);
+    --color-ink-3: var(--ink-3);
+    --color-signal: var(--signal);
+    --color-sky: var(--sky);
+    --color-blue: var(--blue);
+    --color-blue-hi: var(--blue-hi);
+    --color-teal: var(--teal);
+    --color-violet: var(--violet);
+    --color-amber: var(--amber);
+    --color-rose: var(--rose);
+    --color-raised: var(--raised);
+    --shadow-elev: var(--elev);
+    --shadow-float: var(--float);
+}
+/* Light = "Smart" (user reference, 2026-10-14): soft grey page #eceef0, white cards, deep-navy ink #081030, periwinkle
+   blue for actions and the side menu. Text pairs on white: ink 18:1, ink-2 10:1, ink-3 4.9:1, sky (indigo) 7.6:1;
+   white on the menu blue 5.4:1, white on the button blue 5.4:1. */
+:root {
+    --canvas: #eceef0;
+    --panel: #ffffff;
+    --raised: #ffffff;
+    --well: #f3f5f8;
+    --field: #ffffff;
+    --hairline: #e0e4eb;
+    --hairline-strong: #ccd4df;
+    --ink: #081030;
+    --ink-2: #3a4366;
+    --ink-3: #636b8c;
+    --signal: #f0763c;
+    --sky: #1747d1;
+    --tile: #1d5cff;
+    --blue: #1d5cff;
+    --blue-hi: #1747d1;
+    --teal: #16a34a;
+    --violet: #7c3aed;
+    --amber: #ca8a04;
+    --rose: #e11d48;
+    --dot: transparent;
+    --glow: transparent;
+    --panel-glass: var(--panel);
+    /* the side menu: a white panel; each menu area wears its own colour (icons, selected row) */
+    --nav: #ffffff;
+    --nav-hi: #f3f5f8;
+    --nav-ink: #1d5cff;
+    --tint-blue: #1d5cff;
+    --tint-violet: #7c3aed;
+    --tint-red: #e11d48;
+    --area-overview: #1d5cff;
+    --area-find: #c27803;
+    --area-check: #e11d48;
+    --area-act: #16a34a;
+    --area-trust: #7c3aed;
+    --area-overview-on: #ffffff;
+    --area-find-on: #1f1300;
+    --area-check-on: #ffffff;
+    --area-act-on: #ffffff;
+    --area-trust-on: #ffffff;
+    --background: var(--canvas);
+    --foreground: var(--ink);
+    --card: var(--panel);
+    --card-foreground: var(--ink);
+    --popover: var(--raised);
+    --popover-foreground: var(--ink);
+    --secondary: var(--well);
+    --secondary-foreground: var(--ink);
+    --muted: var(--well);
+    --muted-foreground: var(--ink-3);
+    --accent: var(--well);
+    --accent-foreground: var(--ink);
+    --border: var(--hairline);
+    --input: var(--hairline-strong);
+    --primary: var(--blue);
+    --primary-foreground: #ffffff;
+    --ring: var(--sky);
+    --radius: 1rem;
+    --sidebar: var(--panel);
+    --sidebar-border: var(--hairline);
+    --sidebar-accent: var(--well);
+    --elev: 0 1px 2px rgb(8 16 48 / 0.06), 0 10px 26px -16px rgb(8 16 48 / 0.24);
+    --float: 0 2px 8px rgb(8 16 48 / 0.08), 0 28px 60px -24px rgb(8 16 48 / 0.3);
+}
+/* Dark (the default) = "electric" (2026-10-14, user reference): neutral charcoal page, flat cards with thin borders,
+   electric blue #1d5cff as the major colour (buttons, selection, hero card, first chart series), green for good/healthy,
+   yellow for warnings, violet and rose for the remaining areas. Text pairs on a card #15171e: ink 17:1, ink-2 11.4:1,
+   ink-3 5.9:1, link blue 6:1. White on the blue button 5.6:1. */
+.dark {
+    --canvas: #05070d;
+    --panel: #0e1424;
+    --raised: #141b2e;
+    --well: #151d33;
+    --field: #0a0f1c;
+    --hairline: #1d2740;
+    --hairline-strong: #2c3857;
+    --ink: #eef2fb;
+    --ink-2: #bcc6dd;
+    --ink-3: #8792b0;
+    --signal: #f97316;
+    --sky: #6b97ff;
+    --blue: #1d5cff;
+    --blue-hi: #3b74ff;
+    --tile: #1d5cff;
+    --panel-glass: var(--panel);
+    --teal: #22c55e;
+    --violet: #8b5cf6;
+    --amber: #facc15;
+    --rose: #f43f5e;
+    --dot: transparent;
+    --glow: transparent;
+    --nav: #060912;
+    --nav-hi: #0c1222;
+    --nav-ink: #1d5cff;
+    --tint-blue: #3b74ff;
+    --tint-violet: #8b5cf6;
+    --tint-red: #f43f5e;
+    --area-overview: #5b8cff;
+    --area-find: #facc15;
+    --area-check: #f43f5e;
+    --area-act: #22c55e;
+    --area-trust: #8b5cf6;
+    --area-overview-on: #ffffff;
+    --area-find-on: #1f1a00;
+    --area-check-on: #ffffff;
+    --area-act-on: #052e16;
+    --area-trust-on: #ffffff;
+    --popover: var(--raised);
+    --input: var(--hairline-strong);
+    --primary-foreground: #ffffff;
+    --elev: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 1px 2px rgb(0 0 0 / 0.6), 0 16px 36px -20px rgb(0 0 0 / 1);
+    --float: 0 2px 8px rgb(0 0 0 / 0.6), 0 30px 64px -24px rgb(0 0 0 / 1);
+}
+html { background: var(--canvas); color-scheme: light; }
+html.dark { color-scheme: dark; }
+/* the dot field: a fixed grid of faint dots under one soft blue light from the top, fading out towards the bottom */
+body {
+    background:
+        radial-gradient(1200px 600px at 78% -12%, var(--glow), transparent 70%),
+        radial-gradient(900px 520px at -8% 108%, color-mix(in oklab, var(--glow) 70%, transparent), transparent 70%),
+        radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 1.4px) 0 0 / 22px 22px,
+        var(--canvas);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+}
+/* dark page: soft colour washes (blue, violet, teal) behind everything, drifting very slowly */
+html.dark body::before {
+    content: '';
+    position: fixed;
+    inset: -10%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+        none;
+}
+html.dark body { background: transparent; } /* the base colour sits on html so the washes show between it and the page */
+@media (prefers-reduced-motion: no-preference) {
+    html.dark body::before { animation: wash-drift 28s ease-in-out infinite alternate; }
+}
+@keyframes wash-drift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(-3%, 2%, 0) scale(1.06); } }
+::selection { background: color-mix(in oklab, var(--blue) 32%, transparent); }
+* { scrollbar-width: thin; scrollbar-color: var(--hairline-strong) transparent; }
+:focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; }
+input, textarea { caret-color: var(--sky); }
+.tabular { font-variant-numeric: tabular-nums; }
+
+@layer components {
+    /* The signal tile: rounded square, blue-tinted fill, blue hairline, a light along the top edge and a soft blue drop. */
+    .tile-signal {
+        color: #ffffff;
+        background: var(--tile);
+        border: 1px solid var(--tile);
+        box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.18), 0 6px 16px -8px var(--tile);
+    }
+    /* card surface: solid panel, hairline border, soft drop */
+    .glass-card {
+        position: relative;
+        background: var(--panel);
+        border: 1px solid var(--hairline);
+        box-shadow: var(--elev);
+        transition: border-color 200ms;
+    }
+    .dark .glass-card:not(.card-hero) { background: linear-gradient(180deg, #111829 0%, var(--panel) 42%); }
+    .dark .glass-card:not(.card-hero):hover { border-color: var(--hairline-strong); }
+    /* the hero card: each page's headline number on a solid electric-blue card with a lighter curved band (reference's
+       credit card). Inside it the theme's colours are remapped to white so the card's normal content needs no changes. */
+    .card-hero {
+        --ink: #ffffff;
+        --ink-2: rgb(255 255 255 / 0.92);
+        --ink-3: rgb(255 255 255 / 0.8);
+        --sky: #ffffff;
+        --well: rgb(255 255 255 / 0.16);
+        --hairline: rgb(255 255 255 / 0.24);
+        --hero-a: #2f6bff;
+        --hero-b: #1d55f0;
+        --hero-c: #1a46d4;
+        --hero-light: rgb(120 160 255 / 0.35);
+        --hero-glow: rgb(29 92 255 / 0.75);
+        color: var(--ink);
+        background:
+            radial-gradient(115% 95% at 104% 108%, rgb(255 255 255 / 0.12) 0 40%, transparent 40.4%),
+            radial-gradient(80% 70% at 0% 0%, var(--hero-light), transparent 60%),
+            linear-gradient(140deg, var(--hero-a), var(--hero-b) 55%, var(--hero-c));
+        border-color: transparent;
+        box-shadow: 0 1px 2px rgb(0 0 0 / 0.25), 0 20px 44px -22px var(--hero-glow);
+    }
+    /* the same card in other solid colours; every shade keeps white text at 4.5:1 or better */
+    .card-hero-red { --hero-a: #dc2626; --hero-b: #c81e1e; --hero-c: #a71b1b; --hero-light: rgb(255 140 140 / 0.3); --hero-glow: rgb(220 38 38 / 0.6); }
+    .card-hero-orange { --hero-a: #c2410c; --hero-b: #ad3a0b; --hero-c: #93320a; --hero-light: rgb(255 170 110 / 0.3); --hero-glow: rgb(234 88 12 / 0.55); }
+    .card-hero-green { --hero-a: #15803d; --hero-b: #137236; --hero-c: #11602e; --hero-light: rgb(120 230 160 / 0.25); --hero-glow: rgb(22 163 74 / 0.55); }
+    .card-hero-violet { --hero-a: #7c3aed; --hero-b: #6d28d9; --hero-c: #5b21b6; --hero-light: rgb(200 170 255 / 0.3); --hero-glow: rgb(124 58 237 / 0.6); }
+    .card-hero-amber { --hero-a: #b45309; --hero-b: #a14a08; --hero-c: #8a3f07; --hero-light: rgb(255 210 120 / 0.3); --hero-glow: rgb(217 119 6 / 0.55); }
+    /* a box inside a card with a little colour: a solid deep tint of its colour, a matching border and a coloured number */
+    .tint-box {
+        background: color-mix(in oklab, var(--tint, var(--blue)) 16%, var(--panel));
+        border: 1px solid color-mix(in oklab, var(--tint, var(--blue)) 42%, var(--panel));
+    }
+    .tint-box .tint-num { color: color-mix(in oklab, var(--tint, var(--blue)) 55%, var(--ink)); }
+    /* a row of small cards: one line whenever they fit; when they wrap, every row still fills the width (no holes) */
+    .card-row { display: flex; flex-wrap: wrap; }
+    .card-row > * { flex: 1 1 var(--card-min, 200px); min-width: 0; }
+    /* quiet version for icons that label something but are not selected */
+    .tile-quiet {
+        color: var(--ink-2);
+        background: var(--well);
+        border: 1px solid var(--hairline);
+    }
+    /* primary action: solid blue with a light top edge */
+    .btn-blue {
+        background: var(--blue);
+        color: #fff;
+        box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.16), 0 1px 2px rgb(0 0 0 / 0.2), 0 8px 20px -10px color-mix(in oklab, var(--blue) 80%, transparent);
+        transition: background-color 160ms, box-shadow 200ms, opacity 160ms, transform 160ms;
+    }
+    .btn-blue:hover:not(:disabled) { background: var(--blue-hi); transform: translateY(-1px); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.2), 0 2px 4px rgb(0 0 0 / 0.2), 0 12px 24px -10px color-mix(in oklab, var(--blue) 90%, transparent); }
+    .btn-blue:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+    /* the side menu shares the page's ground (one continuous space); a hairline on its right is the only edge */
+    .nav-surface {
+        background: var(--nav);
+        color: var(--ink);
+    }
+
+    /* a thin multicolour line along the very top of the screen: the four tool areas in one stroke */
+    .brand-stripe::before {
+        content: '';
+        position: absolute;
+        inset-inline: 0;
+        top: 0;
+        height: 2px;
+        pointer-events: none;
+        background: linear-gradient(90deg, var(--blue), var(--blue-hi) 55%, var(--teal));
+    }
+    /* each menu item's icon sits on a tile tinted with its area's colour (set as --area on the item) */
+    .area-tile {
+        background: transparent;
+        color: var(--area, var(--blue));
+    }
+    /* the selected page: the row takes a wash of its area colour and the tile turns solid */
+    /* the selected page: a solid blue pill with white text; its tile turns white with a blue icon */
+    .nav-surface .nav-on {
+        --ink: #ffffff;
+        background: #1d5cff;
+        color: #ffffff;
+        box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 20px -8px rgb(29 92 255 / 0.75);
+    }
+    .nav-on .area-tile { background: transparent; color: #ffffff; }
+    .area-tile-on { background: #1d5cff; color: #ffffff; }
+    .area-tile { transition: color 160ms, transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+    .group:hover .area-tile { transform: scale(1.15); }
+    /* a selected filter pill or segment */
+    .pill-on {
+        background: var(--blue);
+        color: #ffffff !important;
+        border-color: var(--blue) !important;
+    }
+}
+@keyframes portal-shimmer { from { background-position: -50% 0; } to { background-position: 150% 0; } }
+@keyframes portal-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* ranking bars grow from the left when they first appear */
+@keyframes bar-grow { from { transform: scaleX(0); } to { transform: none; } }
+@media (prefers-reduced-motion: no-preference) { .rank-bar { transform-origin: left; animation: bar-grow 700ms cubic-bezier(0.16, 1, 0.3, 1) both; } }
+/* cards rise into place when a page opens, one after another (siblings are staggered); state changes never replay it */
+@keyframes card-in { from { opacity: 0; transform: translateY(12px) scale(0.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: no-preference) {
+    .glass-card { animation: card-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+    .glass-card:nth-child(2) { animation-delay: 60ms; }
+    .glass-card:nth-child(3) { animation-delay: 120ms; }
+    .glass-card:nth-child(4) { animation-delay: 180ms; }
+    .glass-card:nth-child(5) { animation-delay: 240ms; }
+    .glass-card:nth-child(n + 6) { animation-delay: 300ms; }
+    aside.glass-card, main.glass-card { animation: none; }
+}
+@media (prefers-reduced-motion: no-preference) { .portal-rise { animation: portal-rise 420ms cubic-bezier(0.16, 1, 0.3, 1) both; } }
+@media (prefers-reduced-motion: reduce) { .animate-spin, .animate-ping, [class*="portal-shimmer"] { animation: none !important; } }
+
+/* ───────── Application Security: reports, diffs and source code, in the same tokens ───────── */
+.md { color: var(--ink-2); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.md h2, .md h3, .md h4 { color: var(--ink); font-weight: 600; letter-spacing: -0.01em; margin: 1.2em 0 0.4em; }
+.md h2 { font-size: 18px; } .md h3 { font-size: 16px; } .md h4 { font-size: 14px; }
+.md > :first-child { margin-top: 0; }
+.md p, .md ul, .md ol, .md blockquote, .md pre, .md .md-table { margin: 0.6em 0; }
+.md ul { list-style: disc; padding-left: 1.3em; } .md ol { list-style: decimal; padding-left: 1.3em; }
+.md a { color: var(--sky); text-decoration: underline; text-underline-offset: 2px; }
+.md b { color: var(--ink); }
+.md code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 12.5px; background: var(--well); border: 1px solid var(--hairline); border-radius: 6px; padding: 1px 5px; }
+.md pre { background: var(--field); border: 1px solid var(--hairline); border-radius: 12px; padding: 12px 14px; overflow-x: auto; }
+.md pre code { background: none; border: 0; padding: 0; }
+.md blockquote { border-left: 3px solid var(--hairline-strong); padding-left: 12px; color: var(--ink-3); }
+.md hr { border: 0; border-top: 1px solid var(--hairline); margin: 1em 0; }
+.md .md-table { overflow-x: auto; border: 1px solid var(--hairline); border-radius: 12px; }
+.md table { width: 100%; font-size: 13px; border-collapse: collapse; }
+.md th { background: var(--well); color: var(--ink-3); font-weight: 500; text-align: left; padding: 8px 12px; white-space: nowrap; }
+.md td { border-top: 1px solid var(--hairline); padding: 8px 12px; vertical-align: top; }
+
+.codebox { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 12.5px; line-height: 1.55; background: var(--field); border: 1px solid var(--hairline); border-radius: 12px; padding: 10px 0; overflow: auto; max-height: 520px; }
+.codebox > span { display: block; padding: 0 14px; white-space: pre; min-width: max-content; }
+.codebox .ln { display: inline-block; width: 3.2em; color: var(--ink-3); user-select: none; }
+.codebox .hl { background: color-mix(in oklab, var(--rose) 18%, transparent); box-shadow: inset 3px 0 0 var(--rose); }
+.codebox .a { background: color-mix(in oklab, var(--teal) 16%, transparent); color: color-mix(in oklab, var(--teal) 60%, var(--ink)); }
+.codebox .d { background: color-mix(in oklab, var(--rose) 14%, transparent); color: color-mix(in oklab, var(--rose) 60%, var(--ink)); }
+.codebox .h { color: var(--sky); }
+.codebox .f { color: var(--ink); font-weight: 600; }
+.codebox .warning { color: var(--amber); } .codebox .error { color: var(--rose); }

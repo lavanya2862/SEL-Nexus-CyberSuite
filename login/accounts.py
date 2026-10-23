@@ -2,10 +2,10 @@
 
 One account list for the whole suite, kept in data/auth/users.json (passwords stored only as scrypt hashes). After a
 good sign-in the browser gets a signed, HttpOnly `portal_session` cookie. Browsers share cookies between ports on the
-same host, so every module on 127.0.0.1 (Defender & Infrastructure on :8800, Application Vulnerabilities on :8500) receives the
+same host, so every module on 127.0.0.1 (Infrastructure Security on :8800, Application Security on :8500) receives the
 same cookie and checks it with the same key in data/auth/session.key.
 
-The file formats match defender_infra/Unified_Cyber_Portal/src/portal/auth.py, which reads the same folder
+The file formats match InfrastructureSecurity/Unified_Cyber_Portal/src/portal/auth.py, which reads the same folder
 (PORTAL_AUTH_DIR) to check the cookie. Change one, change the other.
 
 Sign-in, sign-up and sign-out are written to data/auth/signins.jsonl (who, when, from where, ok or not; never a password).
@@ -25,6 +25,9 @@ from pathlib import Path
 from typing import Any
 
 COOKIE = "portal_session"
+# Domain ids before the modules were renamed; accounts and cookies made earlier still carry them.
+RENAMED = {"defender_infra": "infrastructure_security", "infrastructure_vulnerabilities": "infrastructure_security",
+           "application_vulnerabilities": "application_security"}
 PASSWORD_RULE = "At least 8 characters, with an upper-case letter, a lower-case letter, a number and a symbol"
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _SCRYPT = {"n": 2**14, "r": 8, "p": 1, "dklen": 32}
@@ -158,8 +161,10 @@ class Sessions:
             return None
         if not isinstance(data, dict) or int(data.get("exp", 0)) < time.time():
             return None
+        domains = data.get("domains")
         return {"email": data.get("sub"), "name": data.get("name"), "via": data.get("via"), "expires": data.get("exp"),
-                "domains": data.get("domains"), "domain": data.get("domain")}
+                "domains": [RENAMED.get(d, d) for d in domains] if isinstance(domains, list) else domains,
+                "domain": RENAMED.get(data.get("domain"), data.get("domain"))}
 
 
 class Accounts:
@@ -213,7 +218,10 @@ class Accounts:
     def user_domains(self, user: dict) -> list[str]:
         """The domains an account may open. Accounts made before domains existed keep access to every domain."""
         saved = user.get("domains")
-        return [d for d in self.domain_names if d in saved] if isinstance(saved, list) else list(self.domain_names)
+        if not isinstance(saved, list):
+            return list(self.domain_names)
+        saved = [RENAMED.get(d, d) for d in saved]
+        return [d for d in self.domain_names if d in saved]
 
     def check_domain(self, domain: object, domains: list[str]) -> str:
         if domain not in self.domain_names:

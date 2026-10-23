@@ -1,10 +1,11 @@
-// SEL Nexus CyberSuite sign-in page. People pick a domain (Defender & Infrastructure, Application Vulnerabilities) on
+// SEL Nexus CyberSuite sign-in page. People pick a domain (Infrastructure Security, Application Security) on
 // the sign-in form and go straight there; at sign-up they tick which domains their account needs.
 // A domain that finds nobody signed in sends people here with ?next=<its address>; after sign-in they go straight back.
 // ?switch shows the signed-in person their domains to move between (the "Switch domain" button in each domain).
 (() => {
   const $ = (sel) => document.querySelector(sel)
-  const ICONS = { defender_infra: 'i-server', application_vulnerabilities: 'i-code' }
+  const ICONS = { infrastructure_security: 'i-server', application_security: 'i-code' }
+  const RENAMED = { defender_infra: 'infrastructure_security', infrastructure_vulnerabilities: 'infrastructure_security', application_vulnerabilities: 'application_security' } // ids before the rename
   const LAST = 'cybersuite-domain' // the domain picked last time on this browser, picked again by default
   let config = null
 
@@ -20,7 +21,7 @@
   }
 
   const store = {
-    get() { try { return localStorage.getItem(LAST) } catch { return null } },
+    get() { try { const v = localStorage.getItem(LAST); return RENAMED[v] || v } catch { return null } },
     set(v) { try { localStorage.setItem(LAST, v) } catch { /* not essential */ } },
   }
 
@@ -55,7 +56,7 @@
       list.replaceChildren(...config.modules.map((m) => {
         const label = document.createElement('label')
         label.className = 'domain'
-        const tile = m.id === 'application_vulnerabilities' ? 'tile tile-violet' : 'tile'
+        const tile = m.id === 'application_security' ? 'tile tile-violet' : 'tile'
         label.innerHTML = `<input type="${kind}" name="${kind === 'radio' ? 'domain' : 'domains'}">` +
           `<span class="${tile}"><svg class="ico"><use href="#${ICONS[m.id] || 'i-shield'}"/></svg></span>` +
           '<span><b></b><small></small></span><span class="mark"><svg class="ico"><use href="#i-check"/></svg></span>'
@@ -117,7 +118,7 @@
       const card = document.createElement(m.url ? 'button' : 'div')
       card.className = m.url ? 'module' : 'module off'
       if (m.url) { card.type = 'button'; card.addEventListener('click', () => (here ? enter(user) : switchTo(user, m.id))) }
-      const tile = m.id === 'application_vulnerabilities' ? 'tile tile-violet' : 'tile'
+      const tile = m.id === 'application_security' ? 'tile tile-violet' : 'tile'
       card.innerHTML = `<span class="${tile}"><svg class="ico"><use href="#${ICONS[m.id] || 'i-shield'}"/></svg></span><h2></h2><p></p>` +
         (!m.url ? '<span class="soon">Not connected yet</span>'
           : here ? '<span class="here">You are here · Open</span>' : '<span class="go">Open <svg class="ico"><use href="#i-arrow"/></svg></span>')

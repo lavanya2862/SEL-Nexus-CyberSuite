@@ -58,12 +58,12 @@ def load_settings() -> dict:
         "allowed_email_domains": tuple(d.strip().lower().lstrip("@") for d in env.get("LOGIN_ALLOWED_EMAIL_DOMAINS", "").split(",")
                                        if d.strip()),
         "modules": [
-            {"id": "defender_infra", "name": "Defender & Infrastructure",
+            {"id": "infrastructure_security", "name": "Infrastructure Security",
              "description": "Threat intelligence, vulnerabilities, fixes and alert triage from Microsoft Defender.",
-             "url": env.get("DEFENDER_INFRA_URL", "http://127.0.0.1:8800").rstrip("/")},
-            {"id": "application_vulnerabilities", "name": "Application Vulnerabilities",
-             "description": "Security flaws in our application source code, fixed by AI agents and validated before a pull request.",
-             "url": env.get("APP_VULN_URL", "http://127.0.0.1:8500").rstrip("/")},
+             "url": env.get("INFRA_SEC_URL", env.get("INFRA_VULN_URL", env.get("DEFENDER_INFRA_URL", "http://127.0.0.1:8800"))).rstrip("/")},
+            {"id": "application_security", "name": "Application Security",
+             "description": "Security flaws in our application source code, fixed by our security agents and validated before a pull request.",
+             "url": env.get("APP_SEC_URL", env.get("APP_VULN_URL", "http://127.0.0.1:8500")).rstrip("/")},
         ],
     }
 
