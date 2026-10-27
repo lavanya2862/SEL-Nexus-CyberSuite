@@ -5,12 +5,18 @@ rem Normally called by ..\Start_All.cmd. Started on its own, it also starts the 
 rem is not running yet, because people sign in there.
 rem Any other copy already using the same ports (8800 portal, 8700 fixing, 8900 alert triage) is stopped first.
 rem The first start sets things up by itself: a Python environment (.venv) per tool and the portal's website (web\dist).
-rem Each tool still needs its own .env (copy config\settings.example.env) to show data.
+rem Every tool reads the one suite .env at the repository root (copy .env.example) to show data.
 set "DI=%~dp0"
 cd /d "%DI%Unified_Cyber_Portal"
 rem The Python that makes each .venv: the py launcher when there is one, because "python" can be the Microsoft Store shortcut
 set "PY=python"
 where py >nul 2>nul && set "PY=py -3"
+
+rem Settings for every module live in the one suite .env; the first start makes it from .env.example
+if not exist "%DI%..\.env" if exist "%DI%..\.env.example" (
+  copy /y "%DI%..\.env.example" "%DI%..\.env" >nul
+  echo Created .env from .env.example. Fill in your keys there, then start again to see data.
+)
 
 echo Stopping any other copy that is running...
 powershell -NoProfile -Command "foreach ($p in 8800,8700,8900) { Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }"
@@ -28,7 +34,7 @@ if not exist "web\dist\index.html" (
   popd
 )
 
-rem People sign in on the shared sign-in page; the portal checks the same session key (also settable in config\portal.env).
+rem People sign in on the shared sign-in page; the portal checks the same session key (also settable in the suite .env).
 if not defined PORTAL_LOGIN_URL set "PORTAL_LOGIN_URL=http://127.0.0.1:8000"
 if not defined PORTAL_AUTH_DIR set "PORTAL_AUTH_DIR=..\..\login\data\auth"
 

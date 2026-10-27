@@ -14,6 +14,7 @@ import yaml
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SUITE_ENV = PROJECT_ROOT.parents[1] / ".env"  # the one settings file for the whole suite
 CONFIG_DIR = PROJECT_ROOT / "config"
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 DEFENDER_BASE = "https://api.security.microsoft.com"
@@ -213,7 +214,7 @@ class Settings:
 
 def load_settings(env_file: Path | None = None) -> Settings:
     """Real environment variables take precedence over the .env file."""
-    load_dotenv(env_file if env_file is not None else PROJECT_ROOT / ".env", override=False)
+    load_dotenv(env_file if env_file is not None else SUITE_ENV, override=False)
     models = tuple(m for m in (_env("GEMINI_MODEL") or "gemini-3.5-flash-lite",
                                _env("GEMINI_FALLBACK_MODEL") or "gemini-3.1-flash-lite") if m)
     devices = tuple(d.strip().lower() for d in (_env("UC4_LAB_DEVICES") or "opca-wks-01,opcc-wks-01").split(",")
@@ -228,7 +229,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         gemini_extra_keys=_extra_gemini_keys(),
         gemini_models=models,
         gemini_rpm=_int("GEMINI_RPM", 15),
-        gemini_daily_cap=_int("GEMINI_DAILY_CAP", 1500),
+        gemini_daily_cap=_int("UC4_GEMINI_DAILY_CAP", 1500),
         ai_provider_choice=_provider(),
         azure_endpoint=_env("AZURE_FOUNDRY_ENDPOINT"),
         azure_api_key=_env("AZURE_FOUNDRY_API_KEY"),

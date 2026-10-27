@@ -21,7 +21,7 @@ PROVIDER_BASE_URLS = {
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=Path(__file__).resolve().parents[2] / ".env", env_file_encoding="utf-8", extra="ignore")
 
     # --- LLM -------------------------------------------------------------------------------
     llm_provider: Literal["auto", "openai", "anthropic", "gemini", "none"] = "auto"

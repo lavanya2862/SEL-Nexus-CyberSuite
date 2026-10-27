@@ -22,7 +22,7 @@ Requires Python 3.12+ on Windows.
 py -3.12 -m venv .venv
 .\.venv\Scripts\pip install -r requirements.txt
 .\.venv\Scripts\pip install -e .
-copy config\settings.example.env .env      # then fill in .env (never commit it)
+copy ..\..\.env.example ..\..\.env    # once, for the whole suite; then fill it in (never commit it)
 .\.venv\Scripts\python.exe -m uc1 check
 .\.venv\Scripts\python.exe -m uc1 live-test
 ```

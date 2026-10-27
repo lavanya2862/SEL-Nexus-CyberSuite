@@ -19,7 +19,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from dotenv import dotenv_values
 
-from uc3.config import PROJECT_ROOT, Settings, load_settings
+from uc3.config import PROJECT_ROOT, SUITE_ENV, Settings, load_settings
 from uc3.extract import run_extract
 from uc3.load import run_load
 from uc3.quality import run_checks
@@ -143,8 +143,8 @@ def run_fix_stage(settings: Settings) -> dict | None:
     if not python.is_file():
         log.warning("Fix stage skipped: no fix engine at %s", engine)
         return None
-    # our own .env must not reach the fix engine (same names, e.g. GEMINI_API_KEY, would override its settings)
-    ours = set(dotenv_values(PROJECT_ROOT / ".env"))
+    # the suite .env must not reach the fix engine as environment (same names, e.g. GEMINI_API_KEY, would override its settings)
+    ours = set(dotenv_values(SUITE_ENV))
     env = {k: v for k, v in os.environ.items() if k not in ours} | {"PYTHONIOENCODING": "utf-8"}
     try:
         out = subprocess.run([str(python), "-m", "uc1", "fix-refresh", "-q"], cwd=engine, env=env, capture_output=True,

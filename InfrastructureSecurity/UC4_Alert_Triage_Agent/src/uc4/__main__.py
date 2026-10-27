@@ -52,7 +52,7 @@ def cmd_check(settings: Settings) -> int:
     print(f"  playbooks: {len(books)} ({', '.join(b['id'] for b in books)})")
     print(f"  search templates: {len(queries)}" + (f"  MISSING: {', '.join(missing)}" if missing else ""))
     ok = settings.has_microsoft and not missing
-    print("\n" + ("Ready." if ok else "Not ready yet: fill in the missing settings in .env (see config/settings.example.env)."))
+    print("\n" + ("Ready." if ok else "Not ready yet: fill in the missing settings in the suite .env (see .env.example at the repository root)."))
     return 0 if ok else 1
 
 

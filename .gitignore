@@ -4,8 +4,6 @@
 login/data/
 .env
 *.env
-!*.example.env
-!login/config/login.env
 *.key
 *.pem
 *.pfx

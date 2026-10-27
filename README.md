@@ -12,7 +12,8 @@ One sign-in page in front of the suite's two domains. People pick a domain on th
 
 - **Start_All.cmd** starts the sign-in page and every module, then opens http://127.0.0.1:8000. The first start sets
   everything up by itself (a Python `.venv` per part and the two websites), which takes a few minutes. It needs
-  Python 3.11+ and Node.js 22+. Each Defender tool still needs its own `.env` to show data (see `InfrastructureSecurity`).
+  Python 3.11+ and Node.js 22+. All settings for every module live in one `.env` at the repository root: copy
+  `.env.example` to `.env` once and fill it in (never commit it).
 - **Stop_All.cmd** stops all of them.
 
 ## How the shared sign-in works
@@ -23,7 +24,7 @@ One sign-in page in front of the suite's two domains. People pick a domain on th
    the same host, so every module on `127.0.0.1` receives it, and each module refuses accounts without its domain.
    The **Switch** button in each module's side menu moves between a person's domains without signing in again.
 3. Each module checks that cookie with the key in `login/data/auth/session.key`. Infrastructure Security reads it via
-   `PORTAL_AUTH_DIR` in `InfrastructureSecurity/Unified_Cyber_Portal/config/portal.env`.
+   `PORTAL_AUTH_DIR` in the suite `.env`.
 4. A module that finds nobody signed in sends the visitor to `http://127.0.0.1:8000/?next=<its address>`. After sign-in
    they go straight back.
 5. Signing out anywhere clears the cookie, which signs the person out of every module.

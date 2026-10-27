@@ -3,14 +3,14 @@
 #   worker  – job workers; scale with: docker compose up -d --scale worker=4
 #   db      – PostgreSQL job store / queue (FOR UPDATE SKIP LOCKED)
 #
-#   cp .env.example .env   # set LLM_*, GITHUB_TOKEN, API_KEYS
+#   cp -n ../.env.example ../.env   # the one suite .env: set LLM_*, GITHUB_TOKEN, API_KEYS
 #   docker compose up -d --build
 #   open http://localhost:8000
 
 x-app: &app
   build: .
   image: ai-remediation-pipeline:latest
-  env_file: .env
+  env_file: ../.env
   environment:
     DATABASE_URL: postgresql+psycopg://remediation:remediation@db:5432/remediation
     DATA_DIR: /data

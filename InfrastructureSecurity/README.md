@@ -13,8 +13,8 @@ page (`../login`, http://127.0.0.1:8000), which also leads to the other module, 
 
 ## Getting started
 
-1. Set up UC1, UC3 and UC4 (each has its own `.venv` and `.env`; copy `config/settings.example.env` to `.env` and fill it in).
-2. Set up the portal (see its README). `Unified_Cyber_Portal/config/portal.env` points it at the shared sign-in page
+1. Set up UC1, UC3 and UC4 (each has its own `.venv`; their settings live in the one suite `.env` at the repository root, copied from `.env.example`).
+2. Set up the portal (see its README). the suite `.env` points it at the shared sign-in page
    (`PORTAL_LOGIN_URL`) and its accounts (`PORTAL_AUTH_DIR`).
 3. Double-click **../Start_All.cmd** to start the whole suite and open the sign-in page. **Start_Infrastructure_Security.cmd**
    starts only this module (and the sign-in page if it isn't running). **Stop_Infrastructure_Security.cmd** stops this module.

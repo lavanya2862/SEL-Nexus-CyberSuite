@@ -19,7 +19,7 @@ py -3.14 -m venv .venv
 
 Usually you don't run it by hand: `..\Start_All.cmd` starts it with every module.
 
-## Settings: `config/login.env`
+## Settings: the suite `.env` (repository root)
 
 | Key | Meaning |
 |---|---|

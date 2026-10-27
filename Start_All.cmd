@@ -10,6 +10,12 @@ rem The Python that makes each .venv: the py launcher when there is one, because
 set "PY=python"
 where py >nul 2>nul && set "PY=py -3"
 
+rem Settings for every module live in the one suite .env; the first start makes it from .env.example
+if not exist "%SUITE%.env" if exist "%SUITE%.env.example" (
+  copy /y "%SUITE%.env.example" "%SUITE%.env" >nul
+  echo Created .env from .env.example. Fill in your keys there, then start again to see data.
+)
+
 echo Stopping any sign-in page that is already running...
 powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
 timeout /t 1 /nobreak >nul

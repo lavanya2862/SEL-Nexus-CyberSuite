@@ -21,7 +21,7 @@ Create an account with **Sign up** on the sign-in page. Accounts are kept locall
 
 ## Settings (optional)
 
-Copy `config/portal.env.example` to `config/portal.env` only when the defaults are wrong: other folder locations for UC1/UC3/UC4, another port, sign-in mode (`local`, `cognito` for Amazon Cognito, or `off`), allowed e-mail domains, session length. No secrets live in this file.
+Set these in the suite `.env` (repository root, template `.env.example`) only when the defaults are wrong: other folder locations for UC1/UC3/UC4, another port, sign-in mode (`local`, `cognito` for Amazon Cognito, or `off`), allowed e-mail domains, session length.
 
 ## Development
 
@@ -36,5 +36,5 @@ cd web; npm run dev                                   # web app with hot reload
 |---|---|
 | `src/portal/` | The API (FastAPI): sign-in, data from UC1/UC3/UC4, proxies to the UC1 and UC4 services, background runs, notifications, help chat |
 | `web/` | The web app (React + TypeScript + Vite) |
-| `config/` | `portal.env.example` |
+| `config/` | (settings live in the suite `.env` at the repository root) |
 | `data/` | Created at run time (not in git): accounts, run history, logs |

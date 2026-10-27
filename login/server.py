@@ -3,7 +3,7 @@
     .venv\\Scripts\\python.exe server.py            # http://127.0.0.1:8000
 
 People choose a domain (module) on the sign-in form and go straight there; at sign-up they pick which domains their
-account needs (config/login.env lists them). The session cookie it sets is the one every module on 127.0.0.1 checks
+account needs (the suite .env lists them). The session cookie it sets is the one every module on 127.0.0.1 checks
 (see accounts.py), so people sign in once; it carries the account's domains so each module can refuse the others.
 
 API (all JSON):
@@ -49,7 +49,7 @@ def _on(value: str | None, default: bool) -> bool:
 
 
 def load_settings() -> dict:
-    env = {**_load_env_file(HERE / "config" / "login.env"), **os.environ}
+    env = {**_load_env_file(HERE.parent / ".env"), **os.environ}
     return {
         "port": int(env.get("LOGIN_PORT", 8000)),
         "session_hours": int(env.get("LOGIN_SESSION_HOURS", 12)),

@@ -5,7 +5,7 @@ questions ("how many incidents, and from where?") come here: we hand Gemini the 
 same /api/summary the pages show, the triage queue, recent agent runs) plus a short note about the screen the user is
 on, and it answers in plain words. It only talks: it can't start agents, fix apps or close incidents.
 
-Key: GEMINI_API_KEY in config/portal.secrets.env (copied from UC1 by scripts/copy_gemini_key_from_uc1.py, never
+Key: GEMINI_API_KEY in the suite .env at the repository root (shared with the agents, never
 printed) or the environment. Questions and answers go to data/help/questions.jsonl; a daily cap (PORTAL_HELP_DAILY_CAP,
 default 100) keeps the free Gemini quota for the agents.
 """
@@ -23,7 +23,7 @@ from pathlib import Path
 import httpx
 
 from portal import devicenames
-from portal.config import PORTAL_DIR, _load_env_file
+from portal.config import PORTAL_DIR, SUITE_ENV, _load_env_file
 from portal.sources import UC1, UC4
 
 log = logging.getLogger("portal.help")
@@ -83,7 +83,7 @@ class HelpError(ValueError):
 
 
 def _secrets() -> dict[str, str]:
-    return {**_load_env_file(PORTAL_DIR / "config" / "portal.secrets.env"), **os.environ}
+    return {**_load_env_file(SUITE_ENV), **os.environ}
 
 
 def _keys(env: dict[str, str]) -> list[str]:

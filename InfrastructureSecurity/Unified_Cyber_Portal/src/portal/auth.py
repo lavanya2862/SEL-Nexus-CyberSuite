@@ -1,6 +1,6 @@
 """Portal sign-in: who may open the portal.
 
-Three modes (PORTAL_AUTH in config/portal.env):
+Three modes (PORTAL_AUTH in the suite .env):
   local    (default) the portal keeps its own accounts in data/auth/users.json (passwords stored only as scrypt hashes)
   cognito  an Amazon Cognito user pool checks the password; the browser talks to Cognito directly and hands the
            portal Cognito's signed ID token, which is verified here against the pool's public keys
@@ -175,7 +175,7 @@ class CognitoVerifier:
     def __init__(self, region: str, pool_id: str, client_id: str):
         if not (region and pool_id and client_id):
             raise AuthError("Cognito is not set up: fill PORTAL_COGNITO_REGION, PORTAL_COGNITO_USER_POOL_ID and "
-                            "PORTAL_COGNITO_CLIENT_ID in config/portal.env", 500)
+                            "PORTAL_COGNITO_CLIENT_ID in the suite .env", 500)
         import jwt  # only needed in cognito mode
 
         self.jwt = jwt

@@ -25,7 +25,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from portal import devicenames, fixproxy, helpbot, helpready, notifications, services, uc4proxy
 from portal.auth import COOKIE, Auth, AuthError
-from portal.config import PORTAL_DIR, Settings, _load_env_file, load_settings
+from portal.config import SUITE_ENV, Settings, _load_env_file, load_settings
 from portal.runs import RunManager
 from portal.sources import UC1, UC3, UC4
 from portal.summary import build_summary
@@ -39,7 +39,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="Infrastructure Security API (SEL Nexus CyberSuite)", version="0.1.0", docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
 
-    secrets_env = {**_load_env_file(PORTAL_DIR / "config" / "portal.secrets.env"), **os.environ}
+    secrets_env = {**_load_env_file(SUITE_ENV), **os.environ}
     auth = Auth(settings, secrets_env.get("PORTAL_SESSION_SECRET") or None)
     app.state.auth = auth
 

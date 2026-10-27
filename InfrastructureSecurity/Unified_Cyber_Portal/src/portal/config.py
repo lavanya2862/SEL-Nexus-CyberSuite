@@ -1,7 +1,7 @@
 """Portal settings: where UC1/UC3/UC4 live, which port to use and how people sign in.
 
 Defaults assume the portal folder sits next to the use-case folders. Override with environment variables
-or `config/portal.env` (KEY=value lines, see config/portal.env.example).
+or the suite `.env` at the repository root (KEY=value lines, see .env.example there).
 """
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from pathlib import Path
 
 PORTAL_DIR = Path(__file__).resolve().parents[2]
 ROOT_DIR = PORTAL_DIR.parent
+SUITE_ENV = ROOT_DIR.parent / ".env"  # the one settings file for the whole suite
 
 
 def _load_env_file(path: Path) -> dict[str, str]:
@@ -57,7 +58,7 @@ def _on(value: str | None, default: bool) -> bool:
 
 
 def load_settings() -> Settings:
-    env = {**_load_env_file(PORTAL_DIR / "config" / "portal.env"), **os.environ}
+    env = {**_load_env_file(SUITE_ENV), **os.environ}
     return Settings(
         uc1_dir=Path(env.get("PORTAL_UC1_DIR", ROOT_DIR / "UC1_Threat_Intel_Hunting_Agent")),
         uc3_dir=Path(env.get("PORTAL_UC3_DIR", ROOT_DIR / "UC3_MDE_Vuln_Extraction")),

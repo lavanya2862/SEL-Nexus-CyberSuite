@@ -18,7 +18,8 @@ def isolated_settings(tmp_path, monkeypatch):
     }
     for k, v in env.items():
         monkeypatch.setenv(k, v)
-    monkeypatch.chdir(tmp_path)  # ignore any developer .env file
+    monkeypatch.setitem(config.Settings.model_config, "env_file", None)  # ignore the suite .env
+    monkeypatch.chdir(tmp_path)
     config.reset_settings_cache()
     db.reset_engine()
     yield

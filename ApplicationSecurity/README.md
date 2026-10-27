@@ -198,7 +198,7 @@ Interactive docs are at `/docs`.
 ## Production and scaling
 
 ```bash
-cp .env.example .env && docker compose up -d --build && docker compose up -d --scale worker=6
+cp -n ../.env.example ../.env && docker compose up -d --build && docker compose up -d --scale worker=6
 ```
 
 - **Workers:** stateless API replicas, plus workers that pull jobs from PostgreSQL (`FOR UPDATE SKIP LOCKED`). Each

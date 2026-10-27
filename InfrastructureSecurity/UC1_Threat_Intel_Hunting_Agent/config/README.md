@@ -4,7 +4,7 @@ All files are plain text (CSV or `.kql`); edit them with Notepad or LibreOffice.
 
 | File | What it controls | Change it when… |
 |---|---|---|
-| `settings.example.env` | Template for `..\.env`: Defender login (tenant, client ID, secret), Gemini key/model/speed, feed keys, optional Teams webhook, tuning values. **The real `.env` is in the UC1 folder root, and only you type the keys there.** | Setting up a new machine |
+| `..\..\..\.env` (suite root) | The one settings file for the whole suite (template: `.env.example` there): Defender login, Gemini key/model/speed, feed keys, optional Teams webhook, tuning values. **Only you type the keys there.** | Setting up a new machine |
 | `feeds.csv` | Which feeds run (`enabled` yes/no): `attack`, `kev`, `nvd`, `ncsc_nl`, `cert_eu`, `msrc`, `abusech`, `otx`, `lab_test` | A feed is broken or unwanted, or you add OTX |
 | `risk_policy.csv` | The **risk rules**: points per signal (CISA KEV 35, ransomware 15, EPSS, CVSS, public exploit 10, NCSC-NL [H/H] 15, exposed 15, possible match 8, fresh IOCs 20), rating thresholds (Critical ≥ 70, High ≥ 50, Medium ≥ 30), caps (49 when not on our devices, 69 for a possible product match) and the hunt-hit score (95). | The security team wants different priorities. Every threat's "why" line shows which rules applied. |
 | `opco_mapping.csv` | Which business unit (OpCo) each Defender device belongs to. `match_type` = `rbac_group` (Defender device group), `tag` (device tag, e.g. `OpCo A`) or `name_pattern` (e.g. `opcc-*`). Tried in that order; unmatched = "Unassigned". Copied from UC3. | New devices or OpCos |
