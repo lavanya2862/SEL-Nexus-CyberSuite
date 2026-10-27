@@ -20,7 +20,7 @@ type Item = { to: string; label: string; icon: ComponentType<{ className?: strin
 // The menu follows the story: overview (summary, the agents that fetch the data, fixing) -> dashboard -> archives.
 // Each group has its own colour (icons, selected row) so the menu doubles as a map of the portal's areas.
 const GROUPS: { heading: string; tone: string; on: string; items: Item[] }[] = [
-  { heading: 'Overview', tone: 'var(--area-overview)', on: 'var(--area-overview-on)', items: [{ to: '/', label: 'Summary', icon: LayoutGrid }, { to: '/runs', label: 'Agents', icon: Bot }, { to: '/fixes', label: 'Fix', icon: Wrench }] },
+  { heading: 'Overview', tone: 'var(--area-overview)', on: 'var(--area-overview-on)', items: [{ to: '/', label: 'Summary', icon: LayoutGrid }, { to: '/runs', label: 'Agents', icon: Bot }, { to: '/fixes', label: 'Remediation', icon: Wrench }] },
   { heading: 'Dashboard', tone: 'var(--area-find)', on: 'var(--area-find-on)', items: [
     { to: '/uc3', label: 'Vulnerabilities', icon: ScanSearch }, { to: '/uc1', label: 'Threats', icon: Crosshair },
     { to: '/uc1/hunts', label: 'Attack detection', icon: Radar }, { to: '/respond', label: 'Alert triage', icon: Siren }] },
