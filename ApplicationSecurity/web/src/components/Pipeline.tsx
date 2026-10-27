@@ -2,7 +2,7 @@
 import type { CSSProperties } from 'react'
 import { AlertTriangle, Check, Circle, Loader2, Minus, X } from 'lucide-react'
 import { AgentStatusTag, Chip } from '@/components/kit'
-import { STAGES, dur } from '@/lib/labels'
+import { AGENTS, STAGES, dur } from '@/lib/labels'
 import { statusColor } from '@/lib/theme'
 import type { Stage, Step } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -62,7 +62,10 @@ export function PipelineFlow({ stages, selected, onSelect }: { stages: Stage[]; 
               </div>
               <div className="min-w-0">
                 <div className="text-sm font-semibold leading-snug text-ink">{meta.short}</div>
-                <div className="text-xs text-ink-3">{s.agent ?? (s.id === 'approval' ? 'You' : 'Pipeline')}</div>
+                {/* the agent doing this step stands out in the signal colour; the pipeline's own steps and "You" stay plain */}
+                {s.agent && s.id in AGENTS
+                  ? <div className="text-xs font-semibold text-[var(--signal)]">{s.agent}</div>
+                  : <div className="text-xs text-ink-3">{s.agent ?? (s.id === 'approval' ? 'You' : 'Pipeline')}</div>}
               </div>
               <div className="text-xs font-medium" style={{ color: s.status === 'pending' || s.status === 'skipped' ? 'var(--ink-3)' : color }}>{stageStatusText(s)}</div>
               {chips.length > 0 && <div className="flex flex-wrap gap-1">{chips.map((c) => <span key={c} className="rounded-md border border-hairline px-1.5 py-0.5 text-[11px] text-ink-2">{c}</span>)}</div>}
