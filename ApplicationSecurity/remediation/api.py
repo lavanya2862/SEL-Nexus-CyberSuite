@@ -27,7 +27,6 @@ from .github import GitHubClient, RepoAccessError, RepoURLError, parse_repo_url
 from .logging_setup import setup_logging
 from .models import Finding, JobOptions, RemediationReport
 from .pdf_reports import PDF_NAMES, render_pdf
-from .sandbox import sandbox_available
 from .scanners import capabilities
 from .suite_auth import COOKIE as SUITE_COOKIE, DOMAIN as SUITE_DOMAIN, OLD_DOMAIN as SUITE_OLD_DOMAIN, SuiteSessions
 
@@ -221,10 +220,9 @@ def metrics():
 @app.get("/api/v1/capabilities")
 def get_capabilities(_: str = Depends(require_api_key)):
     s = get_settings()
-    sandbox_ok, sandbox_reason = sandbox_available()
     return {"version": __version__, "scanners": capabilities(),
             "llm": {"enabled": s.llm_enabled, "provider": s.resolved_llm_provider, "model": s.llm_model or None},
-            "github_token_configured": bool(s.github_token), "sandbox": {"available": sandbox_ok, "mode": sandbox_reason},
+            "github_token_configured": bool(s.github_token),
             "git": bool(shutil.which("git")), "auth_required": bool(s.api_key_set),
             "allowed_hosts": sorted(s.allowed_hosts), "defaults": JobOptions().model_dump()}
 
@@ -427,7 +425,7 @@ def _publish_job(job_id: str, repo_url: str) -> None:
         for st in report.stages:
             if st.id == "approval":
                 st.status = "warning" if draft else "completed"
-                st.summary = ("Draft PR opened (flagged for investigation)" if draft else
+                st.summary = ("Draft PR opened (needs review)" if draft else
                               "Approved by reviewer — PR opened")
                 st.metrics["pull_request"] = url
         findings = [Finding.model_validate(f) for f in _json.loads(_artifact(job_id, "findings.json").content)]

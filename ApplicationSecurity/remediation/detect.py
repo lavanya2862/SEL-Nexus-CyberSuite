@@ -1,4 +1,4 @@
-"""Repository inspection: languages, ecosystems and (sandbox) test commands."""
+"""Repository inspection: languages, ecosystems and test commands (for the GitHub Actions tests)."""
 from __future__ import annotations
 
 import json
@@ -47,8 +47,6 @@ class ProjectInfo:
     manifests: list[str] = field(default_factory=list)
     primary_language: str | None = None
     test_command: str | None = None
-    install_command: str | None = None
-    docker_image: str = "python:3.12-slim"
 
 
 def detect_project(root: Path) -> ProjectInfo:
@@ -79,34 +77,23 @@ def _detect_test_command(root: Path, info: ProjectInfo) -> None:
         except (OSError, ValueError):
             pkg = {}
         script = (pkg.get("scripts") or {}).get("test", "")
-        info.docker_image = "node:20-slim"
         if script and "no test specified" not in script:
-            lock = "package-lock.json" in top
-            info.install_command = "npm ci --ignore-scripts" if lock else "npm install --ignore-scripts"
             info.test_command = "npm test --silent"
         return
     if lang == "python" or {"pyproject.toml", "setup.py", "requirements.txt"} & top:
-        info.docker_image = "python:3.12-slim"
-        installs = []
-        if "requirements.txt" in top:
-            installs.append("pip install -q -r requirements.txt")
-        elif "pyproject.toml" in top or "setup.py" in top:
-            installs.append("pip install -q -e .")
-        installs.append("pip install -q pytest")
-        info.install_command = " && ".join(installs)
         if (root / "tests").is_dir() or (root / "test").is_dir() or any(top_name.startswith("test_") for top_name in top):
             info.test_command = "python -m pytest -q -x"
         return
     if "go.mod" in top:
-        info.docker_image, info.install_command, info.test_command = "golang:1.23", "go mod download", "go test ./..."
+        info.test_command = "go test ./..."
     elif "Cargo.toml" in top:
-        info.docker_image, info.install_command, info.test_command = "rust:1", "cargo fetch", "cargo test -q"
+        info.test_command = "cargo test -q"
     elif "pom.xml" in top:
-        info.docker_image, info.install_command, info.test_command = "maven:3-eclipse-temurin-21", None, "mvn -q -B test"
+        info.test_command = "mvn -q -B test"
     elif "build.gradle" in top or "build.gradle.kts" in top:
-        info.docker_image, info.install_command, info.test_command = "gradle:8-jdk21", None, "gradle test -q"
+        info.test_command = "gradle test -q"
     elif "Gemfile" in top:
-        info.docker_image, info.install_command, info.test_command = "ruby:3.3", "bundle install --quiet", "bundle exec rake test"
+        info.test_command = "bundle exec rake test"
 
 
 _VENDOR_DIR = re.compile(r"(^|/)(vendor|vendors|third[_-]?party|external|bower_components|static/(js/)?(lib|libs|vendor)|"

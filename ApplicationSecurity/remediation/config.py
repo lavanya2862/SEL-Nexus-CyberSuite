@@ -78,13 +78,6 @@ class Settings(BaseSettings):
     semgrep_config: str = "p/default"
     trivy_cache_dir: Path | None = None
 
-    # --- Sandboxed execution of repository code (tests) -------------------------------------
-    sandbox_mode: Literal["disabled", "docker", "local"] = "disabled"
-    sandbox_network: str = "none"
-    sandbox_cpus: str = "2"
-    sandbox_memory: str = "2g"
-    test_timeout_seconds: int = 900
-
     # --- Test & Fix loop on GitHub Actions (testloop.py) --------------------------------------
     test_fix_attempts: int = 3            # Remediation Agent fixes before a person takes over
     test_run_timeout_minutes: int = 30    # how long to wait for one GitHub Actions test run

@@ -1,4 +1,4 @@
-"""Validation of changes: static syntax checks (never execute repo code) and sandboxed commands."""
+"""Validation of changes: static syntax checks (never execute repo code)."""
 from __future__ import annotations
 
 import ast
@@ -9,7 +9,6 @@ import tomllib
 from pathlib import Path
 
 from .config import scrubbed_env
-from .models import ValidationResult
 
 
 def static_check(root: Path, files: list[str]) -> tuple[bool, str]:
@@ -48,21 +47,3 @@ def static_check(root: Path, files: list[str]) -> tuple[bool, str]:
         except Exception as exc:  # noqa: BLE001
             problems.append(f"{rel}: {type(exc).__name__}: {exc}")
     return (not problems), "; ".join(problems)
-
-
-def run_validation(worktree: Path, commands: list[tuple[str, str]]) -> list[ValidationResult]:
-    """Legacy API: run trusted commands on the host (used by the local-path CLI)."""
-    import time
-    results = []
-    for name, command in commands:
-        start = time.monotonic()
-        try:
-            proc = subprocess.run(command, cwd=worktree, shell=True, text=True, capture_output=True, timeout=900,
-                                  check=False, env=scrubbed_env())
-            results.append(ValidationResult(name=name, command=command, exit_code=proc.returncode,
-                                            passed=proc.returncode == 0, stdout=proc.stdout[-12000:],
-                                            stderr=proc.stderr[-12000:], duration_seconds=round(time.monotonic() - start, 2)))
-        except subprocess.TimeoutExpired as exc:
-            results.append(ValidationResult(name=name, command=command, exit_code=124, passed=False,
-                                            stdout=str(exc.stdout or "")[-12000:], stderr="Timed out after 900 seconds."))
-    return results

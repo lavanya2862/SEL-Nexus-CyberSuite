@@ -153,9 +153,9 @@ function ApprovalBox({ job }: { job: Job }) {
   const flagged = s.validation_status === 'flagged'
   if (s.pull_request_url) {
     return (
-      <Notice tone={flagged ? 'warn' : 'good'} title={s.pull_request_draft ? 'Draft pull request opened: flagged for investigation' : 'Pull request opened: waiting for human review'}
+      <Notice tone={flagged ? 'warn' : 'good'} title={s.pull_request_draft ? 'Draft pull request opened: needs review' : 'Pull request opened: waiting for human review'}
         action={<LinkBtn href={s.pull_request_url} external kind="good">Open on GitHub <ExternalLink className="size-3.5" /></LinkBtn>}>
-        The fixes are on branch <span className="font-mono">{s.branch}</span>. Review and merge on GitHub; nothing is merged automatically.
+        The fixes are on branch <span className="font-mono">{s.branch}</span>. Review and merge on GitHub.
       </Notice>
     )
   }
@@ -163,7 +163,7 @@ function ApprovalBox({ job }: { job: Job }) {
   const publishing = s.approval_status === 'publishing' || approve.isPending
   const testing = testsActive(job)
   return (
-    <Notice tone={flagged ? 'warn' : 'info'} title={flagged ? 'Your decision: validation flagged this change set' : 'Your decision: approve the fixes'}
+    <Notice tone={flagged ? 'warn' : 'info'} title={flagged ? 'Your decision: this change set needs review' : 'Your decision: approve the fixes'}
       action={
         <div className="flex flex-wrap gap-2">
           <LinkBtn href={artifactUrl(job.id, 'fixes.pdf')}><Download className="size-3.5" /> Fixes (PDF)</LinkBtn>
@@ -225,7 +225,7 @@ function SummaryTab({ job, report: r, findings, agents }: { job: Job; report: Re
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {AGENT_IDS.map((id) => <AgentCard key={id} id={id} view={agents?.[id]} to={`/runs/${job.id}/${id}`} />)}
       </div>
-      {r.notes.length > 0 && <Card title="Notes from the agents"><ul className="list-disc pl-5 text-sm text-ink-2">{r.notes.map((n, i) => <li key={i}>{n}</li>)}</ul></Card>}
+      {r.notes.filter(keepNote).length > 0 && <Card title="Notes from the agents"><ul className="list-disc pl-5 text-sm text-ink-2">{r.notes.filter(keepNote).map((n, i) => <li key={i}>{n}</li>)}</ul></Card>}
     </div>
   )
 }
@@ -235,7 +235,7 @@ function Verdict({ report: r }: { report: Report }) {
   const c = (st: string) => checks.filter((x) => x.status === st).length
   const text: Record<string, [string, string]> = {
     passed: ['All validation checks passed', 'The fixes still compile, add no security regressions and are confirmed by the rescan.'],
-    flagged: ['Flagged for investigation', 'One or more checks failed. The changes are not merged automatically: they go to a draft pull request.'],
+    flagged: ['Needs review', 'One or more checks failed. The changes go to a draft pull request.'],
     not_run: ['Not validated', 'There were no fixes to validate.'],
   }
   const [title, body] = text[r.validation_status] ?? [r.validation_status, '']
@@ -358,16 +358,18 @@ function RemediationExtra({ job, report: r, findings }: { job: Job; report: Repo
   )
 }
 
+// Older runs saved this note; it is no longer shown.
+const keepNote = (n: string) => !n.startsWith('Nothing is merged automatically')
+
 const CHECK_CATS: [string, string, string][] = [
   ['static', 'Static checks', 'Edited files still parse; dependency files stay valid.'],
   ['security-regression', 'Security-regression guard', 'Fixes must not add suppressions, disable TLS, skip tests or remove controls.'],
-  ['functional', 'Functional tests', 'The project’s tests, before vs. after, in the sandbox.'],
   ['security-rescan', 'Security rescan', 'Scanners re-run on the fix branch: findings must be gone and nothing new introduced.'],
   ['policy', 'Change policy', 'Risky changes such as major-version upgrades.'],
 ]
 
 function ValidationExtra({ report: r }: { report: Report }) {
-  const checks = r.validation_checks ?? []
+  const checks = (r.validation_checks ?? []).filter((c) => c.category !== 'functional')  // older reports had one
   const count = (cat: string, st: string) => checks.filter((c) => c.category === cat && c.status === st).length
   const tone = { passed: 'good', failed: 'bad', warning: 'warn', skipped: 'idle' } as const
   return (
@@ -405,18 +407,6 @@ function ValidationExtra({ report: r }: { report: Report }) {
           </DTable>
         ) : <Empty text="No checks were run (no fixes)." />}
       </Card>
-      {r.validation.length > 0 && (
-        <Card title="Functional test runs">
-          <div className="flex flex-col gap-2">
-            {r.validation.map((v, i) => (
-              <details key={i} className="rounded-xl border border-hairline p-3">
-                <summary className="cursor-pointer text-sm"><b>{v.name}</b> · {v.skipped ? 'skipped' : v.passed ? 'passed' : 'FAILED'} <span className="font-mono text-xs text-ink-3">{v.command}</span></summary>
-                <pre className="codebox mt-3"><span>{(v.stdout + '\n' + v.stderr).trim().slice(-6000) || '(no output)'}</span></pre>
-              </details>
-            ))}
-          </div>
-        </Card>
-      )}
     </div>
   )
 }

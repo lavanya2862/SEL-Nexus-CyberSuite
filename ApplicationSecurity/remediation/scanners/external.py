@@ -4,9 +4,10 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 from pathlib import Path
 
-from ..config import get_settings
+from ..config import get_settings, scrubbed_env
 from ..gitops import run_cmd
 from ..models import Finding
 from ..parsers import parse_bandit_data, parse_sarif_data, parse_trivy_data
@@ -18,6 +19,17 @@ SKIP = ["node_modules", "vendor", ".venv", "venv", "dist", "build", "target", ".
 def _ensure(workdir: Path) -> Path:
     workdir.mkdir(parents=True, exist_ok=True)
     return workdir
+
+
+def local_tool(name: str) -> str | None:
+    """A Python scanner installed with this app: in its own environment under tools/<name> (Semgrep, whose
+    dependencies clash with the app's), next to the app's own Python (Bandit), or else anywhere on PATH."""
+    exe = name + (".exe" if os.name == "nt" else "")
+    scripts = "Scripts" if os.name == "nt" else "bin"
+    for path in (Path(__file__).resolve().parents[2] / "tools" / name / scripts / exe, Path(sys.executable).parent / exe):
+        if path.is_file():
+            return str(path)
+    return shutil.which(name)
 
 
 class TrivyScanner(Scanner):
@@ -43,14 +55,18 @@ class SemgrepScanner(Scanner):
     name, kind, binary, setting = "semgrep", "sast", "semgrep", "enable_semgrep"
     description = "Semgrep OSS rules (multi-language SAST)"
 
+    def available(self) -> bool:
+        return local_tool("semgrep") is not None
+
     def scan(self, root: Path, workdir: Path) -> list[Finding]:
         s = get_settings()
         out = _ensure(workdir) / "semgrep.sarif"
-        args = ["semgrep", "scan", "--config", s.semgrep_config, "--sarif", "--output", str(out), "--metrics", "off",
+        args = [local_tool("semgrep") or "semgrep", "scan", "--config", s.semgrep_config, "--sarif", "--output", str(out), "--metrics", "off",
                 "--quiet", "--timeout", "30", "--max-target-bytes", "1000000", "--disable-version-check"]
         for d in SKIP:
             args += ["--exclude", d]
-        res = run_cmd(args + [str(root)], timeout=s.scanner_timeout_seconds)
+        # UTF-8 mode: on Windows Semgrep otherwise writes the SARIF in the ANSI code page and fails on emoji in it
+        res = run_cmd(args + [str(root)], timeout=s.scanner_timeout_seconds, env=scrubbed_env({"PYTHONUTF8": "1"}))
         if not out.exists():
             raise RuntimeError(f"semgrep exited {res.returncode}: {(res.stderr or res.stdout)[-600:]}")
         return parse_sarif_data(json.loads(out.read_text(encoding="utf-8")), "Semgrep", root)
@@ -61,11 +77,14 @@ class BanditScanner(Scanner):
     description = "Bandit (Python SAST)"
     languages = {"python"}
 
+    def available(self) -> bool:
+        return local_tool("bandit") is not None
+
     def scan(self, root: Path, workdir: Path) -> list[Finding]:
         s = get_settings()
         out = _ensure(workdir) / "bandit.json"
         excludes = ",".join(str(root / d) for d in SKIP)
-        res = run_cmd(["bandit", "-r", str(root), "-f", "json", "-o", str(out), "-q", "-x", excludes],
+        res = run_cmd([local_tool("bandit") or "bandit", "-r", str(root), "-f", "json", "-o", str(out), "-q", "-x", excludes],
                       timeout=s.scanner_timeout_seconds)
         if not out.exists():
             raise RuntimeError(f"bandit exited {res.returncode}: {(res.stderr or res.stdout)[-600:]}")

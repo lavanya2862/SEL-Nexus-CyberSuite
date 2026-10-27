@@ -14,7 +14,7 @@ type Msg = { role: 'user' | 'assistant'; content: string; error?: boolean }
 
 const SUGGEST: Record<ChatContext['type'], string[]> = {
   general: ['How does the pipeline validate fixes?', 'What is CodeQL vs Trivy?', 'How do I fix SQL injection in Python?'],
-  run: ['Summarise the most critical risks', 'Why was validation flagged?', 'Which findings still need manual work?', 'What should I review before merging?'],
+  run: ['Summarise the most critical risks', 'Why does this scan need review?', 'Which findings still need manual work?', 'What should I review before merging?'],
   finding: ['Explain this vulnerability simply', 'How do I fix it safely?', 'Is this exploitable here?', 'Review the applied fix'],
 }
 

@@ -136,7 +136,7 @@ function DashboardView({ d, att, findings, repos }: { d: DashboardData; att?: At
       </div>
 
       <p className="pb-2 text-center text-xs text-ink-3">
-        {plural(d.runs, 'scan')} · {num(d.pull_requests)} pull request{d.pull_requests === 1 ? '' : 's'} opened · nothing is ever merged without a person
+        {plural(d.runs, 'scan')} · {num(d.pull_requests)} pull request{d.pull_requests === 1 ? '' : 's'} opened
       </p>
     </div>
   )

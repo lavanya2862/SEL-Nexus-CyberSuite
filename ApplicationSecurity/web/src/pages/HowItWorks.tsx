@@ -27,12 +27,12 @@ export function HowItWorks() {
     { id: 'validation', title: 'Testing & Validation Agent', items: [
       'Static checks: every edited file must still parse',
       'Security-regression guard: rejects suppressions, disabled TLS, skipped tests or removed security controls',
-      'The project’s own tests in a sandbox (before vs. after), undoing any fix that breaks them',
       'Security rescan: the findings must be gone and nothing new may appear',
-    ], tools: <><StatusTag tone={c?.sandbox.available ? 'good' : 'warn'} label={`Sandbox: ${c?.sandbox.available ? c.sandbox.mode : 'off'}`} /><StatusTag tone="good" label="Rescan" /><StatusTag tone="good" label="Diff guard" /></> },
+      'The project’s own tests run on GitHub Actions (Run tests on GitHub); the Remediation Agent fixes failing tests',
+    ], tools: <><StatusTag tone={c?.github_token_configured ? 'good' : 'warn'} label="GitHub Actions tests" /><StatusTag tone="good" label="Rescan" /><StatusTag tone="good" label="Diff guard" /></> },
     { id: 'reporting', title: 'Reporting Agent', items: [
       'A report of what was found, the fixes proposed and applied, and the test results',
-      'The final verdict: validated, or flagged for investigation',
+      'The final verdict: validated, or needs review',
       'A SARIF file for GitHub code scanning, the full patch and one diff per fix',
       'The pull request description with the evidence reviewers need',
     ], tools: <><StatusTag tone="good" label="Markdown" /><StatusTag tone="good" label="SARIF 2.1.0" /><StatusTag tone="good" label="JSON" /></> },
@@ -43,7 +43,7 @@ export function HowItWorks() {
       <Card title="From GitHub link to pull request" description="Every scan goes through these six steps, in this order.">
         <PipelineFlow stages={mergedStages([]).map((s) => ({ ...s, status: 'completed' }))} />
         <div className="mt-4"><Notice tone="info" title="Optional: test on GitHub, failures fixed by the Remediation Agent">Press <b>Run tests on GitHub</b> on a run (or tick it on New scan). The fix branch is pushed with a test workflow, GitHub Actions runs every test in the repository, and when a test fails the Remediation Agent reads the failure, fixes the code (or a test that is itself wrong), and pushes again, which runs the tests again. It stops when everything passes or after 3 fixes. Fixes that skip or delete tests are rejected.</Notice></div>
-        <div className="mt-3"><Notice tone="info" title="A person always decides">Validated fixes become a pull request only after you approve them. If validation fails, the change set is flagged: it opens as a draft pull request labelled <span className="font-mono">needs-investigation</span> (or is held back), and it is never merged automatically.</Notice></div>
+        <div className="mt-3"><Notice tone="info" title="A person always decides">Validated fixes become a pull request only after you approve them. If validation fails, the change set needs review: it opens as a draft pull request labelled <span className="font-mono">needs-investigation</span> (or is held back).</Notice></div>
       </Card>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {agents.map((a) => (

@@ -58,7 +58,7 @@ const HOW = [
   { icon: Upload, title: 'Push the fix branch', text: 'With a small workflow that runs every test in the repository.' },
   { icon: FlaskConical, title: 'GitHub Actions runs the tests', text: 'On GitHub’s own machines, exactly as the repo’s CI would.' },
   { icon: Bot, title: 'Remediation Agent fixes failures', text: 'It reads the failure, fixes the code (or a wrong test) and pushes, which runs the tests again.' },
-  { icon: CheckCircle2, title: 'Until green, or 3 fixes', text: 'Then you approve the branch as a pull request. Nothing is merged automatically.' },
+  { icon: CheckCircle2, title: 'Until green, or 3 fixes', text: 'Then you approve the branch as a pull request.' },
 ]
 
 /** The "GitHub tests" tab of a run. */

@@ -33,7 +33,7 @@ def test_stage_timeline_and_validation_verdict(fake_world):
     assert stages["approval"].status == "warning" and result.report.approval_status == "awaiting_approval"
     assert stages["analysis"].metrics["unique"] == 4 and any("Risk-based" in s.name for s in stages["analysis"].steps)
     cats = {c.category for c in result.report.validation_checks}
-    assert {"static", "security-regression", "security-rescan", "functional"} <= cats
+    assert {"static", "security-regression", "security-rescan"} <= cats and "functional" not in cats
     assert all(f.validation_status == "passed" and f.diff.startswith("diff --git") for f in result.report.fixes)
     llm_fix = next(f for f in result.report.fixes if f.method == "llm")
     assert llm_fix.explanation == "Avoid the shell." and llm_fix.risk == "medium"

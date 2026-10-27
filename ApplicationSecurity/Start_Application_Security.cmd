@@ -17,6 +17,15 @@ if not exist ".venv\Scripts\python.exe" (
   %PY% -m venv .venv || goto :failed
   ".venv\Scripts\python.exe" -m pip install --quiet -r requirements.txt || goto :failed
 )
+rem Optional scanners: scans still run without them. Semgrep gets its own environment because its packages clash with the app's.
+if not exist ".venv\Scripts\bandit.exe" (
+  echo Installing Bandit, first time only...
+  ".venv\Scripts\python.exe" -m pip install --quiet bandit || echo Bandit could not be installed; scans run without it.
+)
+if not exist "tools\semgrep\Scripts\semgrep.exe" (
+  echo Installing Semgrep in tools\semgrep, first time only...
+  %PY% -m venv tools\semgrep && "tools\semgrep\Scripts\python.exe" -m pip install --quiet semgrep || echo Semgrep could not be installed; scans run without it.
+)
 if not exist "web\dist\index.html" (
   echo Building the web app, first time only...
   pushd web

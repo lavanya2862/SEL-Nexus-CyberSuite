@@ -542,16 +542,6 @@ def render_report_pdf(report: RemediationReport, findings: list[Finding]) -> byt
                          [[c.name, c.category, "" if c.fix_index is None else str(c.fix_index + 1), _status(c.status),
                            _p(c.detail, limit=260)] for c in report.validation_checks],
                          [0.22, 0.18, 0.05, 0.1, 0.45], right=(2,))]
-    if report.validation:
-        story += [Spacer(1, 6),
-                  _table(["Command", "Ran", "Exit code", "Result"],
-                         [[v.name, _p(v.command, limit=160), str(v.exit_code),
-                           _status("skipped" if v.skipped else "passed" if v.passed else "failed")]
-                          for v in report.validation], [0.22, 0.52, 0.1, 0.16], right=(2,))]
-        for v in report.validation:
-            tail = (v.stderr or v.stdout or "")[-2500:]
-            if tail and not v.passed and not v.skipped:
-                story += [Paragraph(f"{_x(v.name)}: output", S["h3"]), _code(tail, max_lines=60)]
 
     # 4. Still open
     story += [CondPageBreak(50 * mm), Paragraph(f"4. Still open: {len(open_)} finding(s) and how to resolve them",

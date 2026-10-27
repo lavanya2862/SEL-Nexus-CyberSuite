@@ -143,7 +143,7 @@ function Forms({ view }: { view: SettingsView }) {
       </Card>
 
       <Card title={<span className="flex items-center gap-2"><KeyRound className="size-4 text-sky" /> How keys are kept</span>}>
-        <p className="text-sm leading-relaxed text-ink-2">Keys entered here are saved on this server in <span className="font-mono">DATA_DIR/runtime_settings.json</span>, are never shown in full again, and are removed from the environment of every scanner and test sandbox. Settings can only be changed from this computer unless the server sets <span className="font-mono">API_KEYS</span>.</p>
+        <p className="text-sm leading-relaxed text-ink-2">Keys entered here are saved on this server in <span className="font-mono">DATA_DIR/runtime_settings.json</span>, are never shown in full again, and are removed from the environment of every scanner. Settings can only be changed from this computer unless the server sets <span className="font-mono">API_KEYS</span>.</p>
         <ClientKey />
       </Card>
     </div>

@@ -19,8 +19,7 @@ from .models import SEVERITY_ORDER, JobOptions
 def _options(args) -> JobOptions:
     return JobOptions(ref=args.ref, max_findings=args.max_findings, min_severity=args.min_severity,
                       scanners=[s for s in (args.scanners or "").split(",") if s] or None,
-                      auto_fix=not args.no_fix, use_llm=not args.no_llm, run_tests=args.run_tests or None,
-                      test_command=args.test_command, create_pr=args.create_pr, use_cache=False,
+                      auto_fix=not args.no_fix, use_llm=not args.no_llm, create_pr=args.create_pr, use_cache=False,
                       pr_on_flagged=getattr(args, "pr_on_flagged", "draft"))
 
 
@@ -32,8 +31,6 @@ def _add_job_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--scanners", help="comma-separated subset, e.g. trivy,osv,builtin-sast")
     p.add_argument("--no-fix", action="store_true", help="scan and report only")
     p.add_argument("--no-llm", action="store_true", help="deterministic fixes only")
-    p.add_argument("--run-tests", action="store_true", help="run the test suite in the sandbox")
-    p.add_argument("--test-command")
     p.add_argument("--create-pr", action="store_true", help="push a branch and open a pull request (needs GITHUB_TOKEN)")
     p.add_argument("--pr-on-flagged", choices=["draft", "skip"], default="draft",
                    help="when validation is flagged: open a draft PR (default) or hold it back")
@@ -134,11 +131,10 @@ def cmd_submit(args) -> int:
 
 def cmd_capabilities(_args) -> int:
     from .config import get_settings
-    from .sandbox import sandbox_available
     from .scanners import capabilities
     s = get_settings()
     print(json.dumps({"scanners": capabilities(), "llm_enabled": s.llm_enabled, "llm_provider": s.resolved_llm_provider,
-                      "sandbox": sandbox_available(), "github_token": bool(s.github_token)}, indent=2))
+                      "github_token": bool(s.github_token)}, indent=2))
     return 0
 
 
@@ -179,7 +175,7 @@ def main(argv: list[str] | None = None) -> None:
     submit.add_argument("--wait", action="store_true")
     submit.set_defaults(func=cmd_submit)
 
-    caps = subs.add_parser("capabilities", help="show which scanners/LLM/sandbox are available")
+    caps = subs.add_parser("capabilities", help="show which scanners/LLM are available")
     caps.set_defaults(func=cmd_capabilities)
 
     args = parser.parse_args(argv)

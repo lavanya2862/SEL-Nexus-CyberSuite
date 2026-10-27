@@ -20,7 +20,7 @@ export function Approvals() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Approvals" description="Fix sets the Remediation Agent made and the Validation Agent checked, waiting for a person’s decision. Approving pushes the fix branch and opens a pull request for review. Nothing is ever merged without you." />
+      <PageHeader title="Approvals" description="Fix sets the Remediation Agent made and the Validation Agent checked, waiting for a person’s decision. Approving pushes the fix branch and opens a pull request for review." />
       {!token && <Notice tone="warn" title="Add a GitHub token to approve" action={<LinkBtn to="/settings">Open Settings</LinkBtn>}>Approving needs a token that can push branches and open pull requests. Until then, you can download each patch and apply it yourself.</Notice>}
 
       <section className="flex flex-col gap-3">
@@ -45,7 +45,7 @@ export function Approvals() {
                 <Mini label="Confirmed by Validation Agent" value={s.verified_fixed ?? 0} />
                 <Mini label="Found by Analysis Agent" value={s.findings ?? 0} />
               </div>
-              <Notice tone={flagged ? 'warn' : 'good'} title={flagged ? 'Validation flagged this change set' : 'All validation checks passed'}>
+              <Notice tone={flagged ? 'warn' : 'good'} title={flagged ? 'This change set needs review' : 'All validation checks passed'}>
                 {flagged ? (
                   <>
                     <ul className="list-disc pl-5">{j.failed_checks.map((c) => <li key={c.name}><b>{c.name}:</b> {c.detail}</li>)}</ul>
@@ -108,7 +108,7 @@ function DraftReview({ job: j, busy, onReviewed }: {
         <Mini label="Confirmed by Validation Agent" value={s.verified_fixed ?? 0} />
         <Mini label="Found by Analysis Agent" value={s.findings ?? 0} />
       </div>
-      <Notice tone="warn" title="Validation flagged this change set, and the draft pull request is already open">
+      <Notice tone="warn" title="This change set needs review, and the draft pull request is already open">
         {j.failed_checks.length > 0 && <ul className="list-disc pl-5">{j.failed_checks.map((c, i) => <li key={i}><b>{c.name}:</b> {c.detail}</li>)}</ul>}
         <p className="mt-1">The scan was started with “Push branch &amp; open pull request”, so the pipeline opened it as a <b>draft</b> labelled needs-investigation. Investigate the checks above, then finish or close the pull request on GitHub.</p>
       </Notice>

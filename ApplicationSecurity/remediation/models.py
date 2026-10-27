@@ -94,17 +94,6 @@ class Finding(BaseModel):
         return data
 
 
-class ValidationResult(BaseModel):
-    name: str
-    command: str
-    exit_code: int
-    passed: bool
-    stdout: str = ""
-    stderr: str = ""
-    duration_seconds: float = 0.0
-    skipped: bool = False
-
-
 class ScannerRun(BaseModel):
     name: str
     status: Literal["ok", "failed", "unavailable", "disabled", "skipped"]
@@ -115,6 +104,7 @@ class ScannerRun(BaseModel):
 
 class ValidationCheck(BaseModel):
     name: str
+    # "functional" is only in reports saved before local test runs were removed; tests now run on GitHub Actions.
     category: Literal["static", "security-regression", "security-rescan", "functional", "policy"]
     status: Literal["passed", "failed", "warning", "skipped"]
     detail: str = ""
@@ -169,12 +159,11 @@ PIPELINE_STAGES: list[tuple[str, str, str | None, str]] = [
      "Generate targeted patches (deterministic upgrades/rewrites first, LLM patches for code) and commit each one "
      "on an isolated Git branch."),
     ("validation", "Testing & Validation", "Validation Agent",
-     "Syntax checks, security-regression guard, functional tests in a sandbox and a security rescan of every fix."),
+     "Syntax checks, security-regression guard and a security rescan of every fix."),
     ("reporting", "Reporting", "Reporting Agent",
      "Produce the report, SARIF, per-fix diffs and the final validation status."),
     ("approval", "Human Approval & Pull Request", None,
-     "Push the branch and open a pull request for human review. Flagged runs become draft PRs; nothing is merged "
-     "automatically."),
+     "Push the branch and open a pull request for human review. Runs that need review become draft PRs."),
 ]
 
 
@@ -191,9 +180,6 @@ class JobOptions(BaseModel):
     auto_fix: bool = True
     use_llm: bool = True
     fix_dependencies: bool = True
-    run_tests: bool | None = Field(default=None, description="Run the test suite in the sandbox (needs SANDBOX_MODE).")
-    test_command: str | None = Field(default=None, max_length=500)
-    install_command: str | None = Field(default=None, max_length=500)
     verify_with_rescan: bool = True
     create_pr: bool = False
     github_tests: bool = Field(default=False, description="After the run, test the fix branch on GitHub Actions and let "
@@ -233,7 +219,6 @@ class RemediationReport(BaseModel):
     patches_applied: int = 0
     fixes: list[FixRecord] = Field(default_factory=list)
     verified_fixed: int = 0
-    validation: list[ValidationResult] = Field(default_factory=list)
     validation_checks: list[ValidationCheck] = Field(default_factory=list)
     validation_status: Literal["not_run", "passed", "flagged", "failed"] = "not_run"
     stages: list[PipelineStage] = Field(default_factory=new_stages)

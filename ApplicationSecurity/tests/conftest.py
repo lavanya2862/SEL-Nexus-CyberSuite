@@ -13,7 +13,7 @@ def isolated_settings(tmp_path, monkeypatch):
     env = {
         "DATA_DIR": str(tmp_path / "data"), "DATABASE_URL": "", "EMBEDDED_WORKER": "false",
         "LLM_API_KEY": "", "LLM_MODEL": "", "LLM_PROVIDER": "auto", "GITHUB_TOKEN": "", "API_KEYS": "",
-        "SANDBOX_MODE": "disabled", "ENABLE_TRIVY": "false", "ENABLE_SEMGREP": "false", "ENABLE_BANDIT": "false",
+        "ENABLE_TRIVY": "false", "ENABLE_SEMGREP": "false", "ENABLE_BANDIT": "false",
         "ENABLE_CODEQL": "false", "ENABLE_OSV": "false", "LOG_LEVEL": "WARNING",
     }
     for k, v in env.items():

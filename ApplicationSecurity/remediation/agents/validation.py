@@ -1,24 +1,21 @@
 """Testing & Validation Agent.
 
-Four layers of evidence for every fix:
+Three layers of evidence for every fix:
 
 1. static            – edited files still parse (no repository code is executed)
 2. security-regression – the patch itself must not weaken security (suppressions, disabled TLS,
                          skipped/deleted tests, removed auth/CSRF controls, new hard-coded secrets)
-3. functional        – the project's test suite, baseline vs. after, in a sandbox; a fix that
-                       breaks a previously passing suite is isolated and reverted
-4. security-rescan   – scanners re-run on the patched branch: each finding must be gone and no
+3. security-rescan   – scanners re-run on the patched branch: each finding must be gone and no
                        new high/critical finding may appear
 
+The project's own tests run on GitHub Actions instead (testloop.py), never on this computer.
 Any failure flags the run for investigation instead of letting it through.
 """
 from __future__ import annotations
 
 import re
 
-from ..gitops import git, revert_commit
-from ..models import FixRecord, ValidationCheck, ValidationResult
-from ..sandbox import run_in_sandbox, sandbox_available
+from ..models import FixRecord, ValidationCheck
 from ..validate import static_check
 from .base import RunContext
 
@@ -100,68 +97,6 @@ class ValidationAgent:
     def __init__(self, ctx: RunContext, analysis_agent):
         self.ctx = ctx
         self.analysis = analysis_agent
-        self.tests_on = False
-        self.test_cmd: str | None = None
-        self.install_cmd: str | None = None
-        self.baseline: ValidationResult | None = None
-
-    # -- functional tests -----------------------------------------------------------------
-    def plan_tests(self) -> None:
-        ctx, info = self.ctx, self.ctx.info
-        if ctx.options.run_tests is False:
-            return
-        available, why = sandbox_available()
-        command = ctx.options.test_command or (info.test_command if info else None)
-        if not command:
-            if ctx.options.run_tests:
-                ctx.report.notes.append("Tests requested but no test command was detected; pass test_command.")
-            return
-        if not available:
-            if ctx.options.run_tests:
-                ctx.report.notes.append(f"Tests requested but the sandbox is unavailable ({why}).")
-            return
-        self.tests_on, self.test_cmd = True, command
-        self.install_cmd = ctx.options.install_command or (info.install_command if info else None)
-
-    def _run_tests(self, name: str) -> ValidationResult:
-        full = f"{self.install_cmd} && {self.test_cmd}" if self.install_cmd else self.test_cmd
-        self.ctx.log(f"Validation Agent: running {name}: {full}")
-        result = run_in_sandbox(name, full, self.ctx.src, self.ctx.info.docker_image)
-        self.ctx.log(f"{name}: {'skipped' if result.skipped else ('passed' if result.passed else 'FAILED')} "
-                     f"({result.duration_seconds:.0f}s)", "info" if result.passed else "warning")
-        return result
-
-    def run_baseline(self) -> None:
-        """Called before remediation so failures can be attributed to the fixes."""
-        self.plan_tests()
-        if self.tests_on:
-            self.ctx.progress("baseline-tests", 45)
-            self.baseline = self._run_tests("baseline-tests")
-            self.ctx.report.validation.append(self.baseline)
-
-    def _rollback_culprit(self, checks: list[ValidationCheck]) -> None:
-        ctx = self.ctx
-        ctx.log("Functional tests regressed after the fixes; isolating the responsible commit.", "warning")
-        for sha, record in reversed(list(ctx.fix_commits)):
-            ctx.checkpoint()
-            if record.status != "applied" or not revert_commit(ctx.src, sha):
-                continue
-            result = self._run_tests(f"tests-without-{sha[:8]}")
-            if result.passed:
-                record.status, record.validation_status = "reverted", "flagged"
-                record.detail = (record.detail + " | Reverted: broke the functional test suite.").strip(" |")
-                for f in ctx.findings:
-                    if f.finding_id in record.finding_ids:
-                        f.fix_status, f.fix_note = "failed", "Fix reverted because it broke the test suite."
-                ctx.report.validation.append(result)
-                idx = ctx.report.fixes.index(record)
-                checks.append(ValidationCheck(name="Regression isolated and reverted", category="functional",
-                                              status="warning", fix_index=idx,
-                                              detail=f"{record.summary[:120]} broke the tests and was reverted."))
-                return
-            git(["reset", "-q", "--hard", "HEAD~1"], ctx.src)
-        checks.append(ValidationCheck(name="Regression isolation", category="functional", status="failed",
-                                      detail="Tests fail after the fixes and no single fix could be isolated."))
 
     # -- main -----------------------------------------------------------------------------
     def run(self) -> None:
@@ -199,36 +134,7 @@ class ValidationAgent:
                  f"{flagged} patch(es) contain weakening patterns" if flagged else "No suppressions, disabled checks, "
                  "skipped tests or removed controls introduced")
 
-        # 3. functional tests
-        if self.baseline is not None:
-            ctx.step(self.stage_id, "Baseline functional tests",
-                     "completed" if self.baseline.passed else "warning",
-                     f"{self.baseline.command} → exit {self.baseline.exit_code}")
-        if self.tests_on and applied:
-            ctx.progress("functional-tests", 80)
-            final = self._run_tests("tests-after-fixes")
-            rep.validation.append(final)
-            if final.passed:
-                checks.append(ValidationCheck(name="Functional test suite", category="functional", status="passed",
-                                              detail=f"{final.command} passed in {final.duration_seconds:.0f}s"))
-            elif self.baseline and not self.baseline.passed:
-                checks.append(ValidationCheck(name="Functional test suite", category="functional", status="warning",
-                                              detail="Suite was already failing before any change; results cannot "
-                                                     "confirm the fixes."))
-            else:
-                checks.append(ValidationCheck(name="Functional test suite", category="functional", status="failed",
-                                              detail=f"exit {final.exit_code}: {(final.stderr or final.stdout)[-400:]}"))
-                if self.baseline and self.baseline.passed:
-                    self._rollback_culprit(checks)
-            ctx.step(self.stage_id, "Functional tests after fixes", "completed" if final.passed else "failed",
-                     f"exit {final.exit_code} in {final.duration_seconds:.0f}s")
-        else:
-            why = "disabled (enable SANDBOX_MODE and 'Run functional tests')" if not self.tests_on else "no fixes"
-            checks.append(ValidationCheck(name="Functional test suite", category="functional", status="skipped",
-                                          detail=f"Not run: {why}."))
-            ctx.step(self.stage_id, "Functional tests", "skipped", f"Not run: {why}")
-
-        # 4. security rescan
+        # 3. security rescan
         verified = 0
         if ctx.options.verify_with_rescan and applied:
             ctx.progress("security-rescan", 85)
@@ -291,7 +197,7 @@ class ValidationAgent:
         rep.validation_status = "flagged" if (global_fail or any_flagged) else ("passed" if applied else "not_run")
         failed = sum(c.status == "failed" for c in checks)
         ctx.finish_stage(self.stage_id, "warning" if rep.validation_status == "flagged" else "completed",
-                         ("FLAGGED for investigation" if rep.validation_status == "flagged" else "All checks passed") +
+                         ("Needs review" if rep.validation_status == "flagged" else "All checks passed") +
                          f" · {sum(c.status == 'passed' for c in checks)} passed, {failed} failed, "
                          f"{sum(c.status == 'warning' for c in checks)} warnings",
                          verified=verified, checks=len(checks), failed_checks=failed,

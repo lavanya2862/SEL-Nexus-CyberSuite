@@ -49,7 +49,7 @@ Nothing is ever merged automatically. If validation fails, the change set is **f
      │
      ▼
  ③ Testing & Validation Agent
-     static checks · security-regression guard · functional tests (sandbox, auto-rollback)
+     static checks · security-regression guard
      · security rescan (fixed findings gone, nothing new introduced)  →  PASSED | FLAGGED
      │
      ▼
@@ -85,6 +85,10 @@ reasoning wait for an AI patch. Without a GitHub token, you can download `fixes.
 **CodeQL** is the primary SAST engine. To install it locally, run `scripts/install-codeql.ps1` (Windows) or
 `scripts/install-codeql.sh`. The Docker image and the GitHub Actions workflow include it. If CodeQL is missing, the
 Analysis Agent falls back to Semgrep, Bandit and the built-in rules, and says so in the run.
+
+**Semgrep** and **Bandit** are installed by the Start script on its first run: Bandit into `.venv`, Semgrep into its own
+environment in `tools/semgrep` (its packages clash with the app's). Semgrep downloads its rules (`SEMGREP_CONFIG`,
+default `p/default`) from semgrep.dev on every scan, so it needs internet access.
 
 ## The website
 
@@ -153,7 +157,6 @@ report inside the website, and `fixes.mbox` only to replay the fix commits when 
 |---|---|---|
 | Static | Every edited file still parses (Python AST, JSON, TOML, YAML, `node --check`) | A fix breaks syntax |
 | Security-regression guard | The patch itself | It adds `nosec`/`eslint-disable`-style suppressions, disables TLS verification, skips or deletes tests, removes assertions or auth/CSRF controls, hard-codes credentials, or adds `eval`/`shell=True` |
-| Functional | The project's own tests, baseline vs. after, in the sandbox (`SANDBOX_MODE=docker`) | Tests that passed before now fail. The responsible commit is isolated and reverted |
 | Security rescan | All scanners re-run on the fix branch | A targeted finding is still reported, or a new high/critical issue appears (e.g. an upgraded package with a new advisory) |
 | Policy | Change risk | Warns on major-version upgrades |
 
@@ -187,8 +190,8 @@ remediation scan https://github.com/org/repo --codeql-sarif results/*.sarif --tr
 | `POST` | `/api/v1/assistant/chat` | `{"messages": [...], "job_id": "...", "finding_id": "..."}` |
 | `GET`/`PUT` | `/api/v1/settings`, `POST /settings/test-llm`, `/settings/test-github` | runtime configuration (localhost or API key only) |
 
-Job options: `ref`, `min_severity`, `max_findings`, `scanners`, `auto_fix`, `use_llm`, `fix_dependencies`, `run_tests`,
-`test_command`, `install_command`, `verify_with_rescan`, `create_pr`, `pr_on_flagged` (`draft`|`skip`), `use_cache`,
+Job options: `ref`, `min_severity`, `max_findings`, `scanners`, `auto_fix`, `use_llm`, `fix_dependencies`,
+`verify_with_rescan`, `create_pr`, `pr_on_flagged` (`draft`|`skip`), `use_cache`,
 `github_tests` (start the Test & Fix loop when the run completes).
 Interactive docs are at `/docs`.
 
@@ -210,9 +213,9 @@ cp .env.example .env && docker compose up -d --build && docker compose up -d --s
 
 - **Input:** only allow-listed Git hosts, with strict owner/repo/ref validation.
 - **Git:** runs hardened (no hooks, no local transports, no submodules). The token is sent in an HTTP header, never in a URL.
-- **Repository code is never executed unless you opt in.** The npm lockfile refresh uses `--ignore-scripts`, and tests
-  run only in the sandbox (Docker: no network, dropped capabilities, resource limits).
-- **Secrets:** credentials are stripped from the environment of every scanner and sandbox, and secrets are redacted
+- **Repository code is never executed on this computer.** The npm lockfile refresh uses `--ignore-scripts`, and the
+  project's tests run only on GitHub Actions (**Run tests on GitHub**).
+- **Secrets:** credentials are stripped from the environment of every scanner, and secrets are redacted
   from everything sent to the LLM. UI-managed keys live in `DATA_DIR/runtime_settings.json`, are never returned in
   full, and can only be changed from localhost unless `API_KEYS` is set.
 - **LLM edits:** they must stay inside the repository, cannot touch `.git` or CI workflows, are applied all-or-nothing,

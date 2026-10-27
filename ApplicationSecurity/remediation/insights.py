@@ -30,15 +30,14 @@ AGENTS = {
     "validation": {
         "name": "Validation Agent", "stage": "validation",
         "role": "Proves each fix works and does not make anything worse.",
-        "contract_in": ["Fix commits from the Remediation Agent", "Project test suite (optional sandbox)",
-                        "Scanners for a rescan"],
-        "contract_out": ["PASSED or FLAGGED verdict", "Evidence for every check", "Issues confirmed resolved"],
+        "contract_in": ["Fix commits from the Remediation Agent", "Scanners for a rescan"],
+        "contract_out": ["PASSED or NEEDS REVIEW verdict", "Evidence for every check", "Issues confirmed resolved"],
     },
     "reporting": {
         "name": "Reporting Agent", "stage": "reporting",
         "role": "Packages the evidence and hands the decision to a human.",
         "contract_in": ["Findings, fixes and validation results"],
-        "contract_out": ["Report, SARIF, patch", "Pull request for review (draft if flagged)"],
+        "contract_out": ["Report, SARIF, patch", "Pull request for review (draft if it needs review)"],
     },
 }
 
@@ -212,17 +211,14 @@ def remediation_view(job: dict, report: dict | None, findings: list[dict]) -> di
 def validation_view(job: dict, report: dict | None, findings: list[dict]) -> dict:
     st = _stage(job, report, "validation")
     r = report or {}
-    checks = r.get("validation_checks") or []
-    func = [c for c in checks if c["category"] == "functional"]
-    sandbox_on = any(c["status"] != "skipped" for c in func)
+    checks = [c for c in r.get("validation_checks") or [] if c["category"] != "functional"]  # older reports had one
     inputs = [_kv("Fixes to check", len([f for f in r.get("fixes", []) if f.get("status") == "applied"]) if report else "–"),
-              _kv("Check layers", "syntax · regression guard · " + ("tests · " if sandbox_on else "") + "rescan"),
-              _kv("Functional tests", "on (sandbox)" if sandbox_on else "off", "" if sandbox_on else "warn")]
+              _kv("Check layers", "syntax · regression guard · rescan")]
     outputs, learnings = [], []
     if report:
         cnt = Counter(c["status"] for c in checks)
         verdict = r.get("validation_status", "not_run")
-        outputs = [_kv("Verdict", {"passed": "PASSED", "flagged": "FLAGGED", "not_run": "Not run"}.get(verdict, verdict),
+        outputs = [_kv("Verdict", {"passed": "PASSED", "flagged": "NEEDS REVIEW", "not_run": "Not run"}.get(verdict, verdict),
                        {"passed": "good", "flagged": "warn"}.get(verdict, "")),
                    _kv("Checks passed", cnt.get("passed", 0), "good"),
                    _kv("Checks failed", cnt.get("failed", 0), "bad" if cnt.get("failed") else ""),
@@ -242,10 +238,7 @@ def validation_view(job: dict, report: dict | None, findings: list[dict]) -> dic
             learnings.append(_l(f"The rescan confirmed {r['verified_fixed']} issues are really gone.", "good"))
         for c in checks:
             if c["status"] == "failed" and c["category"] != "security-regression":
-                learnings.append(_l(f"Flagged: {c['name']}. {_short(c['detail'], 160)}", "bad"))
-        if not sandbox_on and r.get("fixes"):
-            learnings.append(_l("Application behaviour was not tested; enable the Docker sandbox to run the "
-                                "project's own tests.", "warn"))
+                learnings.append(_l(f"Needs review: {c['name']}. {_short(c['detail'], 160)}", "bad"))
         majors = [c for c in checks if c["name"].startswith("Major-version")]
         if majors:
             learnings.append(_l(f"{len(majors)} fix(es) are major upgrades and need regression testing.", "warn"))
@@ -274,7 +267,7 @@ def reporting_view(job: dict, report: dict | None, findings: list[dict], artifac
             learnings.append(_l("Waiting for a reviewer: approve the fixes to push the branch and open a pull "
                                 "request.", "warn"))
             if r.get("validation_status") == "flagged":
-                learnings.append(_l("Because validation flagged this scan, the pull request will open as a draft "
+                learnings.append(_l("Because this scan needs review, the pull request will open as a draft "
                                     "labelled needs-investigation.", "warn"))
         else:
             learnings.append(_l("There is nothing to merge in this scan."))
@@ -324,7 +317,7 @@ def run_story(job: dict, report: dict | None, findings: list[dict]) -> dict:
     if verdict == "passed":
         lines.append(f"The Validation Agent passed every check and confirmed {r.get('verified_fixed', 0)} issues are gone.")
     elif verdict == "flagged":
-        lines.append(f"The Validation Agent confirmed {r.get('verified_fixed', 0)} issues are gone but flagged the run: "
+        lines.append(f"The Validation Agent confirmed {r.get('verified_fixed', 0)} issues are gone but the run needs review: "
                      f"{_short(failed[0]['name'] + ' (' + failed[0]['detail'] + ')', 170) if failed else 'see Validation'}.")
     if open_items:
         reasons = Counter(classify(f)[1] for f in open_items).most_common(3)
@@ -335,7 +328,7 @@ def run_story(job: dict, report: dict | None, findings: list[dict]) -> dict:
     elif r.get("patches_applied"):
         decision = {"kind": "approve" if verdict != "flagged" else "investigate",
                     "text": ("Review the fixes and approve to open a pull request." if verdict != "flagged" else
-                             "Investigate the flagged check, then approve to open a draft pull request.")}
+                             "Investigate the failed check, then approve to open a draft pull request.")}
     headline = (f"{r.get('findings_input', 0)} issues found · {len(fixes)} fixed automatically · "
                 f"{r.get('verified_fixed', 0)} confirmed resolved")
     return {"headline": headline, "lines": lines, "decision": decision}

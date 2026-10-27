@@ -18,7 +18,7 @@ export const STAGES: { id: string; name: string; short: string; agent: string | 
   { id: 'reporting', name: 'Reporting', short: 'Write it up', agent: 'Reporting Agent', icon: FileText,
     description: 'Report, SARIF file, one diff per fix and the final validation verdict.' },
   { id: 'approval', name: 'Human Approval & PR', short: 'You decide', agent: null, icon: GitPullRequestArrow,
-    description: 'You approve, then the branch is pushed and a pull request opened. Nothing is ever merged automatically.' },
+    description: 'You approve, then the branch is pushed and a pull request opened.' },
 ]
 
 export function mergedStages(stages: Stage[] | undefined): Stage[] {
@@ -56,7 +56,7 @@ export const FIX_STATUS: Record<string, { label: string; tone: 'good' | 'warn' |
 
 export const VERDICT: Record<string, { label: string; tone: 'good' | 'warn' | 'bad' | 'idle' }> = {
   passed: { label: 'Validated', tone: 'good' },
-  flagged: { label: 'Flagged', tone: 'warn' },
+  flagged: { label: 'Needs review', tone: 'warn' },
   failed: { label: 'Failed', tone: 'bad' },
   not_run: { label: 'Not validated', tone: 'idle' },
 }

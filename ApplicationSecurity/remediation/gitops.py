@@ -98,14 +98,6 @@ def discard_changes(repo: Path) -> None:
     git(["clean", "-q", "-fd"], repo)
 
 
-def revert_commit(repo: Path, sha: str) -> bool:
-    res = git(["revert", "--no-edit", "--no-verify", sha], repo, extra_config=git_identity())
-    if not res.ok:
-        git(["revert", "--abort"], repo)
-        return False
-    return True
-
-
 def diff_since(repo: Path, base: str) -> str:
     res = git(["diff", "--no-color", "--no-ext-diff", base, "HEAD"], repo, timeout=120)
     return res.stdout if res.ok else ""

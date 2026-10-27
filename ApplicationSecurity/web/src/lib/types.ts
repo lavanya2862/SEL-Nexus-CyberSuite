@@ -181,7 +181,6 @@ export interface Report {
   verified_fixed: number
   validation_status: Verdict
   validation_checks: Check[]
-  validation: { name: string; skipped: boolean; passed: boolean; command: string; stdout: string; stderr: string }[]
   fixes: Fix[]
   notes: string[]
   category_counts: Record<string, number>
@@ -249,7 +248,6 @@ export interface Capabilities {
   scanners: Record<string, { available: boolean; enabled: boolean; primary?: boolean; description: string }>
   llm: { enabled: boolean; provider: string | null; model: string | null }
   github_token_configured: boolean
-  sandbox: { available: boolean; mode: string }
   git: boolean
   auth_required: boolean
 }

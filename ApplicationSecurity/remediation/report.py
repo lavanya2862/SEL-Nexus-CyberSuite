@@ -10,7 +10,7 @@ from .models import SEVERITIES, Finding, RemediationReport
 _SARIF_LEVEL = {"critical": "error", "high": "error", "medium": "warning", "low": "note", "info": "note",
                 "unknown": "warning"}
 _SEC_SCORE = {"critical": "9.5", "high": "8.0", "medium": "5.5", "low": "3.0", "info": "0.0", "unknown": "5.0"}
-_VERDICT = {"passed": "PASSED ✅", "flagged": "FLAGGED FOR INVESTIGATION ⚠️", "failed": "FAILED ❌",
+_VERDICT = {"passed": "PASSED ✅", "flagged": "NEEDS REVIEW ⚠️", "failed": "FAILED ❌",
             "not_run": "NOT RUN (no fixes)"}
 _ICON = {"critical": "🟥", "high": "🟧", "medium": "🟨", "low": "🟦", "info": "⬜", "unknown": "⬜"}
 
@@ -81,14 +81,6 @@ def render_markdown(report: RemediationReport, findings: list[Finding], max_rows
         lines.append(f"| {_ICON.get(f.severity, '')} {f.severity} | {title} | {_location(f)} | {scanners} | {f.fix_status} |")
     if len(findings) > max_rows:
         lines.append(f"\n_{len(findings) - max_rows} more findings are in findings.json / findings.sarif._")
-    if report.validation:
-        lines += ["", "## Validation", ""]
-        for item in report.validation:
-            state = "SKIPPED" if item.skipped else ("PASS" if item.passed else "FAIL")
-            lines += [f"### {item.name}: {state}", f"- Command: `{item.command}`", f"- Exit code: `{item.exit_code}`", ""]
-            tail = (item.stderr or item.stdout or "")[-2500:]
-            if tail and not item.passed:
-                lines += ["```text", tail, "```", ""]
     if report.notes:
         lines += ["", "## Notes", ""] + [f"- {n}" for n in report.notes]
     lines += ["", "---", "Automated changes must be reviewed by a human before merging. "
@@ -103,7 +95,7 @@ def render_pr_body(report: RemediationReport) -> str:
              f"`{(report.commit or '')[:12]}`.", "",
              f"**Validation status: {verdict}**", ""]
     if report.validation_status == "flagged":
-        lines += ["> [!WARNING]", "> The Testing & Validation Agent flagged this change set. It is opened as a draft "
+        lines += ["> [!WARNING]", "> This change set needs review: a Testing & Validation Agent check failed. It is opened as a draft "
                   "for investigation and must not be merged until the failed checks below are resolved.", ""]
     lines += ["### Changes", "", "| # | Method | Change | Risk | Rescan | Validation |", "|---:|---|---|---|---|---|"]
     for i, fix in enumerate(report.fixes, 1):

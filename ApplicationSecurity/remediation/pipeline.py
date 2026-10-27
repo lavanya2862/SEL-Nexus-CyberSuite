@@ -3,7 +3,7 @@
     Repository Ingestion        validate link → shallow clone → detect languages/manifests
     Analysis Agent              CodeQL (primary) + Trivy + supporting scanners → normalise → dedupe → rank
     Remediation Agent           isolated branch → deterministic fixes + code fixes, one commit per fix
-    Validation Agent            static · security-regression guard · functional tests · security rescan
+    Validation Agent            static · security-regression guard · security rescan
     Reporting Component         report.md/json · findings.sarif · fixes.patch · fixes.mbox
     Human Approval & PR         push + PR (draft + needs-investigation when flagged); never auto-merged
 """
@@ -118,9 +118,9 @@ class RepositoryPipeline:
             return
         if flagged and self.options.pr_on_flagged == "skip":
             rep.approval_status = "awaiting_approval"
-            ctx.step("approval", "Held back: validation flagged", "warning",
+            ctx.step("approval", "Held back: needs review", "warning",
                      "Policy pr_on_flagged=skip — investigate, then approve manually.")
-            ctx.finish_stage("approval", "warning", "Validation flagged — held for investigation")
+            ctx.finish_stage("approval", "warning", "Needs review — held back")
             return
         if not self.s.github_token:
             rep.approval_status = "awaiting_approval"
@@ -143,7 +143,7 @@ class RepositoryPipeline:
             ctx.step("approval", "Draft PR (needs investigation)" if draft else "Pull request opened",
                      "warning" if draft else "completed", url)
             ctx.finish_stage("approval", "warning" if flagged else "completed",
-                             ("Draft PR opened — flagged for investigation" if flagged
+                             ("Draft PR opened — needs review" if flagged
                               else "PR opened — awaiting human review & merge"), pull_request=url)
         except RepoAccessError as exc:
             rep.approval_status = "failed"
@@ -167,7 +167,6 @@ class RepositoryPipeline:
                 remediation = RemediationAgent(ctx)
                 base = remediation.create_branch()
                 validation = ValidationAgent(ctx, analysis)
-                validation.run_baseline()
                 remediation.run()
                 if rep.fixes:
                     validation.run()
@@ -188,7 +187,6 @@ class RepositoryPipeline:
             if not rep.llm_enabled and any(f.fix_status == "skipped" for f in ctx.findings):
                 rep.notes.append("Some findings need code changes; configure an LLM in Settings so the Remediation "
                                  "Agent can patch them.")
-            rep.notes.append("Nothing is merged automatically. Every change goes through human review.")
             reporting = ReportingAgent(ctx)
             artifacts = reporting.run(patch, mbox)
             self._approval()
