@@ -88,14 +88,14 @@ def post_reopen(base: str, body: dict) -> tuple[int, dict]:
 
 
 def start_uc4_site(uc4_dir: Path, base: str, wait_s: float = 12) -> bool:
-    """Start UC4's website (python -m uc4 serve --no-browser) in the background and wait until it answers."""
+    """Start UC4's service (python -m uc4 serve) in the background and wait until it answers."""
     python = uc4_dir / ".venv" / "Scripts" / "python.exe"
     if not python.is_file():
         python = uc4_dir / ".venv" / "bin" / "python"
     if not python.is_file():
         raise Uc4Unavailable(f"UC4 has no Python environment at {uc4_dir / '.venv'}")
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
-    subprocess.Popen([str(python), "-m", "uc4", "serve", "--no-browser"], cwd=str(uc4_dir), creationflags=flags,
+    subprocess.Popen([str(python), "-m", "uc4", "serve"], cwd=str(uc4_dir), creationflags=flags,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     deadline = time.monotonic() + wait_s
     while time.monotonic() < deadline:

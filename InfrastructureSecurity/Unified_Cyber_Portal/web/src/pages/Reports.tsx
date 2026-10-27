@@ -2,11 +2,10 @@ import { useQuery } from '@tanstack/react-query'
 import { Download, FileSpreadsheet, FileText, FileType } from 'lucide-react'
 import { Empty, Panel } from '@/components/kit'
 import { ago } from '@/lib/format'
-import { UC_LABEL } from '@/lib/runs'
 
 interface ReportFile { name: string; size: number; modified: string | null }
 
-async function fetchReports(): Promise<{ uc1: ReportFile[]; uc3: ReportFile[] }> {
+async function fetchReports(): Promise<{ uc1: ReportFile[]; uc3: ReportFile[]; uc4?: ReportFile[] }> {
   const res = await fetch('/api/reports')
   if (!res.ok) throw new Error(`Portal API answered ${res.status}`)
   return res.json()
@@ -22,9 +21,12 @@ const KIND: Record<string, { icon: typeof FileText; label: string }> = {
 const size = (b: number) => (b > 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`)
 
 function describe(name: string) {
-  if (name.startsWith('UC3_Vulnerability_Summary')) return 'Vulnerability summary workbook (all findings, a sheet per VM, AI fix plan)'
-  if (name.startsWith('UC3_Before_After')) return 'What changed since the previous run'
-  if (name.startsWith('UC1_Threat_Hunting_Report')) return 'Threat hunting report for managers'
+  if (name.startsWith('Vulnerability_Report') && name.endsWith('.xlsx')) return 'Every vulnerability with its fix, AI fix plan, charts'
+  if (name.startsWith('Vulnerability_Report')) return 'Vulnerability report: summary, charts, what to fix first, AI fix guides'
+  if (name.startsWith('UC3_Before_After')) return 'Before / after: time saved by the agent'
+  if (name.startsWith('Threat_Intel_Report')) return 'New threats from this run, what affects us, AI fix steps'
+  if (name.startsWith('Attack_Detection_Report')) return 'Signs of attack, evidence and AI steps to resolve them'
+  if (name.startsWith('Alert_Triage_Report')) return 'Incidents triaged in this run, verdicts, evidence and actions'
   if (name.startsWith('UC1_AI_Spotcheck')) return 'Sheet to check the AI’s answers by hand'
   return 'Report file'
 }
@@ -40,19 +42,21 @@ export function Reports() {
       {error && <Empty text={String((error as Error).message)} />}
       {data && (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-          <Section uc="uc3" title="Vulnerability management" files={data.uc3} />
-          <Section uc="uc1" title="Threat news & hunting" files={data.uc1} />
+          <Section uc="uc3" title="Vulnerability Agent" files={data.uc3} />
+          <Section uc="uc1" title="Threat Intel Agent" files={data.uc1.filter((f) => !f.name.startsWith('Attack_Detection'))} />
+          <Section uc="uc1" title="Attack Detection Agent" files={data.uc1.filter((f) => f.name.startsWith('Attack_Detection'))} />
+          <Section uc="uc4" title="Alert Triage Agent" files={data.uc4 ?? []} />
         </div>
       )}
     </div>
   )
 }
 
-function Section({ uc, title, files }: { uc: 'uc1' | 'uc3'; title: string; files: ReportFile[] }) {
+function Section({ uc, title, files }: { uc: 'uc1' | 'uc3' | 'uc4'; title: string; files: ReportFile[] }) {
   return (
     <Panel className="p-6">
       <div className="flex items-center gap-2 text-xs font-medium text-ink-3">
-        <span className={uc === 'uc1' ? 'size-2 rounded-full bg-violet' : 'size-2 rounded-full bg-sky'} /> {UC_LABEL[uc]}
+        <span className={uc === 'uc1' ? 'size-2 rounded-full bg-violet' : uc === 'uc4' ? 'size-2 rounded-full bg-rose' : 'size-2 rounded-full bg-sky'} /> Reports
       </div>
       <h2 className="mt-1 font-semibold tracking-tight">{title}</h2>
       {files.length ? (

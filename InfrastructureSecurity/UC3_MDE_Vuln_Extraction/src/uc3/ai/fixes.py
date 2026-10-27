@@ -40,7 +40,8 @@ import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from uc3.ai.gemini import AIUnavailable, GeminiClient
+from uc3.ai.azure import make_client
+from uc3.ai.gemini import AIUnavailable
 from uc3.config import CONFIG_DIR, Settings
 
 log = logging.getLogger("uc3.ai")
@@ -78,7 +79,7 @@ SCHEMA = {
         "worst_case": {"type": "STRING", "description": "One sentence, max 30 words: the worst realistic outcome if nothing is done"},
         "why_now": {"type": "STRING", "description": "One sentence, max 30 words, explaining the urgency label using the facts (attacker use list, P1, overdue)"},
         "steps": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "3 to 6 short numbered-free steps for the IT person, max 25 words each"},
-        "verify": {"type": "STRING", "description": "Max 35 words: how to check it worked (version on the PC, then the next UC3/Defender run)"},
+        "verify": {"type": "STRING", "description": "Max 35 words: how to check it worked (version on the PC, then the next Defender scan)"},
         "side_effects": {"type": "STRING", "description": "Max 30 words: what users notice (restart, closed app, compatibility to test)"},
     },
     "required": ["what_is_wrong", "worst_case", "why_now", "steps", "verify", "side_effects"],
@@ -105,7 +106,7 @@ SETTING_SCHEMA = {
         "worst_case": {"type": "STRING", "description": "One sentence, max 30 words: the worst realistic outcome if nothing is done"},
         "why_now": {"type": "STRING", "description": "One sentence, max 30 words, explaining the urgency label (Microsoft's impact score, how many PCs)"},
         "steps": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "3 to 6 short numbered-free steps for the IT person, max 30 words each"},
-        "verify": {"type": "STRING", "description": "Max 35 words: how to check it worked (the setting on the PC, then Defender's next scan / the next UC3 run)"},
+        "verify": {"type": "STRING", "description": "Max 35 words: how to check it worked (the setting on the PC, then Defender's next scan)"},
         "side_effects": {"type": "STRING", "description": "Max 30 words: what users or other systems may notice; say 'None expected' only if the facts give no reason"},
     },
     "required": ["what_is_wrong", "worst_case", "why_now", "steps", "verify", "side_effects"],
@@ -456,7 +457,7 @@ def rules_text(app: dict) -> dict:
     kev = len(app["kev_cves"])
     if app["fix_type"] == FIX_OS:
         steps = ["Agree a restart time with the device users.", app["fix"]["action"] + ".", "Restart the PC.",
-                 "Check the findings disappear after the next UC3 run."]
+                 "Check the findings disappear after the next scan."]
     elif app["fix_type"] == FIX_NONE:
         steps = ["The vendor has not released a fix for these weaknesses yet.",
                  "Follow the vendor's advice (Defender's security recommendation) to reduce the risk until then.",
@@ -468,13 +469,13 @@ def rules_text(app: dict) -> dict:
                      else app["fix"]["action"] + ".")
         if len(app["versions"]) > 1:
             steps.append("Several versions are installed: remove or update every one of them.")
-        steps += ["Restart the app (or the PC if the installer asks).", "Check the findings disappear after the next UC3 run."]
+        steps += ["Restart the app (or the PC if the installer asks).", "Check the findings disappear after the next scan."]
         if app.get("no_patch"):
             n = len(app["no_patch"])
             steps.insert(0, f"{n} of these weaknesses {'has' if n == 1 else 'have'} no fix from the vendor yet; updating closes the others.")
     return {
         "what_is_wrong": f"{app['app']} has {app['cves']} known security weaknesses on {len(app['devices'])} device(s)"
-                         + (f"; {kev} of them are on the CISA list of holes attackers are known to use." if kev else "."),
+                         + (f"; {kev} of them are on the CISA list of vulnerabilities attackers are known to use." if kev else "."),
         "worst_case": "", "why_now": app["urgency"]["label"] + ".", "steps": steps,
         "verify": "After updating, the app's version on the PC is newer and its findings leave the dashboard on the next run.",
         "side_effects": "The PC restarts." if app["fix_type"] == FIX_OS else "The app closes while it updates.",
@@ -492,7 +493,7 @@ def setting_rules_text(card: dict) -> dict:
               "Check the setting shows as fixed after Defender's next scan."]
     return {"what_is_wrong": ms["risk"] or ms["description"] or card["app"], "worst_case": "",
             "why_now": f"{card['urgency']['label']} (Microsoft impact score {card['impact']:g} of 10).", "steps": steps,
-            "verify": "Defender re-checks settings regularly; the setting leaves the list after its next scan and the next UC3 run.",
+            "verify": "Defender re-checks settings regularly; the setting leaves the list after its next scan.",
             "side_effects": "Test on a few PCs first." if card["user_impact"] else ""}
 
 
@@ -514,7 +515,7 @@ def build_fixes(settings: Settings, use_ai: bool = True, force: bool = False, ai
     client, ai_message = None, None
     if use_ai:
         try:
-            client = ai_client or GeminiClient(settings)
+            client = ai_client or make_client(settings)
             client.model()
         except AIUnavailable as exc:
             client, ai_message = None, str(exc)

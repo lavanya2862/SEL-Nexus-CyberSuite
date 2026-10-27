@@ -71,9 +71,9 @@ def _home(ctx) -> list[dict]:
         qa("How many vulnerabilities do we have right now?",
            f"{n(t.get('total'))} vulnerabilities ({n(t.get('cves'))} different CVEs) on {plural(t.get('devices'), 'computer')}. "
            f"{n(t.get('p1'))} of them are Priority 1, the most urgent.", [("Vulnerabilities", "/uc3")]),
-        qa("How many holes are attackers actively using?",
-           f"{n(t.get('kev'))} known exploited holes: they are on CISA's KEV list of holes attackers have really used against organisations (not necessarily against us). "
-           f"{n(t.get('ransomware'))} of them are used by ransomware gangs.", [("Fix & protect", "/fixes")]),
+        qa("How many vulnerabilities are attackers actively using?",
+           f"{n(t.get('kev'))} known exploited vulnerabilities: they are on CISA's KEV list of vulnerabilities attackers have really used against organisations (not necessarily against us). "
+           f"{n(t.get('ransomware'))} of them are used by ransomware gangs.", [("Fix", "/fixes")]),
     ]
 
 
@@ -103,7 +103,7 @@ def _threat(ctx) -> list[dict]:
              + (f"Defender sees {exp[0].get('detail')}." if exp and exp[0].get("detail") else "")
              if devices else "None of our computers have the software this threat targets, so no action is needed for now.")
     exploited = th.get("kind") == "kev" or "actively-exploited" in str(th.get("factors"))
-    second = (f"Yes. It is on CISA's list of holes attackers have really used against organisations (KEV). Rated {th.get('rating')} ({th.get('score')}/100)."
+    second = (f"Yes. It is on CISA's list of vulnerabilities attackers have really used against organisations (KEV). Rated {th.get('rating')} ({th.get('score')}/100)."
               if exploited else f"There is no sign that attackers are using it yet. Rated {th.get('rating')} ({th.get('score')}/100).")
     return [qa("Which of our computers have this?", first.strip()), qa("Are attackers using it right now?", second)]
 
@@ -162,9 +162,9 @@ def _fixes(ctx) -> list[dict]:
     devices = listing([d.get("name") for d in top.get("devices") or []])
     return [
         qa("How many apps need updating?",
-           f"{plural(len(apps), 'app')}. {n(len(now))} are marked \"Fix now\" because attackers are using their holes."),
+           f"{plural(len(apps), 'app')}. {n(len(now))} are marked \"Fix now\" because attackers are using their vulnerabilities."),
         qa("Which app should I update first?",
-           f"{top['app']}: {plural(kev, 'known exploited hole')} ({n(top.get('cves'))} CVEs in total)"
+           f"{top['app']}: {plural(kev, 'known exploited vulnerability', 'known exploited vulnerabilities')} ({n(top.get('cves'))} CVEs in total)"
            + (f", fix by {day(top['fix_by'])}" if top.get("fix_by") else "") + f". It is on {devices}.",
            [(top["app"], f"/fixes?app={quote(top['app'])}")]),
     ]
@@ -174,8 +174,8 @@ def _progress(ctx) -> list[dict]:
     try:
         rows = fixproxy.get_fix(ctx.settings.uc1_site).get("rows") or []
     except fixproxy.Uc1Unavailable:
-        msg = "I can't see the fixes right now: the fix engine isn't running. Open Fix & protect and switch it on."
-        return [qa("How many fixes are done?", msg, [("Fix & protect", "/fixes")]), qa("Did any fix fail?", msg)]
+        msg = "I can't see the fixes right now: the fix engine isn't running. Open the Fix page and switch it on."
+        return [qa("How many fixes are done?", msg, [("Fix", "/fixes")]), qa("Did any fix fail?", msg)]
     c = Counter(r.get("status") for r in rows)
     first = (f"{plural(c['verified'], 'fix', 'fixes')} confirmed by Defender"
              + (f", {n(c['done'])} done and waiting for Defender to confirm" if c["done"] else "")

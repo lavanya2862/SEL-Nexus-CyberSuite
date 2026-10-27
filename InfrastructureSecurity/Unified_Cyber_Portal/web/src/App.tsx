@@ -8,7 +8,6 @@ import { Runs } from '@/pages/Runs'
 import { Hunting } from '@/pages/uc1/Hunting'
 import { ThreatDetail } from '@/pages/uc1/ThreatDetail'
 import { ThreatNews } from '@/pages/uc1/ThreatNews'
-import { DataQuality } from '@/pages/uc3/DataQuality'
 import { FixCentre } from '@/pages/uc3/FixCentre'
 import { FixProgress } from '@/pages/uc3/FixProgress'
 import { Vulnerabilities } from '@/pages/uc3/Vulnerabilities'
@@ -28,9 +27,9 @@ export default function App() {
         {/* Preview: "Ember Glass" design at its own address; the classic design below is unchanged */}
         <Route path="glass" element={<RequireAuth><GlassShell /></RequireAuth>}>
           <Route index element={<GlassHome />} />
-          <Route path="uc1/*" element={<GlassSoon title="Threat news & hunting" />} />
+          <Route path="uc1/*" element={<GlassSoon title="Threats & hunting" />} />
           <Route path="uc3/*" element={<GlassSoon title="Vulnerability management" />} />
-          <Route path="fixes" element={<GlassSoon title="Fix & protect" />} />
+          <Route path="fixes" element={<GlassSoon title="Fix" />} />
           <Route path="reports" element={<GlassSoon title="Reports" />} />
           <Route path="*" element={<GlassSoon title="Page not found" />} />
         </Route>
@@ -39,7 +38,6 @@ export default function App() {
           <Route path="uc1/hunts" element={<Hunting />} />
           <Route path="uc1/threat/:id" element={<ThreatDetail />} />
           <Route path="uc1/:tab?" element={<ThreatNews />} />
-          <Route path="uc3/quality" element={<DataQuality />} />
           <Route path="uc3/vuln/:key" element={<VulnDetail />} />
           <Route path="uc3/:tab?" element={<Vulnerabilities />} />
           <Route path="fixes/progress" element={<FixProgress />} />

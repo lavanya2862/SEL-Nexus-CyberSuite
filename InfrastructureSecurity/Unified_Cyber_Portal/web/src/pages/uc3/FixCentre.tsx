@@ -4,9 +4,11 @@ import {
   AlertTriangle, Check, ChevronDown, Copy, ExternalLink, Loader2, Play, Search, ShieldCheck, ShoppingBasket,
   SlidersHorizontal, Sparkles, Undo2, UserRound, X, Zap,
 } from 'lucide-react'
-import { ConfirmDialog, FixLoop, StatusPill } from '@/components/FixLoop'
+import { ConfirmDialog, StatusPill } from '@/components/FixLoop'
 import { Empty, HopLink, Panel, Tabs, Tag } from '@/components/kit'
 import { FixHistory } from './FixHistory'
+import { AttackResponses } from './AttackResponses'
+import { AgentFilterBar, AgentTags, RowFound, belongs, useAgentFilter } from '@/components/AgentTags'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { FixDown, canApprove, isSetting, settingChange, useFix, useFixAction, type FixRow, type FixView } from '@/lib/fix'
@@ -33,13 +35,13 @@ const findApp = (apps: Uc3FixApp[], focus: string) => {
     ?? apps.find((a) => softwareOf(a).startsWith(f))
 }
 
-type View = 'cards' | 'settings' | 'history' | 'table'
-const VIEWS: [View, string][] = [['cards', 'Updates & upgrades'], ['settings', 'Security settings'], ['history', 'Fixed history'], ['table', 'All fixes as a table']]
+type View = 'cards' | 'settings' | 'attacks' | 'history'
+const VIEWS: [View, string][] = [['cards', 'Updates & upgrades'], ['settings', 'Security settings'], ['attacks', 'Attack responses'], ['history', 'Fixed history']]
 
 /** The fix-type chips on Updates & upgrades (?type= picks one, e.g. from the Vulnerabilities overview). */
 const KINDS: [FixKind, string, string][] = [
-  ['update', 'App updates', 'A newer version of the app closes the holes'],
-  ['os', 'Windows updates', 'The holes are in Windows itself: install the Windows update (Windows Update, WSUS or Intune), usually with a restart'],
+  ['update', 'App updates', 'A newer version of the app fixes the vulnerabilities'],
+  ['os', 'Windows updates', 'The vulnerabilities are in Windows itself: install the Windows update (Windows Update, WSUS or Intune), usually with a restart'],
   ['upgrade', 'Unsupported software', 'Past or near its end-of-support date: the vendor stops fixing it, so move to a supported version'],
   ['none', 'No fix yet', 'The vendor has not released a fix: reduce the risk another way until it comes'],
 ]
@@ -48,21 +50,21 @@ const KIND_PHRASE: Record<FixKind, [string, string]> = {
   upgrade: ['upgrade of unsupported software', 'upgrades of unsupported software'], none: ['app with no fix yet', 'apps with no fix yet'],
 }
 
-/** Act › Fix & protect: what to update and why (UC3 advice), and "fix it for me" on every computer (UC1 fix engine). */
+/** Act › Fix: what to update and why (UC3 advice), and "fix it for me" on every computer (UC1 fix engine). */
 export function FixCentre() {
   const { tab } = useParams()
   const navigate = useNavigate()
-  const view: View = tab === 'table' || tab === 'history' || tab === 'settings' ? tab : 'cards'
+  const view: View = tab === 'history' || tab === 'settings' || tab === 'attacks' ? tab : 'cards'
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Fix & protect</h1>
-          <p className="mt-1 text-sm text-ink-3">Close the holes and lock the doors before attackers use them: updates, upgrades and security settings, or let the portal fix them for you</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Fix</h1>
+          <p className="mt-1 text-sm text-ink-3">Fix the vulnerabilities and tighten the settings before attackers use them: updates, upgrades and security settings, or let the portal fix them for you</p>
         </div>
       </div>
       <Tabs<View> tabs={VIEWS} value={view} onChange={(t) => navigate(t === 'cards' ? '/fixes' : `/fixes/${t}`)} />
-      {view === 'table' ? <FixLoop /> : view === 'history' ? <FixHistory /> : view === 'settings' ? <SettingsCards /> : <FixCards />}
+      {view === 'attacks' ? <AttackResponses /> : view === 'history' ? <FixHistory /> : view === 'settings' ? <SettingsCards /> : <FixCards />}
     </div>
   )
 }
@@ -81,6 +83,7 @@ function FixCards() {
   const [kind, setKind] = useState<'all' | FixKind>(KINDS.some(([k]) => k === typeParam) ? (typeParam as FixKind) : 'all')
   const [q, setQ] = useState('')
   const [chooser, setChooser] = useState(false)
+  const agentFilter = useAgentFilter()
   const rows = useUc3View(data).rows
   const vulns = rows.length                               // the same count the Vulnerabilities page shows
   const noPatch = rows.filter((f) => f.ua === 0).length
@@ -110,7 +113,10 @@ function FixCards() {
   if (isLoading || error || !data) return <Uc3Loading error={error} />
   const X = data.fixes
   if (!X) return <Empty text="The fix guide has not been built yet. Run the vulnerability update to create it." />
-  const inOpco = X.apps.filter((a) => opco === 'all' || a.opcos.includes(opco))
+  const rowsOf = (a: Uc3FixApp) => rowsBySoftware.get(softwareOf(a)) ?? []
+  const inOpcoAll = X.apps.filter((a) => opco === 'all' || a.opcos.includes(opco))
+  const agentCounts = { uc3: inOpcoAll.filter((a) => rowsOf(a).some((r) => belongs(r, 'uc3'))).length, uc1: inOpcoAll.filter((a) => rowsOf(a).some((r) => belongs(r, 'uc1'))).length }
+  const inOpco = agentFilter.agent ? inOpcoAll.filter((a) => rowsOf(a).some(agentFilter.matches)) : inOpcoAll
   const ofKind = (k: FixKind) => inOpco.filter((a) => fixKind(a) === k).length
   const inKind = inOpco.filter((a) => kind === 'all' || fixKind(a) === kind)
   const apps = inKind.filter((a) => (level === 0 || a.urgency.level === level) && (!q || a.app.toLowerCase().includes(q.toLowerCase())))
@@ -163,6 +169,8 @@ function FixCards() {
         </div>
       </Panel>
 
+      <AgentFilterBar filter={agentFilter} counts={agentCounts} total={inOpcoAll.length} what="app fixes" />
+
       <div className="flex flex-wrap gap-1 rounded-xl border border-hairline bg-panel p-1 text-sm" role="group" aria-label="How it gets fixed">
         {([['all', 'All fixes', 'Every update and upgrade', inOpco.length], ...KINDS.map(([k, l, h]) => [k, l, h, ofKind(k)] as const)] as const).map(([k, label, hint, n]) => (
           <button key={k} onClick={() => pickKind(k)} aria-pressed={kind === k} title={hint}
@@ -192,11 +200,11 @@ function FixCards() {
       {apps.length ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
           {apps.map((a) => (
-            <FixCard key={a.key} a={a} rank={X.apps.indexOf(a) + 1} rows={rowsBySoftware.get(softwareOf(a)) ?? []}
+            <FixCard key={a.key} a={a} rank={X.apps.indexOf(a) + 1} rows={rowsOf(a)} isNew={agentFilter.isNew}
               engine={!!v} busy={act.isPending} highlight={highlighted === a} onApprove={approve} onWithdraw={withdraw} />
           ))}
         </div>
-      ) : <Empty text={kind === 'none' ? 'Nothing here: every vulnerability has a fix from its vendor.' : kind === 'os' ? 'No Windows updates needed: Defender found no holes in Windows itself.' : 'No apps match this filter.'} />}
+      ) : <Empty text={agentFilter.agent ? 'No app fixes from this agent match these filters.' : kind === 'none' ? 'Nothing here: every vulnerability has a fix from its vendor.' : kind === 'os' ? 'No Windows updates needed: Defender found no vulnerabilities in Windows itself.' : 'No apps match this filter.'} />}
 
       {v && <BasketBar v={v} />}
       {v && <UrgentChooser open={chooser} onClose={() => setChooser(false)} rows={urgentRows} onApprove={(ids) => { approve(ids); setChooser(false) }} />}
@@ -245,7 +253,7 @@ function Banner({ v, down, urgentApps, onUrgent, auto }: {
       {how && (
         <ol className="grid gap-px border-t border-signal/20 bg-signal/10 text-sm sm:grid-cols-5 animate-in fade-in duration-200">
           {[
-            ['Found', 'Defender finds an old app with known holes'],
+            ['Found', 'Defender finds an old app with known vulnerabilities'],
             ['Explained', 'The card says what’s wrong, why now and the fix'],
             ['Approved', 'You press ⚡ Fix it for me (you can take it out again)'],
             ['Fixed', 'You press Run fixes: the app is updated or removed'],
@@ -325,8 +333,8 @@ function Tracker({ total, reached }: { total: number; reached: number[] }) {
   )
 }
 
-function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw }: {
-  a: Uc3FixApp; rank: number; rows: FixRow[]; engine: boolean; busy: boolean; highlight: boolean
+function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw, isNew }: {
+  a: Uc3FixApp; rank: number; rows: FixRow[]; engine: boolean; busy: boolean; highlight: boolean; isNew: (r: FixRow) => boolean
   onApprove: (ids: string[]) => void; onWithdraw: (ids: string[]) => void
 }) {
   const kevHref = useKevThreatHref()
@@ -337,7 +345,7 @@ function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw
   const ended = pastEos(a)
   const ending = nearEos(a)
   const noPatch = a.no_patch ?? []
-  // a.findings counts only what Defender still lists, so add back the holes already fixed on other computers
+  // a.findings counts only what Defender still lists, so add back the vulnerabilities already fixed on other computers
   const fixedVulns = rows.filter((r) => cleared(r) && !isSetting(r)).reduce((s, r) => s + r.findings, 0)
   const eosList = (vs: typeof ended) => vs.map((v) => `${v.version}${v.eos?.date ? ` (${shortDate(v.eos.date)})` : ''}`).join(', ')
   return (
@@ -349,10 +357,11 @@ function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw
           <div className="min-w-0 flex-1">
             <h3 className="font-semibold leading-tight">{a.app}</h3>
             <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-ink-3">
-              <span>{a.findings + fixedVulns ? `${num(a.findings + fixedVulns)} vulnerabilities${fixedVulns ? ` · ${num(fixedVulns)} fixed` : ''}` : 'no known holes yet'}</span>
+              <span>{a.findings + fixedVulns ? `${num(a.findings + fixedVulns)} vulnerabilities${fixedVulns ? ` · ${num(fixedVulns)} fixed` : ''}` : 'no known vulnerabilities yet'}</span>
               {a.fix_by && <span title="The latest date allowed by our patching rules (SLA). Fix now still means now.">fix by {shortDate(a.fix_by)} (SLA deadline)</span>}
             </div>
             <div className="mt-1.5"><Tag tone={kindOf === 'none' ? 'warn' : undefined}>{KINDS.find(([k]) => k === kindOf)?.[1]}</Tag></div>
+            <div className="mt-1.5"><AgentTags rows={rows} /></div>
           </div>
           <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium" style={{ color: lv.color }}>
             {a.urgency.level === 1 && <AlertTriangle className="size-3.5" />}{a.urgency.label.split(':')[0]}
@@ -368,7 +377,7 @@ function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw
             {noPatch.length > 0 && (
               <li title={noPatch.join(', ')}>
                 <b style={{ color: statusColor.warning }}>No fix from the vendor yet:</b>{' '}
-                {noPatch.length >= a.cves ? 'for any of its holes' : `for ${num(noPatch.length)} of its ${num(a.cves)} holes (updating closes the others)`}.
+                {noPatch.length >= a.cves ? 'for any of its vulnerabilities' : `for ${num(noPatch.length)} of its ${num(a.cves)} vulnerabilities (updating fixes the others)`}.
                 Reduce the risk another way until the fix comes.
               </li>
             )}
@@ -388,7 +397,7 @@ function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw
           )}
           {rows.length && kindOf !== 'none' ? (
             <ul className="divide-y divide-hairline">
-              {rows.map((r) => <ComputerRow key={r.fix_id} r={r} busy={busy} onApprove={onApprove} onWithdraw={onWithdraw} />)}
+              {rows.map((r) => <ComputerRow key={r.fix_id} r={r} busy={busy} onApprove={onApprove} onWithdraw={onWithdraw} fresh={isNew(r)} />)}
             </ul>
           ) : (
             <ul className="divide-y divide-hairline">
@@ -434,7 +443,7 @@ function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw
               {a.kev_cves.map((k) => (
                 <li key={k.cve} className="flex items-start justify-between gap-2">
                   <span><span className="tabular font-medium text-ink">{k.cve}</span>{k.name ? ` · ${k.name}` : ''}</span>
-                  {kevHref(k.cve) && <HopLink to={kevHref(k.cve)!} title="What the outside world says about this hole, and whether anyone used it on us">Threat news</HopLink>}
+                  {kevHref(k.cve) && <HopLink to={kevHref(k.cve)!} title="What the outside world says about this vulnerability, and whether anyone used it on us">Threats</HopLink>}
                 </li>
               ))}
             </ul>
@@ -443,7 +452,7 @@ function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw
 
         <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-hairline pt-3 text-xs text-ink-3">
           {ai ? <><AiBadge text="AI-explained · check before acting" /></> : <Tag>Data-based text (no AI)</Tag>}
-          <HopLink to={`/uc3/all?q=${encodeURIComponent(softwareOf(a))}`} title="This app's holes in our full vulnerability list">Vulnerabilities</HopLink>
+          <HopLink to={`/uc3/all?q=${encodeURIComponent(softwareOf(a))}`} title="This app in our full vulnerability list">Vulnerabilities</HopLink>
           {a.fix.url && (
             <a href={a.fix.url} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 font-medium text-ink hover:underline">
               Official download <ExternalLink className="size-3" />
@@ -473,7 +482,7 @@ function FixedSoFar({ rows }: { rows: FixRow[] }) {
   )
 }
 
-function ComputerRow({ r, busy, onApprove, onWithdraw }: { r: FixRow; busy: boolean; onApprove: (ids: string[]) => void; onWithdraw: (ids: string[]) => void }) {
+function ComputerRow({ r, busy, onApprove, onWithdraw, fresh }: { r: FixRow; busy: boolean; onApprove: (ids: string[]) => void; onWithdraw: (ids: string[]) => void; fresh?: boolean }) {
   const what = r.action === 'setting' ? 'changes this setting' : r.action === 'remove' ? 'removes the old version' : r.action === 'replace' ? 'replaces it with the current version' : 'updates it to the latest version'
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3.5 py-2.5">
@@ -485,6 +494,7 @@ function ComputerRow({ r, busy, onApprove, onWithdraw }: { r: FixRow; busy: bool
           </div>
         )}
         <div className="mt-0.5"><StatusPill r={r} /></div>
+        <RowFound r={r} fresh={fresh} />
         {r.message && ['failed', 'done', 'still_there'].includes(r.status) && <div className="mt-0.5 line-clamp-2 text-[11px] text-ink-3">{r.message}</div>}
       </div>
       {r.action === 'none' ? (
@@ -521,6 +531,7 @@ function SettingsCards() {
   const [params] = useSearchParams()
   const [filter, setFilter] = useState<SettingFilter>('all')
   const [q, setQ] = useState(params.get('q') ?? '')                  // ?q= from the Summary's "Fix" button
+  const agentFilter = useAgentFilter()
   const v = fix.data
   const down = fix.error instanceof FixDown
   const auto = useAutoStart(down, 'fix')
@@ -537,7 +548,10 @@ function SettingsCards() {
   if (isLoading || error || !data) return <Uc3Loading error={error} />
   if (!data.fixes?.settings?.length) return <Empty text="No security-setting checks yet. Run the vulnerability update to read them from Defender." />
   const canAuto = (s: Uc3FixSetting) => (rowsByConfig.get(s.config_id) ?? []).some((r) => r.action === 'setting')
-  const inOpco = data.fixes.settings.filter((s) => opco === 'all' || s.opcos.includes(opco))
+  const settingRows = (s: Uc3FixSetting) => rowsByConfig.get(s.config_id) ?? []
+  const inOpcoAll = data.fixes.settings.filter((s) => opco === 'all' || s.opcos.includes(opco))
+  const agentCounts = { uc3: inOpcoAll.filter((s) => settingRows(s).some((r) => belongs(r, 'uc3'))).length, uc1: 0 }
+  const inOpco = agentFilter.agent ? inOpcoAll.filter((s) => settingRows(s).some(agentFilter.matches)) : inOpcoAll
   const autoCount = inOpco.filter(canAuto).length
   const shown = inOpco
     .filter((s) => (filter === 'all' || (filter === 'auto') === canAuto(s)) && (!q || s.app.toLowerCase().includes(q.toLowerCase())))
@@ -557,7 +571,7 @@ function SettingsCards() {
         </div>
         <div className="text-sm text-ink-2">
           <p>
-            Windows and Defender settings that are weaker than Microsoft recommends. They are <b>not vulnerabilities</b> (no app has a hole, so they are not in the vulnerability count)
+            Windows and Defender settings that are weaker than Microsoft recommends. They are <b>not vulnerabilities</b> (the apps themselves are fine, so they are not in the vulnerability count)
             and <b>not alerts</b> (nothing has happened): it is a door left unlocked.
           </p>
           <p className="mt-1.5">
@@ -567,6 +581,8 @@ function SettingsCards() {
           <p className="mt-1.5 text-xs text-ink-3">Defender re-checks settings by itself, usually within a day; the card then shows Verified.</p>
         </div>
       </Panel>
+
+      <AgentFilterBar filter={agentFilter} counts={agentCounts} total={inOpcoAll.length} what="security settings" />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2 text-sm">
@@ -596,7 +612,7 @@ function SettingsCards() {
       {shown.length ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
           {shown.map((s) => (
-            <SettingCard key={s.key} s={s} rows={rowsByConfig.get(s.config_id) ?? []} engine={!!v} busy={act.isPending}
+            <SettingCard key={s.key} s={s} rows={settingRows(s)} engine={!!v} busy={act.isPending} isNew={agentFilter.isNew}
               onApprove={approve} onWithdraw={withdraw} />
           ))}
         </div>
@@ -608,8 +624,9 @@ function SettingsCards() {
   )
 }
 
-function SettingCard({ s, rows, engine, busy, onApprove, onWithdraw }: {
+function SettingCard({ s, rows, engine, busy, onApprove, onWithdraw, isNew }: {
   s: Uc3FixSetting; rows: FixRow[]; engine: boolean; busy: boolean; onApprove: (ids: string[]) => void; onWithdraw: (ids: string[]) => void
+  isNew: (r: FixRow) => boolean
 }) {
   const lv = LEVEL[s.urgency.level]
   const txt = s.ai ?? {}
@@ -628,6 +645,7 @@ function SettingCard({ s, rows, engine, busy, onApprove, onWithdraw }: {
               <span>{[s.category, s.subcategory].filter(Boolean).join(' · ')}</span>
               <span title="Microsoft's own score for how much this setting matters (0-10)">impact {s.impact}/10</span>
             </div>
+            <div className="mt-1.5"><AgentTags rows={rows} /></div>
           </div>
           <span className="shrink-0 text-xs font-medium" style={{ color: lv.color }}>{s.urgency.label.split(':')[0]}</span>
         </div>
@@ -643,7 +661,7 @@ function SettingCard({ s, rows, engine, busy, onApprove, onWithdraw }: {
           </div>
           {rows.length ? (
             <ul className="divide-y divide-hairline">
-              {rows.map((r) => <ComputerRow key={r.fix_id} r={r} busy={busy} onApprove={onApprove} onWithdraw={onWithdraw} />)}
+              {rows.map((r) => <ComputerRow key={r.fix_id} r={r} busy={busy} onApprove={onApprove} onWithdraw={onWithdraw} fresh={isNew(r)} />)}
             </ul>
           ) : (
             <ul className="divide-y divide-hairline">
@@ -698,7 +716,7 @@ function SettingCard({ s, rows, engine, busy, onApprove, onWithdraw }: {
 
 /* ───────── basket bar: approved fixes waiting to run, and live progress while they run ───────── */
 
-function BasketBar({ v }: { v: FixView }) {
+export function BasketBar({ v }: { v: FixView }) {
   const act = useFixAction()
   const [review, setReview] = useState(false)
   const navigate = useNavigate()
@@ -707,6 +725,7 @@ function BasketBar({ v }: { v: FixView }) {
   const [hideDone, setHideDone] = useState('')
   const approved = v.rows.filter((r) => r.status === 'approved')
   const approvedSettings = approved.filter(isSetting).length
+  const approvedResponses = approved.filter((r) => r.action === 'respond').length
   const inFlight = v.rows.filter((r) => r.status === 'queued' || r.status === 'running')
   const busy = v.worker.running || v.worker.elsewhere || inFlight.length > 0
   const byDevice = [...new Set(approved.map((r) => r.device_name))].sort().map((d) => [d, approved.filter((r) => r.device_name === d)] as const)
@@ -740,7 +759,7 @@ function BasketBar({ v }: { v: FixView }) {
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-semibold">{approved.length} fix{approved.length === 1 ? '' : 'es'} in your basket</div>
                   <div className="truncate text-xs text-ink-3">
-                    {byDevice.map(([d, rs]) => `${d}: ${rs.length}`).join(' · ')} · clears {num(approved.reduce((n, r) => n + r.findings, 0))} findings, {approved.reduce((n, r) => n + r.kev, 0)} exploited holes{approvedSettings ? `, ${approvedSettings} security setting${approvedSettings === 1 ? '' : 's'}` : ''}
+                    {byDevice.map(([d, rs]) => `${d}: ${rs.length}`).join(' · ')} · clears {num(approved.reduce((n, r) => n + r.findings, 0))} findings, {approved.reduce((n, r) => n + r.kev, 0)} exploited vulnerabilities{approvedSettings ? `, ${approvedSettings} security setting${approvedSettings === 1 ? '' : 's'}` : ''}
                   </div>
                 </div>
                 <button onClick={() => setReview(true)} className="rounded-lg border border-hairline px-3 py-2 text-sm font-medium hover:bg-well">Review</button>
@@ -773,7 +792,7 @@ function BasketBar({ v }: { v: FixView }) {
                 <ul className="divide-y divide-hairline">
                   {rs.map((r) => (
                     <li key={r.fix_id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                      <span>{r.action === 'setting' ? 'Change setting:' : r.action === 'remove' ? 'Remove' : r.action === 'replace' ? 'Replace' : 'Update'} {r.app} <span className="text-ink-3">{r.version}</span></span>
+                      <span>{r.action === 'setting' ? 'Change setting:' : r.action === 'respond' ? 'Scan and clean after:' : r.action === 'remove' ? 'Remove' : r.action === 'replace' ? 'Replace' : 'Update'} {r.app} <span className="text-ink-3">{r.version}</span></span>
                       <button onClick={() => act.mutate({ action: 'unapprove', ids: [r.fix_id] })} className="text-xs font-medium text-ink-2 hover:text-ink">Take out</button>
                     </li>
                   ))}
@@ -789,7 +808,7 @@ function BasketBar({ v }: { v: FixView }) {
         open={confirm}
         onClose={() => setConfirm(false)}
         title={`Run ${approved.length} fix${approved.length === 1 ? '' : 'es'} now?`}
-        body={`${byDevice.map(([d, rs]) => `${d}: ${rs.length}`).join(', ')}. the assistant switches a computer on if it is off, closes the apps and updates or removes them${approvedSettings ? ', and changes the chosen security settings' : ''}. This changes the computers and the numbers on every page. Leave a switched-on VM running for about 6 hours so Defender can confirm.`}
+        body={`${byDevice.map(([d, rs]) => `${d}: ${rs.length}`).join(', ')}. the assistant switches a computer on if it is off, closes the apps and updates or removes them${approvedSettings ? ', and changes the chosen security settings' : ''}${approvedResponses ? ', and scans the computers with signs of attack and removes what Defender finds' : ''}. This changes the computers and the numbers on every page. Leave a switched-on VM running for about 6 hours so Defender can confirm.`}
         confirmLabel="Run the fixes"
         onConfirm={() => { act.mutate({ action: 'run' }); setConfirm(false); watch() }}
       />
@@ -809,7 +828,7 @@ function UrgentChooser({ open, onClose, rows, onApprove }: { open: boolean; onCl
       <DialogContent className="max-w-md border-hairline bg-panel">
         <DialogTitle className="flex items-center gap-2"><Zap className="size-5 text-signal" /> Fix all urgent apps</DialogTitle>
         <DialogDescription className="text-sm leading-relaxed text-ink-2">
-          Urgent = holes attackers are known to use (CISA KEV list). Choose the computers: their urgent fixes go into your basket. Nothing runs yet.
+          Urgent = vulnerabilities attackers are known to use (CISA KEV list). Choose the computers: their urgent fixes go into your basket. Nothing runs yet.
         </DialogDescription>
         <ul className="flex flex-col gap-2">
           {devices.map((d) => {

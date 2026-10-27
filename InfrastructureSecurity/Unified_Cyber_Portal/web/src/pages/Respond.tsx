@@ -238,7 +238,7 @@ function WhereItFits() {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       {([
-        [Wrench, 'Fix & protect', 'Prevent', 'Close the holes (old apps, unsupported software, weak settings) before anyone uses them. Planned work: days.', '/fixes'],
+        [Wrench, 'Fix', 'Prevent', 'Fix vulnerable apps, unsupported software and weak settings before anyone uses them. Planned work: days.', '/fixes'],
         [Radar, 'Attack detection', 'Detect quietly', 'Search for an attacker who got in without setting off an alarm.', '/uc1/hunts'],
         [BellRing, 'Triage', 'Respond', 'Defender has raised an alarm: decide and act. Urgent work: minutes.', null],
       ] as const).map(([Icon, title, role, text, to]) => (

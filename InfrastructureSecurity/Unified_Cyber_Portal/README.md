@@ -1,6 +1,6 @@
 # SEL Nexus CyberSuite: Unified Cyber Portal
 
-One website for the three tools: **threat intelligence and hunting** (UC1), **vulnerabilities and fixes** (UC3, with UC1's Fix Centre) and **alert response** (UC4). It has sign-in, a home overview, a notification bell and a help chat. The portal reads each tool's own data folder and talks to the UC1 and UC4 websites in the background, starting them itself when their `.venv` exists.
+One website for the three tools: **threat intelligence and hunting** (UC1), **vulnerabilities and fixes** (UC3, with UC1's Fix Centre) and **alert response** (UC4). It has sign-in, a home overview, a notification bell and a help chat. It is the only user interface: the tools make no web pages of their own. The portal reads each tool's exported data (JSON and Parquet) and calls the UC1 and UC4 services (API only) in the background, starting them itself when their `.venv` exists.
 
 ## Setup
 
@@ -34,7 +34,7 @@ cd web; npm run dev                                   # web app with hot reload
 
 | Path | Purpose |
 |---|---|
-| `src/portal/` | The API (FastAPI): sign-in, data from UC1/UC3/UC4, proxies to the UC1 and UC4 websites, background runs, notifications, help chat |
+| `src/portal/` | The API (FastAPI): sign-in, data from UC1/UC3/UC4, proxies to the UC1 and UC4 services, background runs, notifications, help chat |
 | `web/` | The web app (React + TypeScript + Vite) |
 | `config/` | `portal.env.example` |
 | `data/` | Created at run time (not in git): accounts, run history, logs |

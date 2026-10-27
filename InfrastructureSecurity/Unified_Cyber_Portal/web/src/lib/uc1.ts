@@ -61,7 +61,7 @@ export interface Uc1Data {
   periods?: Record<Period, Uc1Window>   // older UC1 output doesn't have it
 }
 
-/** Period filter of the Threat news page, kept in the address (?period=7 or 30; none = all time). */
+/** Period filter of the Threats page, kept in the address (?period=7 or 30; none = all time). */
 export type Period = '7' | '30' | 'all'
 export const PERIODS: [Period, string][] = [['7', '7 days'], ['30', '30 days'], ['all', 'All time']]
 export function usePeriod(): [Period, (p: Period) => void] {

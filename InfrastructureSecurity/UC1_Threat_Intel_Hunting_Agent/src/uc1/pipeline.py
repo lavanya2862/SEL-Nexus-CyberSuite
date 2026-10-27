@@ -1,10 +1,13 @@
 ﻿"""Two runs share this database:
 
 - Threat Intel run (`uc1 run`): collect -> inventory -> derive -> EPSS -> analyse -> exposure -> score -> link the
-  exposure to computers -> AI fix steps for the threats that affect us -> alerts -> report -> dashboard -> metrics.
+  exposure to computers -> AI fix steps for the threats that affect us -> alerts -> report -> dashboard -> metrics
+  -> fix (the fix plan, with the fixes that are new in this run).
 - Attack check run (`uc1 attack-check`): hunt in Defender for the warning signs the Threat Intel run collected ->
-  correlate (keeps earlier signs, adds new ones) -> re-score -> AI resolution steps -> alerts -> dashboard.
-The fix plan is not part of either run: rebuild it on its own with `python -m uc1 fix-plan`.
+  correlate (keeps earlier signs, adds new ones) -> re-score -> AI resolution steps -> alerts -> dashboard -> fix
+  (a scan-and-clean response for every new sign of attack).
+The fix step only PROPOSES: a person fixes or saves each new fix for later on the portal's run page (or in the Fix
+Centre), and nothing on a computer changes without that approval. `python -m uc1 fix-plan` rebuilds it on its own.
 
 Each step's failure is logged and the next steps continue with what is available. A lock file stops two runs
 (e.g. a scheduled run and a manual one) from overlapping.
@@ -20,7 +23,8 @@ import traceback
 from contextlib import contextmanager
 from datetime import datetime
 
-from uc1 import alerts, analyse, correlate, dashboard, derive, exposure, fix_advice, inventory, metrics, report, resolve, scoring
+from uc1 import alerts, analyse, attack_report, correlate, dashboard, derive, exposure, fix_advice, inventory, metrics, report, resolve, scoring
+from uc1.ai.azure_client import AzureFoundryClient, make_client
 from uc1.ai.gemini_client import AIUnavailable, GeminiClient
 from uc1.api_client import DefenderClient
 from uc1.auth import EntraTokenProvider
@@ -110,11 +114,9 @@ def make_defender(settings: Settings) -> DefenderClient | None:
     return DefenderClient(settings.api_base, EntraTokenProvider(settings))
 
 
-def make_ai(settings: Settings, store: Store) -> GeminiClient | None:
-    if not settings.has_gemini:
-        return None
+def make_ai(settings: Settings, store: Store) -> GeminiClient | AzureFoundryClient | None:
     try:
-        return GeminiClient(settings, store)
+        return make_client(settings, store)
     except AIUnavailable:
         return None
 
@@ -166,7 +168,7 @@ class Pipeline:
         self.step("products", exposure.products_from_cves, self.store)
 
     def analyse(self):
-        return self.step("analyse", analyse.run, self.store, self.ai, workers=self.settings.gemini_workers)
+        return self.step("analyse", analyse.run, self.store, self.ai, workers=self.settings.ai_workers)
 
     def score(self, name="score"):
         self.step("exposure", exposure.compute, self.store)
@@ -189,9 +191,14 @@ class Pipeline:
 
     def outputs(self):
         self.step("alerts", alerts.run, self.store, self.settings)
-        self.step("report", report.build, self.store, self.settings, self.run_id, self.ai)
+        self.step("report", report.build, self.store, self.settings, self.run_id, self.ai, self.steps)
         self.step("dashboard", lambda: str(dashboard.build(self.store, self.settings)))
         self.step("metrics", metrics.write, self.store, self.settings)
+
+    def fix_plan(self, source: str):
+        """Last step of both runs: rebuild the fix plan and list the fixes that are new in this run (proposals only)."""
+        from uc1.fix import plan as fix_plan
+        return self.step("fix_plan", fix_plan.refresh, self.store, self.settings, source)
 
     def attack_check(self) -> dict:
         """The Attack Check Agent: search our computers for the warning signs the Threat Intel run collected."""
@@ -203,7 +210,9 @@ class Pipeline:
         self.score("rescore")          # threats with new signs of attack get their rating raised
         self.resolve()
         self.step("alerts", alerts.run, self.store, self.settings)
+        self.step("report", attack_report.build, self.store, self.settings, self.run_id, self.steps)
         self.step("dashboard", lambda: str(dashboard.build(self.store, self.settings)))
+        self.fix_plan("attack_detection")
         failed = [k for k, v in self.steps.items() if v["status"] == "error"]
         status = "ok" if not failed else "partial"
         finished = utcnow()
@@ -226,6 +235,7 @@ class Pipeline:
         self.correlate()               # no hunts in this run: refreshes which computers each threat affects
         self.fix_advice()
         self.outputs()
+        self.fix_plan("threat_intel")
         failed = [k for k, v in self.steps.items() if v["status"] == "error"]
         feeds_failed = [k for k, v in (self.steps.get("collect", {}).get("result") or {}).items() if v.startswith("FAILED")]
         status = "ok" if not failed and not feeds_failed else "partial"

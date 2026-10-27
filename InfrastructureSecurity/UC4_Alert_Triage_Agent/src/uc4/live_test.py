@@ -5,7 +5,7 @@ from __future__ import annotations
 from uc4.api import ApiError, DefenderClient, graph_client
 from uc4.auth import DEFENDER_SCOPE, AuthError, EntraLogin
 from uc4.config import Settings
-from uc4.llm import AIUnavailable, GeminiLLM
+from uc4.llm import AIUnavailable, make_llm
 from uc4.tools.ti import ThreatIntel
 
 
@@ -74,15 +74,17 @@ def run(settings: Settings) -> bool:
                                  (settings.contain, "Isolate stretch", "WindowsDefenderATP Machine.Isolate")]:
             _line(None, name, f"switched {'ON' if flag else 'off'} in .env (needs {perm}; tested on first use)")
 
-    if not settings.has_gemini:
-        results.append(_line(False, "Gemini", "GEMINI_API_KEY missing in .env (without it: rules-only triage)"))
+    name = {"azure": "Azure AI Foundry", "gemini": "Gemini"}.get(settings.ai_provider, "AI")
+    llm = make_llm(settings)
+    if llm is None:
+        results.append(_line(False, name, "no AI set in .env: AZURE_FOUNDRY_ENDPOINT + _API_KEY + _DEPLOYMENT, "
+                                          "or GEMINI_API_KEY (without it: rules-only triage)"))
     else:
         try:
-            llm = GeminiLLM(settings)
             answer = llm.json("live-test", "Reply in JSON.", 'Return {"status": "READY"}', max_tokens=30)
-            results.append(_line(True, "Gemini", f"model {llm.model()} answered {answer}"))
+            results.append(_line(True, name, f"model {llm.model()} answered {answer}"))
         except AIUnavailable as exc:
-            results.append(_line(False, "Gemini", str(exc)))
+            results.append(_line(False, name, str(exc)))
 
     ti = ThreatIntel(settings)
     for name, key, fn, value in [

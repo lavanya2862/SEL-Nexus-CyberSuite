@@ -33,7 +33,7 @@ export function ThreatNews() {
   const keep = period === 'all' ? '' : `?period=${period}`   // the period follows you from tab to tab
   return (
     <div className="flex flex-col gap-5">
-      <Uc1Header title="Threat news" description="Attacks published by 10 public sources, checked against our computers" data={data} />
+      <Uc1Header title="Threats" description="Attacks published by 10 public sources, checked against our computers" data={data} />
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <Tabs<Tab> tabs={TABS} value={tab} onChange={(t) => navigate((t === 'overview' ? '/uc1' : `/uc1/${t}`) + keep)} />
         {PERIOD_TABS.includes(tab) && (
@@ -74,7 +74,7 @@ function Overview({ d }: { d: Uc1Data }) {
             <span className="text-[34px] font-medium leading-none tracking-tight">{d.posture.rating}</span>
           </div>
           <p className="mt-3 max-w-md text-sm leading-relaxed text-ink-2">
-            <b>{d.posture.urgent}</b> critical or high threats affect our computers right now, including <b>{d.posture.kev}</b> holes attackers are known to use (CISA KEV list).
+            <b>{d.posture.urgent}</b> critical or high threats affect our computers right now, including <b>{d.posture.kev}</b> vulnerabilities attackers are known to use (CISA KEV list).
             In total <b>{num(d.posture.affecting)}</b> threats affect our computers (vulnerabilities we have, or signs of attack the hunts found).
           </p>
         </div>
@@ -133,8 +133,8 @@ function Overview({ d }: { d: Uc1Data }) {
 type Reach = 'all' | 'defender' | 'early' | 'sign' | 'closed'
 const REACH: [Reach, string, string][] = [
   ['all', 'All', 'Everything that affects our computers now'],
-  ['defender', 'Confirmed by Defender', 'The news names a hole Defender also lists on our computer'],
-  ['early', 'Not in Defender yet', 'The news names a hole in an app version we have; Defender hasn’t listed it yet'],
+  ['defender', 'Confirmed by Defender', 'The news names a vulnerability Defender also lists on our computer'],
+  ['early', 'Not in Defender yet', 'The news names a vulnerability in an app version we have; Defender hasn’t listed it yet'],
   ['sign', 'Signs of attack', 'Hunt hits and clues seen on our computers'],
   ['closed', 'Defender never listed it', 'The installed version is affected, but Defender didn’t list it within 30 days (often old, unsupported apps)'],
 ]
@@ -145,7 +145,7 @@ const reachOf = (e: ExplorerRow): Exclude<Reach, 'all'> | null =>
 function AffectsUs({ d }: { d: Uc1Data }) {
   const [params, setParams] = useSearchParams()
   const dd = useDefenderDates()
-  // Threat news shows real threats only: lab tests (harmless activity made on purpose to prove the hunts work) stay out
+  // Threats shows real threats only: lab tests (harmless activity made on purpose to prove the hunts work) stay out
   const real = d.explorer.filter((e) => reachOf(e) && !e.test)
   const show = REACH.find(([r]) => r === params.get('show'))?.[0] ?? 'all'
   const sev = RATINGS.find((r) => r === params.get('sev')) ?? 'All'
@@ -182,10 +182,10 @@ function AffectsUs({ d }: { d: Uc1Data }) {
           )
         })}
       </div>
-      <p className="text-sm text-ink-3">{REACH.find(([r]) => r === show)![2]}. Most dangerous first; open one to see the hole, where it is, its timeline and how to fix it. Ratings come from fixed rules, never the AI.</p>
+      <p className="text-sm text-ink-3">{REACH.find(([r]) => r === show)![2]}. Most dangerous first; open one to see the vulnerability, where it is, its timeline and how to fix it. Ratings come from fixed rules, never the AI.</p>
       {rows.length
         ? rows.map((e, i) => <AffectCard key={e.id} e={e} story={storyOf(e, dd)} openAtStart={i === 0} />)
-        : <Empty text={show === 'early' ? 'Nothing waiting for Defender right now: every hole the news names for our app versions is already in Defender.' : 'Nothing here right now.'} />}
+        : <Empty text={show === 'early' ? 'Nothing waiting for Defender right now: every vulnerability the news names for our app versions is already in Defender.' : 'Nothing here right now.'} />}
     </div>
   )
 }
@@ -283,7 +283,7 @@ function AffectDetail({ e, story }: { e: ExplorerRow; story: Story | null }) {
         )}
         <div className="mt-3 flex flex-wrap gap-2">
           {fixApp && (
-            <Link to={`/fixes?sw=${encodeURIComponent(fixApp)}`} title="Open in Fix & protect (you can let the portal fix it)" className="inline-flex items-center gap-1 rounded-md bg-blue/15 px-2.5 py-1.5 text-xs font-semibold text-sky transition-colors hover:bg-blue/25">
+            <Link to={`/fixes?sw=${encodeURIComponent(fixApp)}`} title="Open on the Fix page (you can let the portal fix it)" className="inline-flex items-center gap-1 rounded-md bg-blue/15 px-2.5 py-1.5 text-xs font-semibold text-sky transition-colors hover:bg-blue/25">
               <Zap className="size-3" /> Fix it
             </Link>
           )}
@@ -594,7 +594,7 @@ function Health({ d }: { d: Uc1Data }) {
     ['New threats assessed', `${num(Number(m.pct_assessed) || 0)}%`, 'analysed ÷ collected'],
     ['Threat hunts completed', `${num(Number(m.hunts_completed) || 0)} (≈${num(Number(m.hunts_per_month_projected) || 0)} a month)`, `${m.hunts_per_run} per run`],
     ['Proactive threats identified', num(Number(m.proactive_threats_identified) || 0), 'threats matched to our computers'],
-    ['Holes on our computers that attackers are known to use', num(Number(m.exposed_actively_exploited) || 0), 'CISA KEV'],
+    ['Vulnerabilities on our computers that attackers are known to use', num(Number(m.exposed_actively_exploited) || 0), 'CISA KEV'],
     ['Reports published', num(Number(m.reports_published) || 0), 'last 30 days'],
     ['Manual effort equivalent', `${num(Number(m['manual_hours_equivalent (assumption)']) || 0)} h`, 'assumption (config/metrics_assumptions.csv)'],
     ['AI calls · corrected by checks', `${num(Number(m.ai_calls) || 0)} · ${m.ai_items_corrected_by_guard ?? '–'}`, 'automatic fact checks'],

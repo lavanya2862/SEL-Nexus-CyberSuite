@@ -120,7 +120,7 @@ def _uc1_part(uc1: UC1, now: datetime) -> dict:
     ok = last.get("status") in ("ok", None) and not last.get("failed_steps")
     message = "Run completed" if ok and not failed else f"Problems: {', '.join(map(str, failed))}" if failed \
         else f"Last run: {last.get('status', 'unknown')}"
-    health = _health("uc1", "Threat news and attack hunting", ok, finished, generated, message, now,
+    health = _health("uc1", "Threats and attack hunting", ok, finished, generated, message, now,
                      {"run_id": last.get("run_id"), "model": data.get("model")})
 
     metrics = data.get("metrics") or {}

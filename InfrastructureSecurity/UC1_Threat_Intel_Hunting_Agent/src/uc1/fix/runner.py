@@ -5,6 +5,7 @@ Judging uses the installed versions the script reads from Windows before and aft
   remove   ok when nothing matching the old version is left
   replace  ok when the old version is gone (a failed install of the new one is reported but doesn't undo the fix)
   setting  ok when the value the script reads back afterwards is the value the catalogue asks for
+  respond  (a sign of attack) ok when the Defender scan ran and no active threat is left afterwards
 "done" means fixed on the computer; it becomes "verified" when Defender's next inventory no longer lists it.
 """
 
@@ -87,6 +88,8 @@ def judge(action: str, result: dict | None) -> tuple[str, str]:
         return "failed", "The computer did not report a result (see the output)."
     if action == "setting":
         return judge_setting(result)
+    if action == "respond":
+        return judge_response(result)
     before, after = result.get("before") or [], result.get("after") or []
     if isinstance(before, dict):
         before = [before]
@@ -115,7 +118,7 @@ def judge(action: str, result: dict | None) -> tuple[str, str]:
         if code in OK_CODES:
             return "done", f"Old version removed ({_fmt(before)}); now installed: {_fmt(after)}." + reboot
         return "done", f"Old version removed ({_fmt(before)}), but installing the current one failed (exit {code}). " \
-                       "The hole is closed; install the new version later if it's needed." + reboot
+                       "The vulnerability is fixed; install the new version later if it's needed." + reboot
     return "failed", f"Unknown action {action}"
 
 
@@ -135,6 +138,20 @@ def judge_setting(result: dict) -> tuple[str, str]:
         return "done", (f"Already set correctly on the computer ({wanted}); Defender's data was older and its next "
                         "check will clear it.")
     return "done", f"Changed from {_shown(before)} to {after}."
+
+
+def judge_response(result: dict) -> tuple[str, str]:
+    """Scan and clean (a sign of attack): done when the scan ran and Defender lists no active threat afterwards."""
+    before, after = int(result.get("before") or 0), int(result.get("after") or 0)
+    if result.get("error"):
+        return "failed", f"The Defender scan could not run: {result['error']}"
+    if after:
+        names = ", ".join(result.get("found") or []) or "see Defender"
+        return "failed", f"Scanned, but Defender still lists {after} active threat{'s' * (after != 1)} ({names}). " \
+                         "Look at the computer in Defender; isolate it there if needed."
+    if before:
+        return "done", f"Scanned and cleaned: Defender removed {before} active threat{'s' * (before != 1)}."
+    return "done", "Scanned with Defender: no active threat found on the computer."
 
 
 class FixRunner:
@@ -205,6 +222,7 @@ class FixRunner:
             with self.state.edit() as data:
                 data["fixes"][fid].update(status="running", started_at=utcnow().isoformat())
             what = f"change setting '{item['app']}'" if item["action"] == "setting" else \
+                f"scan and clean after '{item['app']}'" if item["action"] == "respond" else \
                 f"{item['action']} {item['app']} {item['version']}"
             self._say(f"{device}: {what} via {method}", fid)
             output, result = "", None

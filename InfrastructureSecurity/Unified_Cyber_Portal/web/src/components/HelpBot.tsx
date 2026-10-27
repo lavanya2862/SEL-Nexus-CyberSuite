@@ -115,7 +115,7 @@ export function HelpBot() {
 
   return (
     <>
-      {/* the bubble: raised on Fix & protect so it never covers the basket's Run fixes button */}
+      {/* the bubble: raised on Fix so it never covers the basket's Run fixes button */}
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label={open ? 'Close chat' : 'Open chat'}

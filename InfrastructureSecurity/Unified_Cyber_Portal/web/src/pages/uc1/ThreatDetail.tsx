@@ -159,7 +159,7 @@ function Detail({ t }: { t: T }) {
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <Card title="On our computers" description="Where Microsoft Defender says we have this, and the fix"
-          action={fixSw(t) ? <Link to={`/fixes?sw=${encodeURIComponent(fixSw(t)!)}`} title="Open in Fix & protect (you can let the portal fix it)" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Fix</Link> : undefined}>
+          action={fixSw(t) ? <Link to={`/fixes?sw=${encodeURIComponent(fixSw(t)!)}`} title="Open on the Fix page (you can let the portal fix it)" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Fix</Link> : undefined}>
           {t.exposure.length ? (
             <DTable head={[['Computer'], ['How we know'], ['Fix']]} minWidth={440}>
               {t.exposure.map((e, i) => (
@@ -190,7 +190,7 @@ function Detail({ t }: { t: T }) {
                 <tr key={c.id} className="align-top">
                   <td className="tabular whitespace-nowrap font-medium">
                     {c.id}{c.description && <div className="mt-1 max-w-[260px] whitespace-normal text-[11px] font-normal leading-snug text-ink-3 line-clamp-3">{c.description}</div>}
-                    {t.exposure.length > 0 && <div className="mt-1.5"><HopLink to={`/uc3/all?q=${encodeURIComponent(c.id)}`} title="This hole in our full vulnerability list">Vulnerabilities</HopLink></div>}
+                    {t.exposure.length > 0 && <div className="mt-1.5"><HopLink to={`/uc3/all?q=${encodeURIComponent(c.id)}`} title="This CVE in our full vulnerability list">Vulnerabilities</HopLink></div>}
                   </td>
                   <td className="tabular text-right">{c.cvss ?? '–'}{c.severity && <div className="text-[11px] text-ink-3">{c.severity.toLowerCase()}</div>}</td>
                   <td className="tabular text-right">{c.epss != null ? `${(c.epss * 100).toFixed(1)}%` : '–'}</td>
@@ -250,7 +250,7 @@ function Detail({ t }: { t: T }) {
   )
 }
 
-/** The app behind this threat on our computers ("CVE-… via winrar 5.80.0.0" → winrar), for the Fix & protect link. */
+/** The app behind this threat on our computers ("CVE-… via winrar 5.80.0.0" → winrar), for the Fix link. */
 function fixSw(t: T): string | null {
   const m = t.exposure.map((e) => e.detail.match(/ via (\S+) /)?.[1]).find(Boolean)
   return m ?? null

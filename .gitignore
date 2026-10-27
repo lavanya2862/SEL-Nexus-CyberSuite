@@ -31,3 +31,14 @@ __pycache__/
 # ---- Local tool and editor state
 .claude/
 .impeccable/
+
+# ---- Drafts, decks and notes (only READMEs are kept)
+*.md
+!README.md
+*.ppt
+*.pptx
+~$*
+
+# ---- Data backups made by a restore
+data.before-restore/
+*.db

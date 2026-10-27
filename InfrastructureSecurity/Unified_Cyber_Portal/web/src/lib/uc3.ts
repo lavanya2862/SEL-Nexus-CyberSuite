@@ -2,6 +2,7 @@
 // The helpers mirror UC3's app.js so every number matches the UC3 dashboard exactly.
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useShownName } from '@/lib/deviceNames'
 import { useFilters } from '@/lib/filters'
 
 export const SEVS = ['Critical', 'High', 'Medium', 'Low', 'Unrated'] as const
@@ -160,6 +161,14 @@ export function useUc3View(data: Uc3Data | undefined) {
 }
 
 export type Uc3View = ReturnType<typeof useUc3View>
+
+/** " · OpCo" after a computer's name, or nothing when the group would only repeat the name on screen
+ *  (config/device_names.csv shows both opca-wks-01 and OpCo A as "VM 1", which read "VM 1 · VM 1"). */
+export function useGroupAfter() {
+  const shown = useShownName()
+  return (f: { dev?: Uc3Device; o: string }) =>
+    f.o && shown(f.o).toLowerCase() !== shown(f.dev?.name ?? '').toLowerCase() ? ` · ${f.o}` : ''
+}
 
 /** One finding = one CVE in one app version on one computer; this key names it in the detail page's address. */
 export const findingKey = (f: Finding) => [f.dev?.id, f.cve, f.sw, f.ver].join('|')

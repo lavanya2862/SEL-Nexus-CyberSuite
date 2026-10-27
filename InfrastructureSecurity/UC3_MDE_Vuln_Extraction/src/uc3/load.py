@@ -5,7 +5,8 @@
   data/lake/changes/snapshot_date=<date>/part-0.parquet           change events collected that day
 
 Field names are matched case-insensitively (Defender's export files use `DeviceId`, its JSON answers use
-`deviceId`), unknown fields are ignored and missing ones become empty. Re-loading a day replaces it.
+`deviceId`), unknown fields are ignored and missing ones become empty. Re-loading a day replaces it. A finding the
+export lists twice is kept once (the newest copy); the count dropped goes to data/raw/<date>/load.json.
 """
 
 from __future__ import annotations
@@ -116,6 +117,23 @@ def normalise(records: Iterable[dict], fields: list) -> dict[str, list]:
     return columns
 
 
+def keep_newest(columns: dict[str, list]) -> tuple[dict[str, list], int]:
+    """One row per record_id: the copy Defender saw last. Its export can list a finding twice, an older copy next to
+    the current one (seen when software is removed and detected again), differing only in first/last seen.
+    Returns the columns and how many copies were dropped."""
+    seen, newest = columns["last_seen"], {}
+    for i, record_id in enumerate(columns["record_id"]):
+        key = record_id if record_id is not None else ("row", i)
+        j = newest.get(key)
+        if j is None or (seen[i] or datetime.min) >= (seen[j] or datetime.min):
+            newest[key] = i
+    dropped = len(columns["record_id"]) - len(newest)
+    if not dropped:
+        return columns, 0
+    keep = sorted(newest.values())
+    return {name: [values[i] for i in keep] for name, values in columns.items()}, dropped
+
+
 def _read_jsonl_gz(paths: Iterable[Path]) -> Iterator[dict]:
     for path in paths:
         with gzip.open(path, "rt", encoding="utf-8") as fh:
@@ -150,6 +168,8 @@ def run_load(settings: Settings, run_date: date | None = None) -> dict:
     settings.ensure_dirs()
 
     vulns = normalise(_read_jsonl_gz(sorted((raw / "vulnerabilities").glob("*.json.gz"))), VULNERABILITY_FIELDS)
+    vulns, duplicates_dropped = keep_newest(vulns)
+    (raw / "load.json").write_text(json.dumps({"duplicates_dropped": duplicates_dropped}, indent=2))
     devices = normalise(_read_jsonl_gz([raw / "machines.json.gz"]), DEVICE_FIELDS)
     devices["rbac_group_name"] = [g or UNASSIGNED for g in devices["rbac_group_name"]]
     changes_file = raw / "changes.json.gz"
@@ -159,5 +179,6 @@ def run_load(settings: Settings, run_date: date | None = None) -> dict:
         "vulnerability_rows": _write_partition(settings.lake_dir, "vulnerabilities", run_date, vulns, VULNERABILITY_FIELDS),
         "devices": _write_partition(settings.lake_dir, "devices", run_date, devices, DEVICE_FIELDS),
         "change_rows": _write_partition(settings.lake_dir, "changes", run_date, changes, CHANGE_FIELDS),
+        "duplicates_dropped": duplicates_dropped,
     }
     return {"run_date": run_date.isoformat(), "counts": counts}

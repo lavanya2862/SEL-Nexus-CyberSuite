@@ -32,7 +32,6 @@ class Settings:
     host: str = "127.0.0.1"
     port: int = 8800
     uc1_site: str = "http://127.0.0.1:8700"
-    uc3_site: str = "http://127.0.0.1:8600"
     uc4_site: str = "http://127.0.0.1:8900"
     # sign-in (see auth.py): local = accounts kept by the portal, cognito = Amazon Cognito user pool, off = nobody signs in
     auth_mode: str = "local"
@@ -65,7 +64,6 @@ def load_settings() -> Settings:
         uc4_dir=Path(env.get("PORTAL_UC4_DIR", ROOT_DIR / "UC4_Alert_Triage_Agent")),
         port=int(env.get("PORTAL_PORT", 8800)),
         uc1_site=env.get("PORTAL_UC1_SITE", "http://127.0.0.1:8700"),
-        uc3_site=env.get("PORTAL_UC3_SITE", "http://127.0.0.1:8600"),
         uc4_site=env.get("PORTAL_UC4_SITE", "http://127.0.0.1:8900"),
         auth_mode=env.get("PORTAL_AUTH", "local").strip().lower(),
         signup_open=_on(env.get("PORTAL_SIGNUP"), True),

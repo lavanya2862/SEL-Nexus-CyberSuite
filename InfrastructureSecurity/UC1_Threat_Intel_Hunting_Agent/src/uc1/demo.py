@@ -63,7 +63,7 @@ def notes(store: Store, settings: Settings) -> str:
     else:
         lines.append("- No hits: real indicators were not found on our devices (a real 'we're clean' result). "
                      "Run the 3 lab tests first if you want to show a positive find.")
-    lines += ["", "## 5. Report and alert", f"- Latest report: {report}", "- Dashboard: data\\dashboard\\dashboard.html", "",
+    lines += ["", "## 5. Report and alert", f"- Latest report: {report}", "- Dashboard: the Threats page of the Unified Cyber Portal", "",
               "## 6. Metrics",
               f"- Median time to assess: {m['median_minutes_to_assess']} min · to report: {m['median_minutes_to_report']} min",
               f"- Manual effort equivalent (assumption): {m['manual_hours_equivalent (assumption)']} h", "",

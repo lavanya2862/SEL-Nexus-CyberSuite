@@ -62,7 +62,7 @@ def http(ctx: FeedContext, method: str, url: str, *, attempts: int = 5, timeout:
     for attempt in range(1, attempts + 1):
         try:
             response = ctx.session.request(method, url, headers=headers, timeout=timeout, **kwargs)
-        except (requests.ConnectionError, requests.Timeout) as exc:
+        except (requests.ConnectionError, requests.Timeout, requests.exceptions.ChunkedEncodingError) as exc:
             reason = f"network error ({exc.__class__.__name__})"
         else:
             if response.status_code < 400:

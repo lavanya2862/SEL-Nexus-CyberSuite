@@ -6,7 +6,8 @@ import { useAuth } from '@/lib/auth'
 // attack = the Attack Detection Agent (UC1's attack-check run, on its own so it can run more often than the news)
 export type UcKey = 'uc1' | 'uc3' | 'uc4' | 'attack'
 export const UC_KEYS: UcKey[] = ['uc3', 'uc1', 'attack', 'uc4']
-export type StepStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped'
+/** waiting = the Fix stage: done by the agent, waiting for a person to decide on every new fix */
+export type StepStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped' | 'waiting'
 
 export interface RunStep {
   key: string
@@ -20,6 +21,15 @@ export interface RunStep {
 
 export interface RunFact { label: string; value: string; hint: string }
 
+/** The Vulnerability Agent's Fix stage: the fixes this run proposed (fix engine ids), waiting for a person */
+export interface RunFix {
+  new: number; new_ids: string[]; waiting: number; saved: number; fixable?: number; urgent?: number; verified?: number
+  /** how many of the new ones are app updates / security settings (unknown for older runs) */
+  new_apps?: number; new_settings?: number
+  /** live, from the fix engine's decisions: new fixes still to decide, and decided ones */
+  open?: number; to_fix?: number; saved_now?: number
+}
+
 export interface RunState {
   run_id: string
   uc: UcKey
@@ -31,9 +41,14 @@ export interface RunState {
   steps: RunStep[]
   facts: RunFact[]
   report_file: string | null
+  report_files?: string[]
+  files_from?: 'uc1' | 'uc3' | 'uc4'
   lines: number
   log_tail: string[]
   typical_seconds?: number | null
+  fix?: RunFix | null
+  /** the Fix stage still has new fixes nobody decided on */
+  waiting_for_you?: boolean
 }
 
 export type Runs = Record<UcKey, RunState | null>
@@ -44,19 +59,22 @@ export const PLANNED_STEPS: Record<UcKey, { label: string; description: string }
     { label: 'Extract', description: 'Collect every weakness from Microsoft Defender' },
     { label: 'Validate', description: "Save today's copy and check nothing is missing" },
     { label: 'Score and report', description: 'Rate each problem and prepare the report numbers' },
-    { label: 'Advice agent', description: "AI writes the steps to fix every problem" },
+    { label: 'Remediation agent', description: "AI writes the steps to fix every problem" },
+    { label: 'Fix', description: 'Propose the fixes that are new in this run; you approve each one below' },
   ],
   uc1: [
     { label: 'Gather threat news and understand it', description: 'New threats from 10 public feeds; AI reads each one and how likely it is to be used' },
     { label: 'Check if it affects us', description: 'Is the software these threats target on our computers?' },
     { label: 'Write fix steps', description: "AI writes how to fix each threat that affects us, checked against Defender's data" },
     { label: 'Write the report', description: 'The new threats that affect us and how to fix them, alerts and the report' },
+    { label: 'Fix', description: 'Propose the fixes that are new in this run; you approve each one below' },
   ],
   attack: [
     { label: 'Search our computers', description: 'Look in Microsoft Defender (last 30 days) for the warning signs from threat news and known attacker tricks' },
     { label: 'Connect the evidence', description: 'Who was logged in and what Defender said; earlier signs are kept, new ones added' },
     { label: 'Write resolution steps', description: 'AI writes how to resolve each new sign of attack, checked against the evidence' },
     { label: 'Publish', description: 'Update the Attack detection page and raise alerts' },
+    { label: 'Fix', description: 'Propose a Defender scan-and-clean for every new sign of attack; you approve each one below' },
   ],
   uc4: [
     { label: 'Read new alerts', description: 'New or changed incidents from Microsoft Defender and Sentinel' },
@@ -67,7 +85,7 @@ export const PLANNED_STEPS: Record<UcKey, { label: string; description: string }
 }
 
 // What people see instead of 'UC1/UC3/UC4' (the same names as the side menu)
-export const UC_LABEL: Record<UcKey, string> = { uc1: 'Threat news', uc3: 'Vulnerabilities', uc4: 'Alert triage', attack: 'Attack detection' }
+export const UC_LABEL: Record<UcKey, string> = { uc1: 'Threats', uc3: 'Vulnerabilities', uc4: 'Alert triage', attack: 'Attack detection' }
 // The four agents (each does one job end to end)
 export const UC_SHORT: Record<UcKey, string> = { uc1: 'Threat Intel', uc3: 'Vulnerability', uc4: 'Alert Triage', attack: 'Attack Detection' }   // under an 'Agents' heading
 export const UC_NAME: Record<UcKey, string> = { uc1: 'Threat Intel Agent', uc3: 'Vulnerability Agent', uc4: 'Alert Triage Agent', attack: 'Attack Detection Agent' }

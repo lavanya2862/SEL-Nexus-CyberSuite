@@ -1,6 +1,6 @@
 """The words UC4 shows for its verdicts: Microsoft Defender's own classification terms (chosen 5 Oct 2026), each with
 a plain-English hint. Internal codes (likely_true_positive, ...) never change; only these display words do.
-The website's copy of this table is VERDICT in site_assets/app.js: keep both in step.
+The portal shows these words as they come in UC4's exported data.
 """
 
 VERDICT_LABEL = {

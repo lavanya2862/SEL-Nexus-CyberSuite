@@ -99,6 +99,9 @@ def ver2(version: str) -> str:
 def build_spec(item: dict, allow_choco: bool = True) -> dict:
     """What the script on the VM gets (base64 JSON). Built from the catalogue row only."""
     action = item["action"]
+    if action == "respond":
+        return {"id": item["fix_id"], "action": "respond", "kind": "scan_clean", "check": [], "remove": [], "procs": [],
+                "allow_choco": False}
     if action == "setting":
         return {"id": item["fix_id"], "action": "setting", "kind": item["setting_kind"], "target": item["setting_target"],
                 "value": item["setting_value"], "check": [], "remove": [], "procs": [], "allow_choco": False}
@@ -148,6 +151,54 @@ def setting_items(store: Store, settings: Settings, catalog: dict[str, dict] | N
     return items
 
 
+RESPONSE_STAGE = 1
+_EVIDENCE = re.compile(r"^Hunt '[^']*': ")
+
+
+def response_items(store: Store, settings: Settings, limit_devices: bool = True) -> list[dict]:
+    """One row per sign of attack (attack check finding): scan that computer with Defender and remove what it finds.
+    The only response the fix engine can do with its permissions (Machine.LiveResponse / Azure Run Command);
+    isolating a computer needs Machine.Isolate and stays a job for a person in Defender. Not a vulnerability:
+    findings/CVEs stay 0. Findings are kept from run to run, so these rows never turn "verified"."""
+    rows = store.query("""
+        SELECT f.finding_id, f.kind, f.device_id, f.device_name, COALESCE(f.opco, d.opco, 'Unassigned') AS opco,
+               f.detail, f.timeline, f.is_test, f.created_at
+        FROM findings f LEFT JOIN devices d ON d.device_id = f.device_id
+        WHERE f.kind <> 'exposure' AND f.device_name IS NOT NULL""")
+    items = []
+    for r in rows:
+        if limit_devices and settings.fix_devices and r["device_name"].lower() not in settings.fix_devices:
+            continue
+        timeline = json.loads(r["timeline"]) if isinstance(r["timeline"], str) else (r["timeline"] or [])
+        evidence = _EVIDENCE.sub("", str((timeline[-1] if timeline else {}).get("what") or ""))[:200]
+        sign = "Warning sign found" if r["kind"] == "ioc_hit" else "Suspicious behaviour"
+        items.append({
+            "device_id": r["device_id"], "device_name": r["device_name"], "opco": r["opco"], "kind": "response",
+            "software_name": f"response:{r['finding_id']}", "finding_id": r["finding_id"], "vendor": "", "version": "",
+            "app": r["detail"] or sign, "fix_id": fix_id(r["device_name"], f"response:{r['finding_id']}", ""),
+            "findings": 0, "cves": 0, "kev": 0, "ransomware": 0, "max_epss": 0, "max_cvss": 0, "kev_cves": [],
+            "winget_id": "", "choco_id": "", "match": "", "processes": [], "stage": RESPONSE_STAGE, "action": "respond",
+            "category": sign + (" (test)" if r["is_test"] else ""), "note": evidence,
+            "snapshot_at": r["created_at"].isoformat() if isinstance(r["created_at"], datetime) else r["created_at"]})
+    return items
+
+
+def threats_by_fix(store: Store) -> dict[tuple, list[dict]]:
+    """(device_id, software, version) -> the news threats that target it on that computer (exact CVE exposure:
+    the threat names a CVE that Defender lists for this app version there). Most urgent first, at most 3."""
+    rows = store.query("""
+        SELECT DISTINCT v.device_id, v.name, v.version, e.threat_id, t.title, COALESCE(s.score, 0) AS score
+        FROM device_vulns v
+        JOIN exposure e ON e.device_id = v.device_id AND e.match_type = 'cve' AND e.detail LIKE v.cve_id || ' via %'
+        LEFT JOIN threats t ON t.threat_id = e.threat_id LEFT JOIN scores s ON s.threat_id = e.threat_id""")
+    out: dict[tuple, list[dict]] = {}
+    for r in sorted(rows, key=lambda r: -r["score"]):
+        found = out.setdefault((r["device_id"], r["name"], r["version"]), [])
+        if len(found) < 3 and all(f["id"] != r["threat_id"] for f in found):
+            found.append({"id": r["threat_id"], "title": (r["title"] or r["threat_id"])[:140]})
+    return out
+
+
 def compute(store: Store, settings: Settings, catalog: dict[str, dict] | None = None, limit_devices: bool = True,
             setting_catalog: dict[str, dict] | None = None) -> list[dict]:
     """The plan rows. limit_devices=False ignores FIX_DEVICES (verification needs every computer Defender lists)."""
@@ -180,7 +231,11 @@ def compute(store: Store, settings: Settings, catalog: dict[str, dict] | None = 
         if item["action"] != "none" and item["kev"] and item["stage"] > 1:
             item["stage"] = 1                                     # anything actively exploited is urgent
         items.append(item)
+    threats = threats_by_fix(store)
+    for item in items:
+        item["threats"] = threats.get((item["device_id"], item["software_name"], item["version"]), [])
     items += setting_items(store, settings, setting_catalog, limit_devices)
+    items += response_items(store, settings, limit_devices)
     items.sort(key=lambda i: (i["stage"], -i["ransomware"], -i["kev"], -i["findings"], i["device_name"]))
     return items
 
@@ -224,17 +279,18 @@ def verify(state: FixState, current_ids: set[str], inventory_at: datetime | None
     with state.edit() as data:
         for fid, f in data["fixes"].items():
             status = f.get("status")
-            done_at, approved_at = f.get("finished_at"), f.get("approved_at")
+            done_at, decided_at = f.get("finished_at"), f.get("approved_at") or f.get("saved_at")
             if fid not in current_ids and status in ("done", "failed", "still_there") and after(done_at) \
                     and seen_since(f, done_at):
                 f.update(status="verified", verified_at=now.isoformat())
                 event(data, f"Verified by Defender: {_label(f)} is no longer vulnerable", fid)
                 counts["verified"] += 1
-            elif fid not in current_ids and status == "approved" and after(approved_at) and seen_since(f, approved_at):
+            elif fid not in current_ids and status in ("approved", "saved") and after(decided_at) and seen_since(f, decided_at):
                 f.update(status="gone", verified_at=now.isoformat())
                 event(data, f"{_label(f)} disappeared from Defender before UC1 fixed it", fid)
                 counts["gone"] += 1
-            elif fid in current_ids and status == "done" and after(done_at) and seen_since(f, done_at) and \
+            elif fid in current_ids and status == "done" and (f.get("item") or {}).get("kind") != "response" \
+                    and after(done_at) and seen_since(f, done_at) and \
                     now - datetime.fromisoformat(done_at) > STILL_THERE_AFTER:
                 f["status"] = "still_there"
                 event(data, f"Still listed by Defender 24 h after the fix: {_label(f)}", fid)
@@ -252,9 +308,29 @@ def _what(item: dict) -> str:
     return f"{app} on {item.get('device_name', '?')}"
 
 
-def refresh(store: Store, settings: Settings) -> dict:
-    """Pipeline step: rebuild data/fix/plan.json and verify earlier fixes."""
+# The agents whose runs end with this step, and the fixes each one is about. One fix is one card: an app fix that a
+# news threat targets belongs to both the Vulnerability and the Threat Intel Agent, and one decision covers both.
+DOMAINS = {
+    "vulnerability": lambda i: i.get("kind") != "response",                          # Defender's vulnerabilities + settings
+    "threat_intel": lambda i: i.get("kind") != "response" and bool(i.get("threats")),  # ... that a threat in the news targets
+    "attack_detection": lambda i: i.get("kind") == "response",                        # responses to signs of attack
+}
+SOURCES = set(DOMAINS)
+
+
+def refresh(store: Store, settings: Settings, source: str | None = None) -> dict:
+    """Pipeline step: rebuild data/fix/plan.json and verify earlier fixes.
+
+    Every row keeps found_by = {agent: when that agent's run first flagged it} (None = before this was recorded).
+    New fixes for this run = fixable rows in the agent's domain (DOMAINS) that this agent had not flagged yet and
+    nobody has decided on (plan["new_ids"]); the agent's Fix stage shows them as cards to fix or save for later.
+    A manual `fix-plan` (no source) flags nothing.
+    """
     settings.fix_dir.mkdir(parents=True, exist_ok=True)
+    source = source if source in SOURCES else None
+    previous = {i["fix_id"]: i for i in read_plan(settings).get("items", [])}
+    # first plan with found_by: whatever the old plan had was found before recording started (no flood of "new")
+    migrating = bool(previous) and not any("found_by" in i for i in previous.values())
     everything = compute(store, settings, limit_devices=False)      # verification looks at every computer
     items = [i for i in everything if not settings.fix_devices or i["device_name"].lower() in settings.fix_devices]
     inventory_at = store.scalar("SELECT MAX(snapshot_at) FROM devices")
@@ -265,11 +341,36 @@ def refresh(store: Store, settings: Settings) -> dict:
         installed.setdefault((str(r["device_name"]).lower(), str(r["name"]).lower()), set()).add(str(r["version"]))
     state = FixState(settings.fix_dir / "state.json")
     checked = verify(state, {i["fix_id"] for i in everything}, inventory_at, devices=devices, installed=installed)
-    plan = {"generated_at": utcnow().isoformat(), "inventory_at": inventory_at.isoformat() if inventory_at else None,
-            "stages": STAGES, "items": items}
-    (settings.fix_dir / "plan.json").write_text(json.dumps(plan, default=str, ensure_ascii=False), encoding="utf-8")
+    decided = state.read()["fixes"]
     fixable = [i for i in items if i["action"] != "none"]
-    return {"items": len(items), "fixable": len(fixable), "urgent": sum(1 for i in fixable if i["stage"] == 1), **checked}
+    now = utcnow().isoformat()
+    for item in items:
+        old = previous.get(item["fix_id"])
+        found = dict((old or {}).get("found_by") or {})
+        if (old or {}).get("proposed_by"):                           # plans from the day before found_by
+            found.setdefault(old["proposed_by"], old.get("proposed_at"))
+        if migrating and old is not None:
+            for agent, belongs in DOMAINS.items():
+                if belongs(item):
+                    found.setdefault(agent, None)
+        item["found_by"] = found
+    new_ids = []
+    if source:
+        for item in fixable:
+            if DOMAINS[source](item) and source not in item["found_by"]:
+                item["found_by"][source] = now
+                if item["fix_id"] not in decided:
+                    new_ids.append(item["fix_id"])
+    plan = {"generated_at": now, "inventory_at": inventory_at.isoformat() if inventory_at else None,
+            "stages": STAGES, "items": items, "new_ids": new_ids}
+    (settings.fix_dir / "plan.json").write_text(json.dumps(plan, default=str, ensure_ascii=False), encoding="utf-8")
+    waiting = sum(1 for i in fixable if i["fix_id"] not in decided and i["fix_id"] not in new_ids)
+    saved = sum(1 for f in decided.values() if f.get("status") == "saved")
+    return {"items": len(items), "fixable": len(fixable), "urgent": sum(1 for i in fixable if i["stage"] == 1),
+            "new": len(new_ids), "new_ids": new_ids[:200], "waiting": waiting, "saved": saved,
+            # what kind of fixes are new, so the run page links to the right Fix & protect tab
+            "new_settings": sum(1 for i in fixable if i["fix_id"] in new_ids and i.get("kind") == "setting"),
+            "new_apps": sum(1 for i in fixable if i["fix_id"] in new_ids and not i.get("kind")), **checked}
 
 
 def read_plan(settings: Settings) -> dict:
@@ -292,7 +393,7 @@ def view(settings: Settings) -> dict:
         if fid not in seen and f.get("item"):
             rows.append(_row(f["item"], f))
     total = {s: sum(1 for r in rows if r["status"] == s) for s in
-             ("proposed", "approved", "queued", "running", "done", "failed", "verified", "still_there", "gone", "info")}
+             ("proposed", "saved", "approved", "queued", "running", "done", "failed", "verified", "still_there", "gone", "info")}
     fixed = [r for r in rows if r["status"] == "verified"]
     return {"generated_at": plan.get("generated_at"), "inventory_at": plan.get("inventory_at"), "stages": plan.get("stages", STAGES),
             "rows": rows, "totals": total, "events": data["events"][-60:][::-1], "probes": data.get("probes", {}),
@@ -308,8 +409,10 @@ def _row(item: dict, f: dict) -> dict:
     return {**{k: item.get(k) for k in ("fix_id", "device_name", "opco", "app", "software_name", "version", "action",
                                         "winget_id", "stage", "findings", "cves", "kev", "ransomware", "max_epss",
                                         "kev_cves", "note", "kind", "config_id", "category", "subcategory", "impact",
+                                        "found_by", "threats",
                                         "setting_kind", "setting_target", "setting_value")},
-            "status": status, **{k: f.get(k) for k in ("method", "approved_by", "approved_at", "started_at", "finished_at",
+            "status": status, **{k: f.get(k) for k in ("method", "approved_by", "approved_at", "saved_by", "saved_at",
+                                                      "started_at", "finished_at",
                                                       "verified_at", "message", "result")}}
 
 
@@ -344,6 +447,34 @@ def unapprove(settings: Settings, ids: list[str]) -> dict:
                 event(data, f"Approval withdrawn: {_label(f)}", fid)
                 removed.append(fid)
     return {"withdrawn": removed}
+
+
+def save(settings: Settings, ids: list[str], who: str | None = None) -> dict:
+    """Save for later: reviewed, not fixed yet. It leaves the new-fix cards and waits in the Fix Centre."""
+    items = {i["fix_id"]: i for i in read_plan(settings).get("items", [])}
+    who = who or _user()
+    saved = []
+    with FixState(settings.fix_dir / "state.json").edit() as data:
+        for fid in ids:
+            item = items.get(fid)
+            if not item or item["action"] == "none" or fid in data["fixes"]:
+                continue
+            data["fixes"][fid] = {"status": "saved", "saved_by": who, "saved_at": utcnow().isoformat(), "item": item}
+            event(data, f"Saved for later by {who}: {_what(item)}", fid)
+            saved.append(fid)
+    return {"saved": saved}
+
+
+def unsave(settings: Settings, ids: list[str]) -> dict:
+    """Undo Save for later: the fix is proposed again."""
+    removed = []
+    with FixState(settings.fix_dir / "state.json").edit() as data:
+        for fid in ids:
+            if data["fixes"].get(fid, {}).get("status") == "saved":
+                f = data["fixes"].pop(fid)
+                event(data, f"No longer saved for later: {_label(f)}", fid)
+                removed.append(fid)
+    return {"unsaved": removed}
 
 
 _METHOD = {"runcommand": "Azure Run Command", "liveresponse": "Defender Live Response"}

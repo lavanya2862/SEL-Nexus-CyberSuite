@@ -13,7 +13,7 @@ from uc1.feeds.common import FeedContext, http, norm_name
 from uc1.store import dumps, to_utc, utcnow
 
 URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
-PAGE = 2000
+PAGE = 200    # NVD cuts off or stalls on bigger pages; 200 come back in about 15 s
 MAX_WINDOW = timedelta(days=120)   # NVD's limit for one lastMod range
 
 

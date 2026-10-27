@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  AlertTriangle, ArrowRight, Check, CheckCircle2, Clock, Download, Minus, Play, Terminal, WifiOff, X, XCircle,
+  AlertTriangle, ArrowRight, Check, CheckCircle2, Clock, Download, Hand, Minus, Play, Terminal, WifiOff, X, XCircle,
 } from 'lucide-react'
 import { Panel } from '@/components/kit'
+import { NewFixes } from '@/components/NewFixes'
 import { dateTime } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
@@ -35,7 +36,9 @@ export function Runs() {
   const elapsed = useElapsed(run?.started_at, run?.finished_at, live)
   const steps: ViewStep[] = run?.steps ?? PLANNED_STEPS[uc].map((p) => ({ ...p, status: 'pending' as StepStatus, detail: '', started_at: null, finished_at: null }))
   const finished = steps.filter((s) => ['done', 'skipped', 'error'].includes(s.status)).length
-  const pct = !run ? 0 : run.status === 'running' ? Math.round((finished / steps.length) * 100) : 100
+  // the Fix stage is waiting for a person: the run is not over until every new fix has a decision
+  const waiting = !!run?.waiting_for_you && run.status !== 'running'
+  const pct = !run ? 0 : run.status === 'running' || waiting ? Math.round((finished / steps.length) * 100) : 100
   const current = steps.findIndex((s) => s.status === 'running')
 
   return (
@@ -85,7 +88,7 @@ export function Runs() {
       {/* status + horizontal pipeline */}
       <Panel className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-4 px-6 pt-6">
-          <StatusHeadline run={run} uc={uc} elapsed={elapsed} running={running} current={current} total={steps.length} offline={offline} />
+          <StatusHeadline run={run} uc={uc} elapsed={elapsed} running={running} current={current} total={steps.length} offline={offline} waiting={waiting} />
           <div className="flex items-center gap-4">
             <div className="text-right">
               <div className="tabular text-3xl font-semibold leading-none tracking-tight">{pct}%</div>
@@ -115,6 +118,9 @@ export function Runs() {
 
       {run && run.status !== 'running' && <ResultPanel run={run} uc={uc} seconds={elapsed} />}
 
+      {/* the Fix stage's human approval: the fixes this run proposed, to fix now or save for later */}
+      {run?.fix && run.status !== 'running' && <NewFixes fix={run.fix} uc={uc} since={run.started_at} />}
+
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         <LogPanel uc={uc} run={run} live={live} />
         <History uc={uc} />
@@ -125,8 +131,8 @@ export function Runs() {
 
 /* ───────── headline ───────── */
 
-function StatusHeadline({ run, uc, elapsed, running, current, total, offline }: {
-  run: RunState | null; uc: UcKey; elapsed: number; running: boolean; current: number; total: number; offline: boolean
+function StatusHeadline({ run, uc, elapsed, running, current, total, offline, waiting }: {
+  run: RunState | null; uc: UcKey; elapsed: number; running: boolean; current: number; total: number; offline: boolean; waiting: boolean
 }) {
   const typical = typicalLabel(uc, run?.typical_seconds)
   let icon = <Clock className="size-5 text-ink-3" />
@@ -149,6 +155,12 @@ function StatusHeadline({ run, uc, elapsed, running, current, total, offline }: 
     icon = map[run.status].i
     title = map[run.status].t
     sub = `${dateTime(run.started_at)}${run.finished_at ? ` → ${dateTime(run.finished_at)}` : ''} · ${typical}`
+    if (waiting) {
+      const open = run.fix?.open ?? 0
+      icon = <Hand className="size-5 animate-pulse" style={{ color: statusColor.warning }} />
+      title = `Waiting for you: ${open} new fix${open === 1 ? '' : 'es'} to decide`
+      sub = `The agent finished in ${fmtSeconds(elapsed)}. Press Fix or Save for later on each card below to finish the run.`
+    }
   }
   return (
     <div className="flex min-w-0 items-start gap-3">
@@ -178,7 +190,7 @@ function HorizontalSteps({ steps, live }: { steps: ViewStep[]; live: boolean }) 
   )
 }
 
-const isFinished = (s: StepStatus) => s === 'done' || s === 'skipped' || s === 'error'
+const isFinished = (s: StepStatus) => s === 'done' || s === 'skipped' || s === 'error'   // not 'waiting': a person still has to decide
 
 function StepColumn({ step, index, first, last, prevDone, live }: { step: ViewStep; index: number; first: boolean; last: boolean; prevDone: boolean; live: boolean }) {
   const secs = useElapsed(step.started_at, step.finished_at, live && step.status === 'running')
@@ -190,7 +202,7 @@ function StepColumn({ step, index, first, last, prevDone, live }: { step: ViewSt
       {!last && <Track filled={done} side="right" />}
       <Node status={step.status} n={index + 1} />
       <div className={cn('mt-4 text-sm font-medium leading-snug transition-colors', step.status === 'pending' ? 'text-ink-3' : 'text-ink')}>{step.label}</div>
-      <p key={step.detail || step.description} className="mt-1 line-clamp-3 max-w-[22ch] text-xs leading-relaxed text-ink-3 animate-in fade-in slide-in-from-bottom-1 duration-300">
+      <p key={step.detail || step.description} className={cn('mt-1 line-clamp-3 max-w-[22ch] text-xs leading-relaxed animate-in fade-in slide-in-from-bottom-1 duration-300', step.status === 'waiting' ? 'font-medium text-ink' : 'text-ink-3')}>
         {step.status === 'skipped' ? 'Not needed this time' : step.detail || step.description}
       </p>
       <div className="tabular mt-2 h-4 text-[11px] font-medium" style={{ color: step.status === 'running' ? 'var(--sky)' : 'var(--ink-3)' }}>
@@ -219,6 +231,13 @@ function Node({ status, n }: { status: StepStatus; n: number }) {
     return <span className={cn(ring, 'text-white animate-in zoom-in-50 duration-300')} style={{ background: statusColor.critical }}><X className="size-5" strokeWidth={3} /></span>
   if (status === 'skipped')
     return <span className={cn(ring, 'border border-hairline bg-well text-ink-3')}><Minus className="size-4" /></span>
+  if (status === 'waiting')
+    return (
+      <span className={cn(ring, 'text-white')} style={{ background: statusColor.warning }}>
+        <span className="absolute inset-0 animate-ping rounded-full" style={{ background: statusColor.warning, opacity: 0.3 }} />
+        <Hand className="relative size-5" strokeWidth={2.5} />
+      </span>
+    )
   if (status === 'running')
     return (
       <span className={cn(ring, 'bg-panel')}>
@@ -240,9 +259,10 @@ function ResultPanel({ run, uc, seconds }: { run: RunState; uc: UcKey; seconds: 
   const { startedHere } = useRuns()
   const good = run.status === 'ok' || run.status === 'partial'
   const target = RESULTS[uc]
-  // jump to the results only for a run started from this tab that has just finished
+  // jump to the results only for a run started from this tab that has just finished, and never away from new fixes
+  // that are waiting for a decision on this page
   const [count, setCount] = useState<number | null>(() =>
-    good && startedHere.has(uc) && run.finished_at && Date.now() - new Date(run.finished_at).getTime() < 15_000 ? 10 : null)
+    good && !run.fix?.new && startedHere.has(uc) && run.finished_at && Date.now() - new Date(run.finished_at).getTime() < 15_000 ? 10 : null)
   useEffect(() => {
     if (count == null) return
     if (count <= 0) {
@@ -275,11 +295,11 @@ function ResultPanel({ run, uc, seconds }: { run: RunState; uc: UcKey; seconds: 
               </Link>
             )}
             <Link to="/" className="inline-flex items-center gap-2 rounded-xl border border-hairline px-4 py-2.5 text-sm font-medium hover:bg-well">Open the Dashboard</Link>
-            {run.report_file && (
-              <a href={`/api/files/uc1/${encodeURIComponent(run.report_file)}`} className="inline-flex items-center gap-2 rounded-xl border border-hairline px-4 py-2.5 text-sm font-medium hover:bg-well">
-                <Download className="size-4" /> Report (Word)
+            {(run.report_files?.length ? run.report_files : run.report_file ? [run.report_file] : []).map((name) => (
+              <a key={name} href={`/api/files/${run.files_from ?? 'uc1'}/${encodeURIComponent(name)}`} className="inline-flex items-center gap-2 rounded-xl border border-hairline px-4 py-2.5 text-sm font-medium hover:bg-well">
+                <Download className="size-4" /> Report ({{ xlsx: 'Excel', docx: 'Word', pdf: 'PDF' }[name.split('.').pop() ?? ''] ?? 'file'})
               </a>
-            )}
+            ))}
           </div>
         </div>
 

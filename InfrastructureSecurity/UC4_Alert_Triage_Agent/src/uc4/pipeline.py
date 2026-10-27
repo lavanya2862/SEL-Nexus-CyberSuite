@@ -14,7 +14,7 @@ from uc4.api import DefenderClient, graph_client
 from uc4.auth import DEFENDER_SCOPE, EntraLogin
 from uc4.config import Settings
 from uc4.ingest import fetch
-from uc4.llm import GeminiLLM
+from uc4.llm import make_llm
 from uc4.store import Store, utcnow
 from uc4.triage import Triage
 
@@ -85,7 +85,7 @@ def build_clients(settings: Settings, store: Store):
     login = EntraLogin(settings)
     graph = graph_client(settings, login)
     defender = DefenderClient(settings.defender_base, login.provider(DEFENDER_SCOPE))
-    llm = GeminiLLM(settings, store) if settings.has_gemini else None
+    llm = make_llm(settings, store)
     return graph, defender, llm
 
 
@@ -104,7 +104,7 @@ def _step(steps: dict, name: str, fn, *args):
 
 def run(settings: Settings, store: Store | None = None, clients=None) -> dict:
     """One full run. `clients` = (graph, defender, llm) for tests; built from .env otherwise."""
-    from uc4 import autoresolve, backtest, feedback, ledger, metrics, respond, writeback
+    from uc4 import autoresolve, backtest, feedback, ledger, metrics, report, respond, writeback
     from uc4.export import export_all
     close = store is None
     store = store or Store(settings.db_path)
@@ -145,6 +145,7 @@ def run(settings: Settings, store: Store | None = None, clients=None) -> dict:
                 "report": bool(backtest.report(settings, store, full=False))})
             _step(steps, "metrics", lambda: metrics.write(store, settings) and "ok")
             _step(steps, "export", export_all, store, settings)
+            _step(steps, "report", report.build, store, settings, run_id, started)
     except RunLocked:
         raise
     finally:

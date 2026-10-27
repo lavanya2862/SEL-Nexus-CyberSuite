@@ -7,6 +7,8 @@ param([string]$Spec)
 #   action = replace  : remove the old app, then install the current one
 #   action = setting  : change ONE security setting (from config\setting_fix_catalog.csv), reading it before and after:
 #                       kind asr = attack-protection rule, defender = a Defender Antivirus option, registry = a DWORD
+#   action = respond  : after a sign of attack: update Defender's signatures, quick scan, remove what it finds
+#                       (kind scan_clean, the only response), counting active threats before and after
 # The last line of output is "UC1RESULT {json}" - UC1 reads that. Windows PowerShell 5.1 compatible, ASCII only.
 
 $ErrorActionPreference = 'Continue'
@@ -230,6 +232,30 @@ if ($s.action -eq 'setting') {
         catch { $result.error = ($_.Exception.Message -replace '[^\x20-\x7E]', '').Trim(); Say "change failed: $($result.error)" }
     }
     $result.after = Get-Setting
+    $result.log = @($log)
+    Write-Output ('UC1RESULT ' + ($result | ConvertTo-Json -Compress -Depth 4))
+    exit 0
+}
+
+# ------------------------------------------------------------------ response to a sign of attack
+function Get-ActiveThreats { @(Get-MpThreat -ErrorAction SilentlyContinue | Where-Object { $_.IsActive }) }
+
+if ($s.action -eq 'respond') {
+    $result = @{ id = $s.id; action = 'respond'; computer = $env:COMPUTERNAME; kind = $s.kind }
+    if ($s.kind -ne 'scan_clean') { throw "unknown response kind $($s.kind)" }
+    $result.before = (Get-ActiveThreats).Count
+    try { Update-MpSignature -ErrorAction Stop; Say 'Defender signatures updated' }
+    catch { Say "signature update failed (scanning with the current ones): $($_.Exception.Message)" }
+    try { Start-MpScan -ScanType QuickScan -ErrorAction Stop; Say 'Defender quick scan finished' }
+    catch { $result.error = ($_.Exception.Message -replace '[^\x20-\x7E]', '').Trim(); Say "scan failed: $($result.error)" }
+    if (-not $result.error -and (Get-ActiveThreats).Count -gt 0) {
+        try { Remove-MpThreat -ErrorAction Stop; Say 'removed the active threats Defender found' }
+        catch { Say "remove failed: $($_.Exception.Message)" }
+    }
+    $left = Get-ActiveThreats
+    $result.after = $left.Count
+    $result.found = @($left | Select-Object -First 5 | ForEach-Object { "$($_.ThreatName)" })
+    $result.exit = if ($result.error) { 1 } else { 0 }
     $result.log = @($log)
     Write-Output ('UC1RESULT ' + ($result | ConvertTo-Json -Compress -Depth 4))
     exit 0

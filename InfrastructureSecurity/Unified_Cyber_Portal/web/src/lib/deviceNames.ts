@@ -17,9 +17,9 @@ interface Spot { start: number; end: number; real: string }
 const ATTRS = ['title', 'aria-label', 'placeholder']
 const SKIP = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'NOSCRIPT'])
 
-export function DeviceNames() {
+function useNames() {
   const { user } = useAuth()
-  const { data } = useQuery({
+  return useQuery({
     queryKey: ['device-names'],
     queryFn: async (): Promise<Names> => {
       const res = await fetch('/api/device-names')
@@ -27,9 +27,19 @@ export function DeviceNames() {
     },
     enabled: !!user,
     staleTime: Infinity,
-  })
+  }).data
+}
+
+export function DeviceNames() {
+  const data = useNames()
   useEffect(() => (data && Object.keys(data).length ? rename(data) : undefined), [data])
   return null
+}
+
+/** The name the screen will show for a real one, for pages that must know it up front (e.g. to not repeat it). */
+export function useShownName() {
+  const names = useNames()
+  return (real: string) => names?.[real.toLowerCase().split('.')[0]] ?? real
 }
 
 /** Swap the names everywhere under <body> from now on; returns the stop function. */

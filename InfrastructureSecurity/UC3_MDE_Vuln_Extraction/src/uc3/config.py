@@ -31,6 +31,27 @@ class Settings:
     gemini_extra_keys: tuple[str, ...] = field(default=(), repr=False)   # GEMINI_API_KEY_2, _3 ...
     gemini_models: tuple[str, ...] = ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite")
     gemini_rpm: int = 10
+    ai_provider_choice: str = "auto"           # AI_PROVIDER: auto (Azure Foundry when set, else Gemini) | azure | gemini
+    azure_endpoint: str | None = None          # AZURE_FOUNDRY_ENDPOINT, e.g. https://<resource>.openai.azure.com
+    azure_api_key: str | None = field(default=None, repr=False)
+    azure_deployment: str | None = None        # AZURE_FOUNDRY_DEPLOYMENT: the deployment name in Foundry
+    azure_rpm: int = 60
+    azure_reasoning_effort: str | None = "low"  # AZURE_FOUNDRY_REASONING_EFFORT for gpt-5 / o-series; off = not sent
+    fix_stage: bool = True                     # UC3_FIX_STAGE: last stage of a run proposes the new fixes (0 = off)
+    fix_engine_dir: Path | None = None         # UC3_FIX_ENGINE_DIR: the Threat Intel Agent folder (its fix engine)
+
+    @property
+    def has_azure(self) -> bool:
+        return bool(self.azure_endpoint and self.azure_api_key and self.azure_deployment)
+
+    @property
+    def ai_provider(self) -> str | None:
+        """"azure", "gemini" or None (cards without AI text). AI_PROVIDER=auto prefers Azure Foundry when set."""
+        if self.ai_provider_choice == "azure":
+            return "azure" if self.has_azure else None
+        if self.ai_provider_choice == "gemini":
+            return "gemini" if self.gemini_keys else None
+        return "azure" if self.has_azure else "gemini" if self.gemini_keys else None
 
     @property
     def gemini_keys(self) -> tuple[str, ...]:
@@ -77,6 +98,19 @@ def _extra_gemini_keys() -> tuple[str, ...]:
     return tuple(k for n in range(2, 10) if (k := _env(f"GEMINI_API_KEY_{n}")))
 
 
+def _effort() -> str | None:
+    """AZURE_FOUNDRY_REASONING_EFFORT: minimal | low (default) | medium | high; "off" sends none."""
+    value = (_env("AZURE_FOUNDRY_REASONING_EFFORT") or "low").lower()
+    return None if value == "off" else value
+
+
+def _provider() -> str:
+    value = (_env("AI_PROVIDER") or "auto").lower()
+    if value not in ("auto", "azure", "gemini"):
+        raise ConfigError("AI_PROVIDER must be auto, azure or gemini")
+    return value
+
+
 def _resolve(path_str: str) -> Path:
     path = Path(path_str)
     return path if path.is_absolute() else (PROJECT_ROOT / path).resolve()
@@ -103,6 +137,14 @@ def load_settings(env_file: Path | None = None, require_credentials: bool = True
         gemini_models=tuple(m for m in (_env("GEMINI_MODEL") or "gemini-3.5-flash-lite",
                                         _env("GEMINI_FALLBACK_MODEL") or "gemini-3.1-flash-lite") if m),
         gemini_rpm=max(1, int(_env("GEMINI_RPM") or 10)),
+        ai_provider_choice=_provider(),
+        azure_endpoint=_env("AZURE_FOUNDRY_ENDPOINT"),
+        azure_api_key=_env("AZURE_FOUNDRY_API_KEY"),
+        azure_deployment=_env("AZURE_FOUNDRY_DEPLOYMENT"),
+        azure_rpm=max(1, int(_env("AZURE_FOUNDRY_RPM") or 60)),
+        azure_reasoning_effort=_effort(),
+        fix_stage=(_env("UC3_FIX_STAGE") or "1") != "0",
+        fix_engine_dir=_resolve(_env("UC3_FIX_ENGINE_DIR") or "../UC1_Threat_Intel_Hunting_Agent"),
     )
     if require_credentials:
         validate_credentials(settings)

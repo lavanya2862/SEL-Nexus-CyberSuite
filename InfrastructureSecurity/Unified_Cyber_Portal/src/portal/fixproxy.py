@@ -2,7 +2,7 @@
 
 UC1 keeps the plan, the approvals, the safety rules and the one-fixer-at-a-time lock; the portal only forwards
 requests to it: GET /api/fix (plan + approvals + results + what the fixer is doing) and POST /api/fix/approve |
-unapprove | run | probe with UC1's header X-UC1: fix. Only the fields UC1 expects are forwarded (ids, method).
+unapprove | save | unsave | run | probe with UC1's header X-UC1: fix. Only the fields UC1 expects are forwarded (ids, method).
 If The fix engine is not running, the portal can start it with UC1's own Python (127.0.0.1 only).
 """
 from __future__ import annotations
@@ -15,7 +15,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-ACTIONS = {"approve", "unapprove", "run", "probe"}
+ACTIONS = {"approve", "unapprove", "save", "unsave", "run", "probe"}
 METHODS = {"runcommand", "liveresponse"}
 
 
@@ -58,14 +58,14 @@ def post_fix(base: str, action: str, body: dict) -> tuple[int, dict]:
 
 
 def start_uc1_site(uc1_dir: Path, base: str, wait_s: float = 12) -> bool:
-    """Start UC1's website (python -m uc1 serve --no-browser) in the background and wait until it answers."""
+    """Start UC1's service (python -m uc1 serve) in the background and wait until it answers."""
     python = uc1_dir / ".venv" / "Scripts" / "python.exe"
     if not python.is_file():
         python = uc1_dir / ".venv" / "bin" / "python"
     if not python.is_file():
         raise Uc1Unavailable(f"The fix engine has no Python environment at {uc1_dir / '.venv'}")
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
-    subprocess.Popen([str(python), "-m", "uc1", "serve", "--no-browser"], cwd=str(uc1_dir), creationflags=flags,
+    subprocess.Popen([str(python), "-m", "uc1", "serve"], cwd=str(uc1_dir), creationflags=flags,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     deadline = time.monotonic() + wait_s
     while time.monotonic() < deadline:

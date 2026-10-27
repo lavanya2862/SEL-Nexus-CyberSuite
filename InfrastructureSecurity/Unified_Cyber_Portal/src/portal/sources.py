@@ -36,18 +36,7 @@ class UC1:
 
     def dashboard(self) -> dict | None:
         data = _read_json(self.dashboard_dir / "dashboard_data.json")
-        if data is None:          # older UC1 output: the same data is embedded in dashboard.html
-            data = self._from_html()
-        return data
-
-    def _from_html(self) -> dict | None:
-        try:
-            html = (self.dashboard_dir / "dashboard.html").read_text(encoding="utf-8")
-            start = html.index("const D = ") + len("const D = ")
-            data, _ = json.JSONDecoder().raw_decode(html[start:])
-            return data if isinstance(data, dict) else None
-        except (OSError, ValueError):
-            return None
+        return data if isinstance(data, dict) else None
 
     def last_run(self) -> dict | None:
         return _read_json(self.root / "data" / "last_run.json")
@@ -78,7 +67,8 @@ class UC1:
         folder = self.root / "data" / "reports"
         files = sorted(folder.glob("*.*"), key=lambda p: p.stat().st_mtime, reverse=True) if folder.is_dir() else []
         return [{"name": p.name, "size": p.stat().st_size, "modified": mtime_iso(p)}
-                for p in files if p.suffix.lower() in (".docx", ".pdf", ".xlsx")]
+                for p in files if p.suffix.lower() in (".docx", ".pdf", ".xlsx")
+                and not p.name.startswith("UC1_Threat_Hunting_Report")]    # replaced by Threat_Intel / Attack_Detection
 
 
 class UC3:
@@ -110,19 +100,8 @@ class UC3:
         return _read_json(self.root / "data" / "status" / "last_run.json")
 
     def dashboard(self) -> dict | None:
-        """UC3's own dashboard data (the bundle its HTML dashboard is drawn from), unchanged."""
-        folder = self.root / "data" / "dashboard"
-        data = _read_json(folder / "dashboard_data.json")
-        html = folder / "UC3_Dashboard_latest.html"
-        json_file = folder / "dashboard_data.json"
-        # prefer whichever is newer: an older UC3 version only writes the HTML
-        if data is None or (html.is_file() and json_file.is_file() and html.stat().st_mtime > json_file.stat().st_mtime + 5):
-            try:
-                text = html.read_text(encoding="utf-8")
-                start = text.index("const D = ") + len("const D = ")
-                data, _ = json.JSONDecoder().raw_decode(text[start:])
-            except (OSError, ValueError):
-                pass
+        """UC3's exported data bundle (data/dashboard/dashboard_data.json), unchanged."""
+        data = _read_json(self.root / "data" / "dashboard" / "dashboard_data.json")
         return data if isinstance(data, dict) else None
 
     def ai_fixes_meta(self) -> dict | None:
@@ -138,10 +117,11 @@ class UC3:
         return {a["key"]: a["app"] for a in apps or [] if isinstance(a, dict) and a.get("key") and a.get("app")}
 
     def downloads(self) -> list[dict]:
-        files = sorted(self.reporting.glob("UC3_*.*"), key=lambda p: p.stat().st_mtime, reverse=True) \
+        files = sorted([*self.reporting.glob("UC3_*.*"), *self.reporting.glob("Vulnerability_Report_*.*")], key=lambda p: p.stat().st_mtime, reverse=True) \
             if self.reporting.is_dir() else []
         return [{"name": p.name, "size": p.stat().st_size, "modified": mtime_iso(p)}
-                for p in files if p.suffix.lower() in (".xlsx", ".md")]
+                for p in files if p.suffix.lower() in (".xlsx", ".docx", ".pdf", ".md")
+                and not p.name.startswith("UC3_Vulnerability_Summary")]    # replaced by Vulnerability_Report_*
 
 
 def _jsonl(path: Path) -> list[dict]:
@@ -171,6 +151,12 @@ class UC4:
     def __init__(self, root: Path):
         self.root = root
         self.data = root / "data"
+
+    def reports(self) -> list[dict]:
+        folder = self.data / "reports"
+        files = sorted(folder.glob("Alert_Triage_Report_*.*"), key=lambda p: p.stat().st_mtime, reverse=True)             if folder.is_dir() else []
+        return [{"name": p.name, "size": p.stat().st_size, "modified": mtime_iso(p)}
+                for p in files if p.suffix.lower() in (".docx", ".pdf")]
 
     def last_run(self) -> dict | None:
         return _read_json(self.data / "last_run.json")

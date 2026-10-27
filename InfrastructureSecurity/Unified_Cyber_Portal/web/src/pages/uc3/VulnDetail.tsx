@@ -5,7 +5,7 @@ import { Card, DTable, Empty, HopLink, Panel, SevTag, Tag } from '@/components/k
 import { num, shortDate } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
 import { useKevThreatHref } from '@/lib/uc1'
-import { EXPL, addDays, daysBetween, findingHref, findingKey, pretty, useUc3Data, useUc3View, type Finding } from '@/lib/uc3'
+import { EXPL, addDays, daysBetween, findingHref, findingKey, pretty, useGroupAfter, useUc3Data, useUc3View, type Finding } from '@/lib/uc3'
 import { Uc3Loading } from './common'
 
 const PRIORITY: Record<string, string> = {
@@ -19,6 +19,7 @@ export function VulnDetail() {
   const kevHref = useKevThreatHref()
   const { data, error, isLoading } = useUc3Data()
   const view = useUc3View(data)
+  const groupAfter = useGroupAfter()
   if (isLoading || error || !data) return <Uc3Loading error={error} />
 
   const f = view.all.find((x) => findingKey(x) === key)
@@ -47,7 +48,7 @@ export function VulnDetail() {
         <div>
           <div className="flex items-center gap-2 text-xs font-medium text-ink-3"><span className="size-2 rounded-full bg-sky" /> Weak spots · vulnerability</div>
           <h1 className="tabular mt-1 text-2xl font-semibold tracking-tight">{f.cve}</h1>
-          <p className="mt-1 text-sm text-ink-3">In <b className="font-medium text-ink-2">{app}</b> on <b className="font-medium text-ink-2">{f.dev?.name}</b> · {f.o}</p>
+          <p className="mt-1 text-sm text-ink-3">In <b className="font-medium text-ink-2">{app}</b> on <b className="font-medium text-ink-2">{f.dev?.name}</b>{groupAfter(f)}</p>
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <SevTag sev={f.sev} />
             <Tag>{f.pr}</Tag>
@@ -70,7 +71,7 @@ export function VulnDetail() {
       <Panel className="flex items-start gap-3 p-5 text-sm leading-relaxed text-ink-2">
         {f.kev ? <AlertTriangle className="mt-0.5 size-4 shrink-0" style={{ color: statusColor.critical }} /> : null}
         <p>
-          {kev ? <><b className="text-ink">{kev.name}.</b> Attackers are known to use this hole (CISA list, since {shortDate(kev.added)}). </> : null}
+          {kev ? <><b className="text-ink">{kev.name}.</b> Attackers are known to use this vulnerability (CISA list, since {shortDate(kev.added)}). </> : null}
           This weakness is in <b className="text-ink">{app}</b>. The fix: <b className="text-ink">{action}</b>.{' '}
           {sameApp.length > 1 && <>That also fixes the other {num(sameApp.length - 1)} vulnerabilities in this app on this computer.</>}
         </p>
@@ -88,7 +89,7 @@ export function VulnDetail() {
         </Card>
         <Card title="Where it is and the deadline">
           <Facts rows={[
-            ['Computer', <>{f.dev?.name} <span className="text-ink-3">· {f.o}</span></>],
+            ['Computer', <>{f.dev?.name}<span className="text-ink-3">{groupAfter(f)}</span></>],
             ['Operating system', [f.dev?.os, f.dev?.osv].filter(Boolean).join(' ') || '–'],
             ['App and version', app],
             ['First seen', f.fs ? `${shortDate(f.fs)} (${num(f.age)} days ago)` : '–'],
@@ -111,7 +112,7 @@ export function VulnDetail() {
 
       {kevHref(f.cve) && (
         <div className="flex items-center gap-2 text-sm text-ink-3">
-          What the outside world says about it, and whether anyone used it on us: <HopLink to={kevHref(f.cve)!}>Threat news</HopLink>
+          What the outside world says about it, and whether anyone used it on us: <HopLink to={kevHref(f.cve)!}>Threats</HopLink>
         </div>
       )}
     </div>
@@ -132,6 +133,7 @@ function Facts({ rows }: { rows: [string, ReactNode][] }) {
 }
 
 function FindingTable({ rows, show, current, onOpen }: { rows: Finding[]; show: 'computer' | 'cve'; current?: string; onOpen: (f: Finding) => void }) {
+  const groupAfter = useGroupAfter()
   return (
     <DTable head={[[show === 'computer' ? 'Computer' : 'Vulnerability'], ['Severity'], ['Days open', 'right'], ['Deadline']]} minWidth={420} maxHeight={320}>
       {rows.map((x) => {
@@ -139,7 +141,7 @@ function FindingTable({ rows, show, current, onOpen }: { rows: Finding[]; show: 
         return (
           <tr key={findingKey(x)} onClick={() => !here && onOpen(x)} className={here ? 'bg-well' : 'cursor-pointer hover:bg-well/60'}>
             <td className="tabular whitespace-nowrap font-medium">
-              {show === 'computer' ? <>{x.dev?.name} <span className="text-xs font-normal text-ink-3">· {x.o}</span></> : x.cve}
+              {show === 'computer' ? <>{x.dev?.name}<span className="text-xs font-normal text-ink-3">{groupAfter(x)}</span></> : x.cve}
               {here && <span className="ml-1.5 text-xs font-normal text-ink-3">(this one)</span>}
             </td>
             <td><SevTag sev={x.sev} /></td>

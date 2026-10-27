@@ -31,10 +31,10 @@ export const SCREENS: Record<ScreenKey, Screen> = {
   home: {
     name: 'Summary',
     placeholder: 'For example: which computer is most at risk?',
-    questions: ['How many vulnerabilities do we have right now?', 'How many holes are attackers known to use?'],
+    questions: ['How many vulnerabilities do we have right now?', 'How many vulnerabilities are attackers known to use?'],
   },
   threats: {
-    name: 'Threat news',
+    name: 'Threats',
     placeholder: 'For example: are all news sources working?',
     questions: ['How many threats affect us?', 'What is the most dangerous threat right now?'],
   },
@@ -59,7 +59,7 @@ export const SCREENS: Record<ScreenKey, Screen> = {
     questions: ['Can I trust today’s numbers?', 'When was the data last refreshed?'],
   },
   fixes: {
-    name: 'Fix & protect',
+    name: 'Fix',
     placeholder: 'For example: which fix is due soonest?',
     questions: ['How many apps need updating?', 'Which app should I update first?'],
   },

@@ -8,7 +8,7 @@ An **AI triage assistant** for security incidents. For every new incident it col
 Defender / Sentinel incident ─► packet (alerts, devices, accounts, files; attacker text kept apart)
    ─► playbook for its type ─► read-only searches ±24 h, threat intel, history, watchlists
    ─► safety rules (before) ─► ONE AI call, strict JSON ─► answer checker ─► safety rules (after: only more cautious)
-   ─► triage queue website ─► analyst agrees / disagrees ─► metrics + accuracy
+   ─► the portal's Alert triage page ─► analyst agrees / disagrees ─► metrics + accuracy
 ```
 
 ## Setup
@@ -29,7 +29,8 @@ What `.env` needs:
 | Setting | Where it comes from |
 |---|---|
 | `UC4_TENANT_ID`, `UC4_CLIENT_ID`, `UC4_CLIENT_SECRET` | An Entra ID app registration with Microsoft Graph application permissions `SecurityIncident.Read.All`, `SecurityAlert.Read.All`, `ThreatHunting.Read.All` and WindowsDefenderATP `Machine.Read.All` (admin consent granted) |
-| `GEMINI_API_KEY` | Free key from Google AI Studio |
+| `AZURE_FOUNDRY_ENDPOINT`, `AZURE_FOUNDRY_API_KEY`, `AZURE_FOUNDRY_DEPLOYMENT` | Azure AI Foundry model deployment (Foundry portal -> Models + endpoints). When all three are set the agent uses it instead of Gemini; `AI_PROVIDER=gemini` switches back. Reasoning models such as gpt-5 work too (`AZURE_FOUNDRY_REASONING_EFFORT`, default low) |
+| `GEMINI_API_KEY` | Free key from Google AI Studio (used when Azure AI Foundry is not set) |
 | `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3` … (optional) | Spare Gemini keys: when one key uses up its daily quota the next takes over. Each must be from a different Google Cloud project (keys in one project share its quota) |
 | `ABUSECH_AUTH_KEY`, `OTX_API_KEY`, `ABUSEIPDB_API_KEY`, `GREYNOISE_API_KEY` | Free threat-intel keys (all optional) |
 
@@ -44,7 +45,7 @@ Optional actions are **off** by default and need extra permissions when switched
 ## Commands
 
 ```powershell
-.\.venv\Scripts\python.exe -m uc4 serve       # triage website: http://127.0.0.1:8900 (this computer only)
+.\.venv\Scripts\python.exe -m uc4 serve       # service for the portal: http://127.0.0.1:8900/api (this computer only)
 .\.venv\Scripts\python.exe -m uc4 run         # pick up new incidents and triage them
 .\.venv\Scripts\python.exe -m uc4 backtest    # accuracy on GUIDE + lab incidents
 .\.venv\Scripts\python.exe -m uc4 metrics     # MTTR, MTTC, SLA, effort (MEASURED / ASSUMPTION)
@@ -56,7 +57,7 @@ Backtest data: Microsoft's **GUIDE** dataset (about 1 M analyst-labelled inciden
 
 | Path | Purpose |
 |---|---|
-| `src/uc4/` | The agent: incident packets, playbooks, safety rules, AI call + answer checker, threat intel, backtest, metrics, website (`site_assets/`) |
+| `src/uc4/` | The agent: incident packets, playbooks, safety rules, AI call + answer checker, threat intel, backtest, metrics, `site.py` (API for the portal; no web pages) |
 | `config/` | Settings template, playbooks, safety rules (`guardrails.yaml`), containment menu, watchlists, KQL queries, SLA policy, answer schema |
 | `data/`, `logs/` | Created at run time (not in git) |
 

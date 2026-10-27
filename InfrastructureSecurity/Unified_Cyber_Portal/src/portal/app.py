@@ -164,7 +164,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/fix/{action}")
     async def fix_action(action: str, request: Request, x_portal: str | None = Header(default=None)):
-        """Approve / withdraw / run / check. Needs X-Portal: fix (a plain link or another website cannot press it)."""
+        """Approve / withdraw / save for later / run / check. Needs X-Portal: fix (a plain link or another website cannot press it)."""
         if x_portal != "fix":
             return JSONResponse({"error": "missing header"}, status_code=403)
         try:
@@ -256,15 +256,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/reports")
     def report_files() -> dict:
-        return {"uc1": UC1(settings.uc1_dir).reports(), "uc3": UC3(settings.uc3_dir).downloads()}
+        return {"uc1": UC1(settings.uc1_dir).reports(), "uc3": UC3(settings.uc3_dir).downloads(),
+                "uc4": UC4(settings.uc4_dir).reports()}
 
     @app.get("/api/files/{uc}/{name}")
     def download(uc: str, name: str):
         """Download one listed report file. Only names the listing returns are served (no paths)."""
-        listed = {"uc1": UC1(settings.uc1_dir).reports, "uc3": UC3(settings.uc3_dir).downloads}.get(uc)
+        listed = {"uc1": UC1(settings.uc1_dir).reports, "uc3": UC3(settings.uc3_dir).downloads,
+                  "uc4": UC4(settings.uc4_dir).reports}.get(uc)
         if listed is None or name not in {f["name"] for f in listed()}:
             return JSONResponse({"error": "not found"}, status_code=404)
-        folder = settings.uc1_dir / "data" / "reports" if uc == "uc1" else settings.uc3_dir / "data" / "reporting"
+        folder = {"uc1": settings.uc1_dir / "data" / "reports", "uc3": settings.uc3_dir / "data" / "reporting",
+                  "uc4": settings.uc4_dir / "data" / "reports"}[uc]
         return FileResponse(folder / name, filename=name)
 
     runs = RunManager({"uc1": settings.uc1_dir, "uc3": settings.uc3_dir, "uc4": settings.uc4_dir, "attack": settings.uc1_dir})

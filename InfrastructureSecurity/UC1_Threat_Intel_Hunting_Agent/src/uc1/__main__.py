@@ -8,24 +8,26 @@
   analyse     derive + EPSS + Gemini analysis + exposure + scoring
   hunt        run hunts in Defender (+ correlate + re-score)
   report      build the Word/PDF report
-  dashboard   build data/dashboard/dashboard.html
+  dashboard   export the portal's data (data/dashboard/*.json)
   alerts      raise alerts for high-risk threats that affect us
   metrics     print the key metrics
   run         the Threat Intel run: everything above except hunting, in order (what the scheduled task runs)
   attack-check  the Attack Check Agent: hunt in Defender for the collected warning signs, keep new signs of attack,
-              AI resolution steps, alerts, dashboard (waits up to 30 minutes if a Threat Intel run is busy)
+              AI resolution steps, alerts, portal data (waits up to 30 minutes if a Threat Intel run is busy)
   summary     short overview of what's in the database
   spotcheck   export 20 AI answers for a person to check (--score FILE reads the marks back)
   demo        the demo story with today's numbers (data/demo_notes.md)
-  serve       the UC1 website on http://127.0.0.1:8700 (this computer only): live dashboard, threat
-              detail pages, reports, "Run now" button, Fix Centre (--port N, --no-browser)
+  serve       the service the portal calls on http://127.0.0.1:8700 (this computer only): run status,
+              "Run now" and the fix engine; no web pages (--port N)
 
 Fix loop - fixes only run after an approval:
   fix-plan     rebuild the fix plan from the last inventory (and verify earlier fixes)
+  fix-refresh  pull a fresh inventory from Defender, rebuild the fix plan and list the new fixes (the Vulnerability
+               Agent's Fix stage; prints "Fix plan: {json}"; waits up to 15 minutes if a Threat Intel run is busy)
   fix-status   show the plan and each fix's status
   fix-probe    read-only check of the lab VMs (winget, installed versions) (--method)
   fix-approve  approve fixes: --stage 1 | --all | --ids fx_a,fx_b  [--device NAME] [--method runcommand|liveresponse]
-  fix-run      run the approved fixes now (also from the website's Fix Centre)
+  fix-run      run the approved fixes now (also from the portal's Fix page)
 """
 
 from __future__ import annotations
@@ -77,9 +79,15 @@ def cmd_check(settings: Settings) -> int:
     print("Settings in .env (values are never shown):")
     for name, is_set, why in settings.describe():
         print(f"  [{'set' if is_set else '---'}] {name:24s} {why}")
-    print(f"  Gemini models: {', '.join(settings.gemini_models)} · {settings.gemini_rpm} requests/min cap")
+    if settings.ai_provider == "azure":
+        print(f"  AI: Azure AI Foundry deployment {settings.azure_deployment} · {settings.azure_rpm} requests/min cap")
+    else:
+        print(f"  Gemini models: {', '.join(settings.gemini_models)} · {settings.gemini_rpm} requests/min cap")
     print("\nInternet reachability:")
-    for name, url in FEED_HOSTS.items():
+    hosts = dict(FEED_HOSTS)
+    if settings.has_azure:
+        hosts["Azure AI Foundry"] = settings.azure_endpoint
+    for name, url in hosts.items():
         try:
             r = requests.head(url, timeout=15, allow_redirects=True)
             print(f"  [OK  ] {name} (HTTP {r.status_code})")
@@ -151,12 +159,11 @@ def main(argv: list[str] | None = None) -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=["check", "live-test", "models", "collect", "inventory", "analyse", "hunt",
                                             "report", "dashboard", "alerts", "metrics", "run", "attack-check", "summary",
-                                            "spotcheck", "demo", "serve", "fix-plan", "fix-status", "fix-probe",
+                                            "spotcheck", "demo", "serve", "fix-plan", "fix-refresh", "fix-status", "fix-probe",
                                             "fix-approve", "fix-run"])
     parser.add_argument("--feeds", help="collect: comma-separated feed names (default: all enabled)")
     parser.add_argument("--score", help="spotcheck: the filled-in spot-check file to score")
     parser.add_argument("--port", type=int, default=8700, help="serve: port on 127.0.0.1 (default 8700)")
-    parser.add_argument("--no-browser", action="store_true", help="serve: don't open the browser")
     parser.add_argument("--method", choices=["runcommand", "liveresponse"], help="fix-*: Azure Run Command or Defender Live Response")
     parser.add_argument("--stage", type=int, help="fix-approve: approve every fix in this stage (1 = urgent, 2 = end-of-life, 3 = other)")
     parser.add_argument("--ids", help="fix-approve: comma-separated fix IDs (see fix-status)")
@@ -177,9 +184,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if live_test.run(settings) else 1
     if args.command == "serve":
         from uc1.site import serve
-        serve(settings, port=args.port, open_browser=not args.no_browser)
+        serve(settings, port=args.port)
         return 0
     if args.command == "models":
+        if settings.ai_provider == "azure":
+            print(f"Azure AI Foundry deployment: {settings.azure_deployment} (AI_PROVIDER={settings.ai_provider_choice})")
+            return 0
         from uc1.ai.gemini_client import GeminiClient
         ai = GeminiClient(settings)
         for name in ai.available_models():
@@ -190,6 +200,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command in ("fix-status", "fix-probe", "fix-approve", "fix-run"):
         return cmd_fix(settings, args)
+
+    if args.command in ("attack-check", "fix-refresh"):
+        # wait BEFORE opening the database: a busy Threat Intel run holds the DuckDB file, so opening it would fail
+        waited, limit = 0, (30 if args.command == "attack-check" else 15) * 60
+        while lock_active(settings) and waited < limit:              # a Threat Intel run is busy: wait for it
+            if waited % 60 == 0:
+                print("Waiting for the Threat Intel run to finish before "
+                      + ("checking for attacks" if args.command == "attack-check" else "refreshing the fix plan"), flush=True)
+            time.sleep(15)
+            waited += 15
 
     store = Store(settings.db_path)
     try:
@@ -227,14 +247,16 @@ def main(argv: list[str] | None = None) -> int:
             print(report.build(store, settings, None, make_ai(settings, store)))
             return 0
 
-        if args.command == "attack-check":
-            waited = 0
-            while lock_active(settings) and waited < 30 * 60:      # a Threat Intel run is busy: wait for it
-                if waited % 60 == 0:
-                    print("Waiting for the Threat Intel run to finish before checking for attacks", flush=True)
-                time.sleep(15)
-                waited += 15
         with run_lock(settings):
+            if args.command == "fix-refresh":
+                from uc1.fix import plan as fix_plan
+                p = Pipeline(settings, store, defender=make_defender(settings))
+                p.inventory()
+                inv = p.steps["inventory"]
+                result = {**fix_plan.refresh(store, settings, "vulnerability"), "inventory": inv["status"],
+                          "inventory_note": inv.get("error") or inv.get("reason") or ""}
+                print("Fix plan:", json.dumps(result, default=str), flush=True)
+                return 0
             p = Pipeline(settings, store, defender=make_defender(settings), ai=make_ai(settings, store))
             started = utcnow()
             if args.command == "collect":

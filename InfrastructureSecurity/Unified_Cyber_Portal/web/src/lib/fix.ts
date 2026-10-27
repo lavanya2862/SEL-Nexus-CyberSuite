@@ -1,17 +1,30 @@
-// Fix & protect' automatic fixing = UC1's fix engine, reached through the portal (/api/fix -> UC1's /api/fix).
+// Fix' automatic fixing = UC1's fix engine, reached through the portal (/api/fix -> UC1's /api/fix).
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-export type FixStatus = 'proposed' | 'approved' | 'queued' | 'running' | 'done' | 'failed' | 'verified' | 'still_there' | 'gone' | 'info'
+export type FixStatus = 'proposed' | 'saved' | 'approved' | 'queued' | 'running' | 'done' | 'failed' | 'verified' | 'still_there' | 'gone' | 'info'
 export type FixMethod = 'runcommand' | 'liveresponse'
+export type FixSource = 'vulnerability' | 'threat_intel' | 'attack_detection'
+
+/** The fix engine's name for each agent → the portal's agent key (UC_NAME / UC_DOT in lib/runs) */
+export const SOURCE_UC = { vulnerability: 'uc3', threat_intel: 'uc1', attack_detection: 'attack' } as const
+export type FixAgent = (typeof SOURCE_UC)[FixSource]
+/** The fix engine writes UTC times without a zone */
+export const fixTime = (s: string | null | undefined) => (s ? s.replace(' ', 'T') + (s.endsWith('Z') || s.includes('+') ? '' : 'Z') : null)
 
 export interface FixRow {
   fix_id: string; device_name: string; opco: string; app: string; software_name: string; version: string
-  action: 'upgrade' | 'remove' | 'replace' | 'setting' | 'none'; winget_id: string; stage: number; findings: number; cves: number
+  action: 'upgrade' | 'remove' | 'replace' | 'setting' | 'respond' | 'none'; winget_id: string; stage: number; findings: number; cves: number
   kev: number; ransomware: number; max_epss: number; kev_cves: string[]; note: string; status: FixStatus
   method: FixMethod | null; approved_by: string | null; approved_at: string | null; started_at: string | null
+  /** Save for later (on the run page's new-fix cards): reviewed, not fixed yet */
+  saved_by?: string | null; saved_at?: string | null
+  /** Which agents' runs proposed this fix, and when (UTC, no zone; null = before this was recorded) */
+  found_by?: Partial<Record<FixSource, string | null>>
+  /** The threats in the news that target this app on this computer (Threat Intel Agent), most urgent first */
+  threats?: { id: string; title: string }[]
   finished_at: string | null; verified_at: string | null; message: string | null
   /** Security settings (kind 'setting', software_name 'setting:<config_id>'): what the fix engine changes */
-  kind?: 'setting' | null; config_id?: string | null; category?: string | null; subcategory?: string | null; impact?: number | null
+  kind?: 'setting' | 'response' | null; config_id?: string | null; category?: string | null; subcategory?: string | null; impact?: number | null
   setting_kind?: 'asr' | 'defender' | 'registry' | null; setting_target?: string | null; setting_value?: number | null
   /** What the computer reported back after a fix run (UC1 fix engine). A setting reports numbers: the value before/after */
   result?: {
@@ -59,18 +72,22 @@ async function post(action: string, body: object = {}) {
   return out
 }
 
-/** approve / unapprove / run / probe / start-uc1, then refresh the view. */
+/** approve / unapprove / save / unsave / run / probe / start-uc1, then refresh the view. */
 export function useFixAction() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ action, ids, method }: { action: 'approve' | 'unapprove' | 'run' | 'probe' | 'start-uc1'; ids?: string[]; method?: FixMethod }) =>
+    mutationFn: ({ action, ids, method }: { action: 'approve' | 'unapprove' | 'save' | 'unsave' | 'run' | 'probe' | 'start-uc1'; ids?: string[]; method?: FixMethod }) =>
       post(action, { ids: ids ?? [], ...(method ? { method } : {}) }),
-    onSettled: () => qc.invalidateQueries({ queryKey: ['fix'] }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['fix'] })
+      qc.invalidateQueries({ queryKey: ['runs'] })     // a decision can end a run's Fix stage
+    },
   })
 }
 
 export const STATUS: Record<FixStatus, { label: string; tone: 'muted' | 'sky' | 'run' | 'teal' | 'good' | 'bad' | 'warn' }> = {
   proposed: { label: 'Proposed', tone: 'muted' },
+  saved: { label: 'Saved for later', tone: 'muted' },
   approved: { label: 'Approved', tone: 'sky' },
   queued: { label: 'Queued', tone: 'sky' },
   running: { label: 'Running…', tone: 'run' },
@@ -82,7 +99,7 @@ export const STATUS: Record<FixStatus, { label: string; tone: 'muted' | 'sky' | 
   info: { label: 'No action', tone: 'muted' },
 }
 
-export const ACTION_LABEL: Record<FixRow['action'], string> = { upgrade: 'Update', remove: 'Remove', replace: 'Replace', setting: 'Change setting', none: 'No action' }
+export const ACTION_LABEL: Record<FixRow['action'], string> = { upgrade: 'Update', remove: 'Remove', replace: 'Replace', setting: 'Change setting', respond: 'Scan and clean', none: 'No action' }
 export const isSetting = (r: Pick<FixRow, 'kind' | 'software_name'>) => r.kind === 'setting' || r.software_name.startsWith('setting:')
 /** The app version a fix result reports (settings report plain numbers, so they have none) */
 export const versionOf = (v: { version?: string } | number | null | undefined) => (typeof v === 'object' && v ? v.version : undefined)
@@ -103,5 +120,5 @@ export function settingChange(r: Pick<FixRow, 'setting_kind' | 'setting_target' 
   return 'Changes it to what Microsoft recommends'
 }
 export const METHOD_LABEL: Record<FixMethod, string> = { runcommand: 'Azure Run Command', liveresponse: 'Defender Live Response' }
-export const canApprove = (r: FixRow) => r.action !== 'none' && ['proposed', 'failed', 'still_there', 'gone'].includes(r.status)
+export const canApprove = (r: FixRow) => r.action !== 'none' && ['proposed', 'saved', 'failed', 'still_there', 'gone'].includes(r.status)
 export const canWithdraw = (r: FixRow) => ['approved', 'failed', 'still_there'].includes(r.status)

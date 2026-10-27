@@ -1,7 +1,7 @@
 import { useEffect, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-  Bot, ChevronRight, Crosshair, Database, FileText, Grip, LayoutGrid, Moon, PanelLeftClose, PanelLeftOpen, Play, Radar,
+  Bot, ChevronRight, Crosshair, FileText, Grip, LayoutGrid, Moon, PanelLeftClose, PanelLeftOpen, Play, Radar,
   LogOut, Menu, ScanSearch, Siren, Sun, Wrench,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -17,20 +17,21 @@ import { cn } from '@/lib/utils'
 
 type Item = { to: string; label: string; icon: ComponentType<{ className?: string }> }
 
-// The menu follows the story: overview (incl. the agents that fetch the data) -> find out -> check -> act -> trust & share.
+// The menu follows the story: overview (summary, the agents that fetch the data, fixing) -> dashboard -> archives.
 // Each group has its own colour (icons, selected row) so the menu doubles as a map of the portal's areas.
 const GROUPS: { heading: string; tone: string; on: string; items: Item[] }[] = [
-  { heading: 'Overview', tone: 'var(--area-overview)', on: 'var(--area-overview-on)', items: [{ to: '/', label: 'Dashboard', icon: LayoutGrid }, { to: '/runs', label: 'Agents', icon: Bot }] },
-  { heading: 'Find', tone: 'var(--area-find)', on: 'var(--area-find-on)', items: [{ to: '/uc3', label: 'Vulnerabilities', icon: ScanSearch }, { to: '/uc1', label: 'Threat news', icon: Crosshair }] },
-  { heading: 'Check', tone: 'var(--area-check)', on: 'var(--area-check-on)', items: [{ to: '/uc1/hunts', label: 'Attack detection', icon: Radar }] },
-  { heading: 'Act', tone: 'var(--area-act)', on: 'var(--area-act-on)', items: [{ to: '/fixes', label: 'Fix & protect', icon: Wrench }, { to: '/respond', label: 'Alert triage', icon: Siren }] },
-  { heading: 'Trust & share', tone: 'var(--area-trust)', on: 'var(--area-trust-on)', items: [{ to: '/uc3/quality', label: 'Data quality', icon: Database }, { to: '/reports', label: 'Reports', icon: FileText }] },]
+  { heading: 'Overview', tone: 'var(--area-overview)', on: 'var(--area-overview-on)', items: [{ to: '/', label: 'Summary', icon: LayoutGrid }, { to: '/runs', label: 'Agents', icon: Bot }, { to: '/fixes', label: 'Fix', icon: Wrench }] },
+  { heading: 'Dashboard', tone: 'var(--area-find)', on: 'var(--area-find-on)', items: [
+    { to: '/uc3', label: 'Vulnerabilities', icon: ScanSearch }, { to: '/uc1', label: 'Threats', icon: Crosshair },
+    { to: '/uc1/hunts', label: 'Attack detection', icon: Radar }, { to: '/respond', label: 'Alert triage', icon: Siren }] },
+  { heading: 'Archives', tone: 'var(--area-trust)', on: 'var(--area-trust-on)', items: [{ to: '/reports', label: 'Reports', icon: FileText }] },]
 const NAV = GROUPS.flatMap((g) => g.items)
 
 // Breadcrumb names for the tabs inside a page (the page itself comes from the menu)
 const TAB_NAMES: Record<string, string> = {
   affects: 'Affects us', explorer: 'Explorer', health: 'Health & metrics',
-  threat: 'Threat detail', opco: 'By VM', age: 'Age & SLA', trends: 'Trends', devices: 'Devices', table: 'All fixes (table)',
+  threat: 'Threat detail', opco: 'By VM', age: 'Age & SLA', trends: 'Trends', devices: 'Devices',
+  quality: 'Data quality',
   uc1: 'Threat Intel Agent', uc3: 'Vulnerability Agent', uc4: 'Alert Triage Agent', progress: 'Fix progress',
 }
 
@@ -75,7 +76,7 @@ export function AppShell() {
   const [tour, setTour] = useState(false)
   const [collapsed, setCollapsed] = useCollapsedNav()
   const onHome = pathname === '/'
-  // the most specific menu item wins (/uc3/quality is Data quality, not Vulnerabilities)
+  // the most specific menu item wins (/uc1/hunts is Attack detection, not Threats)
   const activeItem = NAV.map((i) => i.to)
     .filter((to) => (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(to + '/')))
     .sort((a, b) => b.length - a.length)[0]
@@ -86,7 +87,7 @@ export function AppShell() {
   }, [])
 
   // A new page always opens at the top (the browser would otherwise keep the last page's scroll position).
-  // Pages that jump to a card themselves (?app= on Fix & protect) still do so after this.
+  // Pages that jump to a card themselves (?app= on Fix) still do so after this.
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
   }, [pathname])

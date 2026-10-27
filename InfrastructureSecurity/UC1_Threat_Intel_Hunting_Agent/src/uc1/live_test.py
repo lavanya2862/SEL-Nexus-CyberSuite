@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import requests
 
-from uc1.ai.gemini_client import AIUnavailable, GeminiClient
+from uc1.ai.azure_client import make_client
+from uc1.ai.gemini_client import AIUnavailable
 from uc1.api_client import ApiError, DefenderClient
 from uc1.auth import AuthError, EntraTokenProvider
 from uc1.config import Settings
@@ -45,17 +46,19 @@ def run(settings: Settings) -> bool:
         except (AuthError, ApiError) as exc:
             results.append(_line(False, "Defender", str(exc).replace("\n", " ")))
 
-    # Gemini
-    if not settings.has_gemini:
-        results.append(_line(False, "Gemini", "GEMINI_API_KEY missing in .env"))
+    # AI: Azure AI Foundry or Gemini (AI_PROVIDER)
+    name = {"azure": "Azure AI Foundry", "gemini": "Gemini"}.get(settings.ai_provider, "AI")
+    if settings.ai_provider is None:
+        results.append(_line(False, name, "no AI set in .env: AZURE_FOUNDRY_ENDPOINT + _API_KEY + _DEPLOYMENT, "
+                                          "or GEMINI_API_KEY"))
     else:
         try:
-            ai = GeminiClient(settings)
+            ai = make_client(settings)
             model = ai.model()
             answer = ai.text("live-test", "Answer with one word.", "Reply with the word READY.", max_tokens=20)
-            results.append(_line(True, "Gemini", f"model {model} answered '{answer[:20]}'"))
+            results.append(_line(True, name, f"model {model} answered '{answer[:20]}'"))
         except AIUnavailable as exc:
-            results.append(_line(False, "Gemini", str(exc)))
+            results.append(_line(False, name, str(exc)))
 
     # NVD
     try:

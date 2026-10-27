@@ -46,6 +46,19 @@ def _key_count(settings: "Settings") -> str:
     return f" ({n} keys: the next takes over when one runs out)" if n > 1 else ""
 
 
+def _effort() -> str | None:
+    """AZURE_FOUNDRY_REASONING_EFFORT: minimal | low (default) | medium | high; "off" sends none."""
+    value = (_env("AZURE_FOUNDRY_REASONING_EFFORT") or "low").lower()
+    return None if value == "off" else value
+
+
+def _provider() -> str:
+    value = (_env("AI_PROVIDER") or "auto").lower()
+    if value not in ("auto", "azure", "gemini"):
+        raise ConfigError("AI_PROVIDER must be auto, azure or gemini")
+    return value
+
+
 def _flag(name: str, default: bool = False) -> bool:
     value = _env(name)
     return default if value is None else value.lower() not in ("0", "false", "no", "off")
@@ -74,6 +87,13 @@ class Settings:
     gemini_models: tuple[str, ...] = ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite")
     gemini_rpm: int = 15
     gemini_daily_cap: int = 1500
+    ai_provider_choice: str = "auto"             # AI_PROVIDER: auto (Azure Foundry when set, else Gemini) | azure | gemini
+    azure_endpoint: str | None = None            # AZURE_FOUNDRY_ENDPOINT, e.g. https://<resource>.openai.azure.com
+    azure_api_key: str | None = field(default=None, repr=False)
+    azure_deployment: str | None = None          # AZURE_FOUNDRY_DEPLOYMENT: the deployment name in Foundry
+    azure_rpm: int = 60
+    azure_reasoning_effort: str | None = "low"   # AZURE_FOUNDRY_REASONING_EFFORT for gpt-5 / o-series; off = not sent
+    azure_daily_cap: int = 1500
     abusech_auth_key: str | None = field(default=None, repr=False)
     otx_api_key: str | None = field(default=None, repr=False)
     abuseipdb_api_key: str | None = field(default=None, repr=False)
@@ -153,6 +173,23 @@ class Settings:
         return bool(self.gemini_keys)
 
     @property
+    def has_azure(self) -> bool:
+        return bool(self.azure_endpoint and self.azure_api_key and self.azure_deployment)
+
+    @property
+    def ai_provider(self) -> str | None:
+        """"azure", "gemini" or None (rules-only triage). AI_PROVIDER=auto prefers Azure Foundry when it is set."""
+        if self.ai_provider_choice == "azure":
+            return "azure" if self.has_azure else None
+        if self.ai_provider_choice == "gemini":
+            return "gemini" if self.has_gemini else None
+        return "azure" if self.has_azure else "gemini" if self.has_gemini else None
+
+    @property
+    def has_ai(self) -> bool:
+        return self.ai_provider is not None
+
+    @property
     def gemini_keys(self) -> tuple[str, ...]:
         """GEMINI_API_KEY, then the spare keys: the next one takes over when one uses up its daily quota."""
         return tuple(dict.fromkeys(k for k in (self.gemini_api_key, *self.gemini_extra_keys) if k))
@@ -163,7 +200,10 @@ class Settings:
             ("UC4_TENANT_ID", bool(self.tenant_id), "Microsoft login (incidents, searches, device info)"),
             ("UC4_CLIENT_ID", bool(self.client_id), "Microsoft login (incidents, searches, device info)"),
             ("UC4_CLIENT_SECRET", bool(self.client_secret), "Microsoft login (incidents, searches, device info)"),
-            ("GEMINI_API_KEY", self.has_gemini, "AI verdicts (without it: rules-only triage)" + _key_count(self)),
+            ("AZURE_FOUNDRY_API_KEY", self.has_azure, "AI verdicts via Azure AI Foundry (with ENDPOINT + DEPLOYMENT)"
+             + (" - in use" if self.ai_provider == "azure" else "")),
+            ("GEMINI_API_KEY", self.has_gemini, "AI verdicts via Gemini (without any AI: rules-only triage)"
+             + _key_count(self) + (" - in use" if self.ai_provider == "gemini" else "")),
             ("ABUSECH_AUTH_KEY", bool(self.abusech_auth_key), "threat intel: URLhaus, ThreatFox, MalwareBazaar"),
             ("OTX_API_KEY", bool(self.otx_api_key), "optional threat intel: AlienVault OTX"),
             ("ABUSEIPDB_API_KEY", bool(self.abuseipdb_api_key), "optional threat intel: AbuseIPDB (IP reputation)"),
@@ -189,6 +229,13 @@ def load_settings(env_file: Path | None = None) -> Settings:
         gemini_models=models,
         gemini_rpm=_int("GEMINI_RPM", 15),
         gemini_daily_cap=_int("GEMINI_DAILY_CAP", 1500),
+        ai_provider_choice=_provider(),
+        azure_endpoint=_env("AZURE_FOUNDRY_ENDPOINT"),
+        azure_api_key=_env("AZURE_FOUNDRY_API_KEY"),
+        azure_deployment=_env("AZURE_FOUNDRY_DEPLOYMENT"),
+        azure_rpm=max(1, _int("AZURE_FOUNDRY_RPM", 60)),
+        azure_reasoning_effort=_effort(),
+        azure_daily_cap=_int("AZURE_FOUNDRY_DAILY_CAP", 1500),
         abusech_auth_key=_env("ABUSECH_AUTH_KEY"),
         otx_api_key=_env("OTX_API_KEY"),
         abuseipdb_api_key=_env("ABUSEIPDB_API_KEY"),

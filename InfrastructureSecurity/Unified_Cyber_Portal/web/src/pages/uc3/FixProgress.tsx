@@ -32,13 +32,13 @@ function latestRun(v: FixView): FixRow[] {
   return started.filter((r) => newest - new Date(r.started_at!).getTime() < 2 * 3600_000)
 }
 
-/** Fix & protect › Fix progress: the whole run on one screen, one lane per computer. */
+/** Fix › Fix progress: the whole run on one screen, one lane per computer. */
 export function FixProgress() {
   const { data: v, error, isLoading } = useFix()
   const auto = useAutoStart(error instanceof FixDown, 'fix')
   return (
     <div className="flex flex-col gap-5">
-      <Link to="/fixes" className="inline-flex w-fit items-center gap-1.5 text-sm text-ink-3 hover:text-ink"><ArrowLeft className="size-4" /> Fix & protect</Link>
+      <Link to="/fixes" className="inline-flex w-fit items-center gap-1.5 text-sm text-ink-3 hover:text-ink"><ArrowLeft className="size-4" /> Fix</Link>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Fix progress</h1>
         <p className="mt-1 text-sm text-ink-3">Every fix moves forward as the computer reports back. You can leave this page; the fixes keep going.</p>
@@ -73,7 +73,7 @@ function Body({ v }: { v: FixView }) {
                 {live ? (v.worker.task === 'probe' ? 'Checking the computers…' : 'Fixing now…') : rows.length ? 'Last fix run finished' : 'No fixes have run yet'}
               </h2>
               <p key={v.worker.step || v.worker.message} className="mt-0.5 text-sm text-ink-3 animate-in fade-in slide-in-from-left-1 duration-300">
-                {live ? v.worker.step || 'Starting' : v.worker.message || 'Put fixes in the basket on Fix & protect, then press Run fixes.'}
+                {live ? v.worker.step || 'Starting' : v.worker.message || 'Put fixes in the basket on the Fix page, then press Run fixes.'}
                 {startedAt && <> · started {dateTime(startedAt)}</>}
               </p>
             </div>
@@ -149,7 +149,7 @@ function Body({ v }: { v: FixView }) {
 
       {v.impact && (
         <p className="text-xs text-ink-3">
-          All fixes so far clear {num(v.impact.findings_cleared)} of {num(v.impact.findings_open + v.impact.findings_cleared)} findings and {v.impact.kev_cleared} known exploited holes.
+          All fixes so far clear {num(v.impact.findings_cleared)} of {num(v.impact.findings_open + v.impact.findings_cleared)} findings and {v.impact.kev_cleared} known exploited vulnerabilities.
         </p>
       )}
     </>

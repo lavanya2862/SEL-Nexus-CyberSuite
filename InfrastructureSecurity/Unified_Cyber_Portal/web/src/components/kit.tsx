@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { chartTokens, useTheme, type ChartTokens } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
-/** "Follow this hole": a small link to the same item on the next tab (Vulnerabilities → Threat news → Fix & protect). */
+/** "Follow this vulnerability": a small link to the same item on the next tab (Vulnerabilities → Threats → Fix). */
 export function HopLink({ to, children, title }: { to: string; children: ReactNode; title?: string }) {
   return (
     <Link to={to} title={title} className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-hairline px-2 py-1 text-[11px] font-semibold text-ink-2 hover:bg-well hover:text-ink">

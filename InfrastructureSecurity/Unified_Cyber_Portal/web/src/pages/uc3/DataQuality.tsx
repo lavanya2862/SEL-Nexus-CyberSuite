@@ -3,8 +3,8 @@ import { Chart, axisStyle } from '@/components/Chart'
 import { Panel, Tag } from '@/components/kit'
 import { dateTime, num, shortDate } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
-import { CHECK_LABEL, useUc3Data } from '@/lib/uc3'
-import { Card, DTable, Uc3Header, Uc3Loading } from './common'
+import { CHECK_LABEL, type Uc3Data } from '@/lib/uc3'
+import { Card, DTable } from './common'
 
 const ICON = {
   PASS: { icon: CheckCircle2, color: statusColor.good, label: 'Passed' },
@@ -13,9 +13,8 @@ const ICON = {
   INFO: { icon: Info, color: 'var(--ink-3)', label: 'Info' },
 } as const
 
-export function DataQuality() {
-  const { data, error, isLoading } = useUc3Data()
-  if (isLoading || error || !data) return <Uc3Loading error={error} />
+/** Vulnerabilities › Data quality (/uc3/quality): can we trust these numbers? The automatic checks on every run. */
+export function DataQuality({ data }: { data: Uc3Data }) {
   const r = data.run
   const counts = (s: string) => data.dq.filter((c) => c.status === s).length
   const worst = counts('FAIL') ? 'FAIL' : counts('WARN') ? 'WARN' : 'PASS'
@@ -35,8 +34,6 @@ export function DataQuality() {
     : []
   return (
     <div className="flex flex-col gap-5">
-      <Uc3Header title="Data quality" description="Can we trust these numbers? Automatic checks on every run" data={data} />
-
       <Panel className="grid gap-6 p-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,2fr)] lg:items-center">
         <div className="flex items-center gap-4">
           <span className="grid size-14 place-items-center rounded-2xl" style={{ background: `color-mix(in oklab, ${W.color} 16%, transparent)` }}>

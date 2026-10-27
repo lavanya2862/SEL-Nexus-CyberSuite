@@ -1,6 +1,6 @@
 """Keep the services behind the portal running, so nobody has to switch anything on.
 
-The portal relies on two background services: the fixing service (UC1's site, Fix & protect) and the alert-triage
+The portal relies on two background services: the fixing service (UC1's site, Fix) and the alert-triage
 service (UC4's site: agree/disagree, Ask, Reopen). `python -m portal serve` starts a watcher thread that starts
 either one when it is not answering, at start-up and then every CHECK_EVERY seconds. Each service is started with its
 own Python, handed to Windows so it keeps running on its own (see _launch); 127.0.0.1 only. Switch off with PORTAL_AUTOSTART=0.
@@ -96,7 +96,7 @@ def start_one(settings, name: str, wait_s: float = 15) -> bool:
         python = _python(folder)
         if python is None:
             raise ERRORS[name](f"The {name} service has no Python environment in {folder}")
-        _launch([str(python), "-m", module, "serve", "--no-browser"], folder)
+        _launch([str(python), "-m", module, "serve"], folder)
         deadline = time.monotonic() + wait_s
         while time.monotonic() < deadline:
             if listening(base):

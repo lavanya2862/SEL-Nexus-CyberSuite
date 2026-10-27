@@ -12,7 +12,7 @@ requires-python = ">=3.12"
 where = ["src"]
 
 [tool.setuptools.package-data]
-uc1 = ["dashboard_assets/*", "site_assets/*"]
+uc1 = ["fix_assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

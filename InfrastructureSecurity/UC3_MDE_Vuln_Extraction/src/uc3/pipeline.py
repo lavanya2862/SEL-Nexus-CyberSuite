@@ -1,19 +1,25 @@
-"""The whole run: extract -> load -> transform -> quality -> publish -> retention.
+"""The whole run: extract -> load -> transform -> quality -> publish (Remediation agent) -> retention -> fix.
 
 Publishing is skipped when a quality check FAILs, so the dashboard keeps showing the last good data; the
 dashboard is then rebuilt only to show a red alert about the failed run (see status.py).
+The Fix stage only PROPOSES fixes: the fix engine lists the ones that are new in this run, and a person fixes or
+saves each one for later on the portal's run page. Nothing on a computer changes without that approval.
 Only one run can happen at a time (a lock file), whether started by the scheduled task, the command line or
-the live page's "Refresh now" button.
+the portal's "Run agents" button.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import subprocess
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 
-from uc3.config import Settings, load_settings
+from dotenv import dotenv_values
+
+from uc3.config import PROJECT_ROOT, Settings, load_settings
 from uc3.extract import run_extract
 from uc3.load import run_load
 from uc3.quality import run_checks
@@ -103,18 +109,62 @@ def publish_all(settings: Settings) -> dict:
     from uc3.excel import build_excel
     from uc3.metrics import build_metrics
     from uc3.publish import run_publish
+    from uc3.report import build_report, gather
 
-    # The two log lines below mark the stages "Score and report" and "Advice agent" (the portal's run page reads them)
+    # The log lines below mark the stages "Score and report" and "Remediation agent" (the portal's run page reads them)
     published = run_publish(settings)
     log.info("Score and report finished: %d reporting tables, CISA KEV %s", len(published["tables"]), published["kev"]["status"])
     log_severity_counts(settings)
-    log.info("Advice agent started")
+    log.info("Remediation agent started")
     published["ai_fixes"] = run_ai_fixes(settings)
     published["dashboard"] = str(build_dashboard(settings))
-    published["excel"] = str(build_excel(settings))
+    report_data = gather(settings)                    # one read for the Excel and the Word/PDF report
+    published["excel"] = str(build_excel(settings, report_data))
+    published["report"] = build_report(settings, report_data)
+    log.info("Report files: %s", {"xlsx": published["excel"], **published["report"]})   # the portal links these
     published["metrics"] = str(build_metrics(settings)["path"])
-    log.info("Advice agent finished: %s", published["ai_fixes"])
+    log.info("Remediation agent finished: %s", published["ai_fixes"])
     return published
+
+
+FIX_RESULT_KEYS = ("new", "new_ids", "new_apps", "new_settings", "waiting", "saved", "fixable", "urgent", "verified",
+                   "still_there", "inventory")
+
+
+def run_fix_stage(settings: Settings) -> dict | None:
+    """Fix stage: the fix engine (in the Threat Intel Agent) pulls a fresh inventory from Defender, rebuilds its fix
+    plan and lists the fixes that are new in this run. It fixes nothing; optional, so a problem never stops a run."""
+    log.info("Fix stage started")
+    engine = settings.fix_engine_dir
+    if not settings.fix_stage or not engine:
+        log.info("Fix stage skipped: switched off (UC3_FIX_STAGE=0)")
+        return None
+    python = engine / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    if not python.is_file():
+        log.warning("Fix stage skipped: no fix engine at %s", engine)
+        return None
+    # our own .env must not reach the fix engine (same names, e.g. GEMINI_API_KEY, would override its settings)
+    ours = set(dotenv_values(PROJECT_ROOT / ".env"))
+    env = {k: v for k, v in os.environ.items() if k not in ours} | {"PYTHONIOENCODING": "utf-8"}
+    try:
+        out = subprocess.run([str(python), "-m", "uc1", "fix-refresh", "-q"], cwd=engine, env=env, capture_output=True,
+                             text=True, encoding="utf-8", errors="replace", timeout=25 * 60,
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log.warning("Fix stage skipped: the fix engine did not answer (%s)", exc.__class__.__name__)
+        return None
+    line = next((ln for ln in reversed(out.stdout.splitlines()) if ln.startswith("Fix plan:")), None)
+    if not line:
+        why = (out.stdout.strip().splitlines() or out.stderr.strip().splitlines() or ["no answer"])[-1]
+        log.warning("Fix stage skipped: the fix engine could not refresh the plan (%s)", why[:200])
+        return None
+    result = json.loads(line.split(":", 1)[1])
+    if result.get("inventory") != "ok":
+        log.warning("Fix stage: Defender inventory %s (%s); fixes come from the last good inventory",
+                    result.get("inventory"), result.get("inventory_note") or "-")
+    summary = {k: result.get(k) for k in FIX_RESULT_KEYS}
+    log.info("Fix stage finished: %s", summary)
+    return summary
 
 
 def log_severity_counts(settings: Settings) -> None:
@@ -142,7 +192,7 @@ def run_ai_fixes(settings: Settings, **kwargs) -> dict | None:
 
 
 def refresh_alert(settings: Settings) -> None:
-    """Rebuild the dashboard from the last good reporting tables so it shows the latest run status."""
+    """Rebuild the portal data from the last good reporting tables so it shows the latest run status."""
     from uc3.dashboard.build import build_dashboard
 
     if (settings.reporting_dir / "fact_vulnerability.parquet").is_file():
@@ -169,11 +219,12 @@ def run_all(settings: Settings, run_date: date | None = None) -> dict:
     log.info("Publishing the dashboard, Excel summary and report tables")
     published = publish_all(settings)
     retention = apply_retention(settings)
-    return {"extract": manifest, "load": loaded, "quality": quality, "publish": published, "retention": retention}
+    fix = run_fix_stage(settings)
+    return {"extract": manifest, "load": loaded, "quality": quality, "publish": published, "retention": retention, "fix": fix}
 
 
 def daily_job(run_date: date | None = None) -> dict:
-    """One complete run with locking and error recording — used by `uc3 run`, the scheduled task and live mode.
+    """One complete run with locking and error recording — used by `uc3 run`, the scheduled task and the portal.
 
     Returns {"outcome": "published" | "quality_failed" | "skipped" | "error", ...}.
     """

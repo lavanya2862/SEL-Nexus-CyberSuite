@@ -1,20 +1,19 @@
-"""The UC4 triage website: `python -m uc4 serve` -> http://127.0.0.1:8900 (this computer only).
+"""The Alert Triage Agent's service for the portal: `python -m uc4 serve` -> http://127.0.0.1:8900 (this computer only).
 
-  /                      Triage queue: every triaged incident, verdict, confidence, guardrails, SLA clock
-  /incident/<id>         One incident: verdict + summary, evidence (with the searches behind it), alerts, entities,
-                         threat intel, context, history, next steps, containment, agree/disagree form
-  /metrics               Client metrics (MEASURED / ASSUMPTION)
-  /backtest              Accuracy on GUIDE + lab incidents, confusion matrix, noisy detectors
+The portal is the only user interface; this service has no web pages, only the API the portal calls:
   GET  /api/status       run in progress? last run?
+  GET  /api/queue        every triaged incident with its verdict and the latest analyst feedback
   POST /api/run          start a run now (header X-UC4: run)
   POST /api/feedback     analyst agree/disagree (header X-UC4: feedback)
   POST /api/contain      human-approved isolate/release of a LAB device (header X-UC4: contain; off unless UC4_CONTAIN=1)
-  POST /api/ask          "Ask about this incident": Gemini answers from the incident's saved evidence (header X-UC4: ask)
+  POST /api/close        close an incident in Defender (header X-UC4: close; off unless switched on)
+  POST /api/reopen       reopen an automatically closed incident (header X-UC4: reopen)
+  POST /api/ask          "Ask about this incident": the AI answers from the incident's saved evidence (header X-UC4: ask)
 
-Design (as UC1): runs export files (data/export/*.json, data/verdicts/*.json, data/last_run.json) and the server only
+Design (as UC1): runs export files (data/export/*.json, data/verdicts/*.json, data/last_run.json) and the service only
 reads those plus the feedback files it appends to. It never opens the database, so it can't block a scheduled run.
 Security: listens on 127.0.0.1 only; the Host header must name this computer (blocks DNS rebinding); every POST
-needs a custom header (other websites can't send it); all values are escaped in the browser (textContent).
+needs a custom header (other websites can't send it).
 """
 
 from __future__ import annotations
@@ -22,7 +21,6 @@ from __future__ import annotations
 import json
 import logging
 import threading
-import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
@@ -32,7 +30,6 @@ from uc4.config import Settings
 from uc4.triage import _safe
 
 log = logging.getLogger("uc4.site")
-ASSETS = Path(__file__).parent / "site_assets"
 DEFAULT_PORT = 8900
 HEADER = "X-UC4"
 
@@ -92,15 +89,9 @@ class Site(ThreadingHTTPServer):
         data["uc1"] = fixes_for(self.settings.uc1_dir, [d.get("name") for d in data["packet"]["entities"]["devices"]])
         from uc4.ask import history
         data["questions"] = history(self.settings, data["packet"]["incident_id"])
-        data["flags"]["ask"] = self.settings.has_gemini
+        data["flags"]["ask"] = self.settings.has_ai
         data["status"] = self.status()
         return data
-
-    def metrics(self) -> dict:
-        return _read_json(self.settings.export_dir / "metrics.json", {"metrics": []})
-
-    def backtest(self) -> dict:
-        return _read_json(self.settings.export_dir / "backtest.json", {"sets": {}})
 
     # ---------- runs ----------
     def status(self) -> dict:
@@ -142,8 +133,8 @@ class Site(ThreadingHTTPServer):
         return ask(self.settings, self._llm, data, question, cap=self.settings.ask_daily_cap)
 
     def _default_llm(self):
-        from uc4.llm import GeminiLLM
-        return GeminiLLM(self.settings) if self.settings.has_gemini else None
+        from uc4.llm import make_llm
+        return make_llm(self.settings)
 
     def _default_graph(self):
         from uc4.api import graph_client
@@ -154,12 +145,6 @@ class Site(ThreadingHTTPServer):
         from uc4.api import DefenderClient
         from uc4.auth import DEFENDER_SCOPE, EntraLogin
         return DefenderClient(self.settings.defender_base, EntraLogin(self.settings).provider(DEFENDER_SCOPE))
-
-
-def _page(name: str, payload) -> str:
-    html = (ASSETS / name).read_text(encoding="utf-8")
-    data = json.dumps(payload, default=str, ensure_ascii=False).replace("</", "<\\/")
-    return html.replace("/*__DATA__*/null", data)
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -182,9 +167,6 @@ class _Handler(BaseHTTPRequestHandler):
     def _json(self, status: int, payload) -> None:
         self._send(status, json.dumps(payload, default=str).encode(), "application/json")
 
-    def _html(self, html: str, status: int = 200) -> None:
-        self._send(status, html.encode("utf-8"), "text/html; charset=utf-8")
-
     def _host_ok(self) -> bool:
         host = (self.headers.get("Host") or "").rsplit(":", 1)[0].lower()
         return host in ("127.0.0.1", "localhost")
@@ -194,29 +176,11 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(403, {"error": "forbidden host"})
         path = unquote(self.path.split("?")[0].split("#")[0])
         s = self.server
-        if path in ("/", "/index.html"):
-            return self._html(_page("queue.html", s.triage_data()))
-        if path.startswith("/incident/"):
-            data = s.incident(path[len("/incident/"):])
-            if data is None:
-                return self._html(_page("notfound.html", {}), 404)
-            return self._html(_page("incident.html", data))
-        if path == "/metrics":
-            return self._html(_page("metrics.html", {"metrics": s.metrics(), "status": s.status()}))
-        if path == "/backtest":
-            return self._html(_page("backtest.html", {"backtest": s.backtest(), "status": s.status()}))
         if path == "/api/status":
             return self._json(200, s.status())
         if path == "/api/queue":
             return self._json(200, s.triage_data())
-        if path.startswith("/assets/"):
-            name = path[len("/assets/"):]
-            types = {".css": "text/css; charset=utf-8", ".js": "application/javascript; charset=utf-8"}
-            file = ASSETS / name
-            if "/" in name or "\\" in name or file.suffix not in types or not file.is_file():
-                return self._json(404, {"error": "not found"})
-            return self._send(200, file.read_bytes(), types[file.suffix])
-        return self._html(_page("notfound.html", {}), 404)
+        return self._json(404, {"error": "not found"})
 
     def _body(self) -> dict:
         length = min(int(self.headers.get("Content-Length") or 0), 32_000)
@@ -297,13 +261,11 @@ class _Handler(BaseHTTPRequestHandler):
         return self._json(200, {"action": row})
 
 
-def serve(settings: Settings, port: int = DEFAULT_PORT, open_browser: bool = True) -> None:
+def serve(settings: Settings, port: int = DEFAULT_PORT) -> None:
     settings.ensure_dirs()
     server = Site(("127.0.0.1", port), settings)
-    url = f"http://127.0.0.1:{server.server_address[1]}/"
-    print(f"UC4 triage website at {url} (this computer only). Keep this window open; Ctrl+C stops it.", flush=True)
-    if open_browser:
-        webbrowser.open(url)
+    print(f"Alert Triage Agent service on http://127.0.0.1:{server.server_address[1]}/api (this computer only). "
+          "Keep this window open; Ctrl+C stops it.", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

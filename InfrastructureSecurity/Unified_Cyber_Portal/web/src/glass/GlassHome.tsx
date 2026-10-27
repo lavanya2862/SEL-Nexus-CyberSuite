@@ -64,10 +64,6 @@ function GlassView({ s }: { s: Summary }) {
         <Uc1Panel s={s} />
         <Uc3Panel s={s} />
       </div>
-
-      <p className="pb-2 text-center text-xs text-[var(--g-ink-3)]">
-        Lab proof of concept · data refreshed {ago(s.generated_at)} · commands are shown, never run
-      </p>
     </div>
   )
 }
@@ -246,7 +242,7 @@ function EmberCta({ v }: { v: View }) {
       <Radar />
       <div className="relative flex h-full flex-col">
         <h3 className="text-[22px] font-semibold leading-tight tracking-tight">
-          {kevFixes.length} updates clear every exploited hole
+          {kevFixes.length} updates fix every exploited vulnerability
         </h3>
         <p className="mt-2 max-w-[24ch] text-sm text-[#2b1309]/80">
           Attackers are known to use these flaws (CISA KEV list). Updating the apps below takes the list to zero.
@@ -288,7 +284,7 @@ function AppBars({ v }: { v: View }) {
           <h3 className="text-sm text-[var(--g-ink-2)]">Where the risk sits</h3>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="tabular text-[26px] font-medium leading-none tracking-tight">{rows[pick] ? num(rows[pick][metric]) : '–'}</span>
-            <span className="text-sm text-[var(--g-ink-3)]">{rows[pick] ? `${metric === 'kev' ? 'exploited holes' : 'findings'} in ${shortApp(rows[pick].app)}` : ''}</span>
+            <span className="text-sm text-[var(--g-ink-3)]">{rows[pick] ? `${metric === 'kev' ? 'exploited vulnerabilities' : 'findings'} in ${shortApp(rows[pick].app)}` : ''}</span>
           </div>
         </div>
         <Seg small items={[['findings', 'Findings'], ['kev', 'Exploited']]} value={metric} onChange={(m) => { setMetric(m); setSel(0) }} />
@@ -363,7 +359,7 @@ function ExposureColumn({ v }: { v: View }) {
               <ShieldAlert className="size-5 text-[var(--g-ember-hi)]" />
             </span>
           </div>
-          <div className="mt-6 text-sm text-[var(--g-ink-3)]">Exploited holes on our devices</div>
+          <div className="mt-6 text-sm text-[var(--g-ink-3)]">Exploited vulnerabilities on our devices</div>
           <div className="mt-1 flex items-end justify-between">
             <span className="tabular text-[32px] font-medium leading-none tracking-tight">{num(v.totals.kev)}</span>
             <span className="flex items-center gap-1 rounded-md bg-[var(--g-ember)]/20 px-2 py-1 text-xs font-medium text-[var(--g-ember-hi)]">

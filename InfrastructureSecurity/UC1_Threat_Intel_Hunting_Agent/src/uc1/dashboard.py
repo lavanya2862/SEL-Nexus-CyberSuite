@@ -1,22 +1,23 @@
-"""Phase 7: the Threat Command Centre dashboard (data/dashboard/dashboard.html).
+"""Phase 7: the data behind the portal's Threats and Attack detection pages (data/dashboard/*.json).
 
-One self-contained HTML file: all data is embedded as JSON and Apache ECharts (Apache-2.0) is embedded too,
-so it opens offline with a double-click, can be e-mailed, and needs no server.
+The agent makes no web pages of its own: the Unified Cyber Portal reads these files (read-only) and draws them.
+  dashboard_data.json   headline numbers, charts, the threat explorer, hunts, devices, metrics
+  site_data.json        one threat's full detail, per threat id
+  clues.json            every clue (IP, domain, web link, file hash) collected
 """
 
 from __future__ import annotations
 
 import json
 import re
-import shutil
 from datetime import timedelta
 from pathlib import Path
 
-from uc1 import metrics, resolve
+from uc1 import fix_advice, metrics, resolve
 from uc1.config import Settings
+from uc1.report import defang
 from uc1.store import Store, utcnow
 
-ASSETS = Path(__file__).parent / "dashboard_assets"
 SOURCE_GROUPS = {"CISA KEV": "Vulnerability lists", "NVD": "Vulnerability lists",
                  "NCSC-NL": "Advisories", "CERT-EU": "Advisories", "Microsoft MSRC": "Advisories",
                  "ThreatFox": "IOC feeds", "URLhaus": "IOC feeds", "MalwareBazaar": "IOC feeds",
@@ -264,22 +265,118 @@ def gather(store: Store, settings: Settings | None = None) -> dict:
 
 
 def build(store: Store, settings: Settings) -> Path:
+    """Write the portal's data for the Threat Intel Agent: dashboard_data.json, site_data.json and clues.json."""
     out_dir = settings.dashboard_dir
     out_dir.mkdir(parents=True, exist_ok=True)
-    if not (out_dir / "ECHARTS_LICENSE.txt").is_file():      # ECharts itself is embedded in the page
-        shutil.copy2(ASSETS / "ECHARTS_LICENSE.txt", out_dir / "ECHARTS_LICENSE.txt")
-    payload = gather(store, settings)
-    # same data as plain JSON, for the Unified Cyber Portal (read-only consumer; never touches the database)
-    (out_dir / "dashboard_data.json").write_text(json.dumps(payload, default=str, ensure_ascii=False), encoding="utf-8")
-    data = json.dumps(payload, default=str, ensure_ascii=False).replace("</", "<\\/")
-    echarts = (ASSETS / "echarts.min.js").read_text(encoding="utf-8").replace("</script", "<\\/script")
-    html = (ASSETS / "template.html").read_text(encoding="utf-8")
-    # one self-contained file: works when opened from disk, e-mailed or previewed
-    html = html.replace('<script src="echarts.min.js"></script>', "<script>" + echarts + "</script>")
-    html = html.replace("/*__DATA__*/null", data)
-    path = out_dir / "dashboard.html"
-    path.write_text(html, encoding="utf-8")
-    from uc1.site import export_clues, export_site_data      # data for the website's detail pages
+    path = out_dir / "dashboard_data.json"
+    path.write_text(json.dumps(gather(store, settings), default=str, ensure_ascii=False), encoding="utf-8")
     export_site_data(store, settings)
     export_clues(store, settings)
+    return path
+
+
+def export_site_data(store: Store, settings: Settings) -> Path:
+    """Everything the portal's threat detail page needs, as data/dashboard/site_data.json."""
+    q = store.query
+    month = utcnow() - timedelta(days=30)
+    threats = q("""
+        SELECT t.threat_id, t.title, t.source, t.kind, t.url, t.published_at, t.first_seen_at, t.is_test, t.text,
+               s.score, s.rating, s.factors, s.why, a.summary, a.threat_type, a.techniques AS ai_techniques,
+               a.actions, a.confidence, a.ai_status, a.ai_model, a.dropped, a.analysed_at
+        FROM threats t LEFT JOIN scores s USING (threat_id) LEFT JOIN analysis a USING (threat_id)
+        WHERE t.first_seen_at >= ? OR t.threat_id IN (SELECT threat_id FROM findings)""", [month])
+    ids = {t["threat_id"] for t in threats}
+    links: dict[str, dict[str, list]] = {}
+    for l in q("SELECT threat_id, link_type, value, origin FROM threat_links"):
+        if l["threat_id"] in ids:
+            links.setdefault(l["threat_id"], {}).setdefault(l["link_type"], []).append((l["value"], l["origin"]))
+    cve_ids = sorted({v for lk in links.values() for v, _ in lk.get("cve", [])})
+    cves = {}
+    for i in range(0, len(cve_ids), 500):
+        chunk = cve_ids[i:i + 500]
+        for c in q(f"""SELECT cve_id, cvss, severity, epss, epss_percentile, kev_added, kev_due, kev_ransomware, description
+                       FROM cves WHERE cve_id IN ({",".join("?" for _ in chunk)})""", chunk):
+            cves[c["cve_id"]] = c
+    techniques = {t["technique_id"]: t for t in q("SELECT * FROM attack_techniques")}
+    exposure: dict[str, list] = {}
+    for e in q("SELECT * FROM exposure ORDER BY device_name"):
+        exposure.setdefault(e["threat_id"], []).append({k: e[k] for k in ("device_name", "opco", "match_type", "detail",
+                                                                          "recommended_update")})
+    findings: dict[str, list] = {}
+    resolutions = resolve.for_findings(store)
+    threat_fixes = fix_advice.for_threats(store)
+    for f in q("SELECT * FROM findings WHERE kind <> 'exposure' ORDER BY first_hit DESC NULLS LAST"):
+        findings.setdefault(f["threat_id"], []).append({
+            "kind": f["kind"], "device": f["device_name"], "opco": f["opco"], "detail": f["detail"], "is_test": f["is_test"],
+            "first_hit": f["first_hit"], "hunt_id": f["hunt_id"], "users": _j(f["users"]), "alerts": _j(f["alerts"]),
+            "timeline": _j(f["timeline"]), "resolution": resolutions.get(f["finding_id"])})
+    hunt_ids = {f["hunt_id"] for fl in findings.values() for f in fl if f["hunt_id"]}
+    hunts: dict[str, list] = {}
+    for h in q("SELECT * FROM hunts ORDER BY started_at DESC"):
+        keys = [h["threat_id"]] if h["threat_id"] in ids else []
+        if h["hunt_id"] in hunt_ids:
+            keys += [f_tid for f_tid, fl in findings.items() if any(f["hunt_id"] == h["hunt_id"] for f in fl)]
+        for key in dict.fromkeys(keys):
+            if len(hunts.setdefault(key, [])) < 4:
+                hunts[key].append({k: h[k] for k in ("name", "origin", "technique", "status", "row_count", "error",
+                                                     "started_at", "query")})
+
+    out = {}
+    for t in threats:
+        tid = t["threat_id"]
+        lk = links.get(tid, {})
+        fixes = [e["recommended_update"] for e in exposure.get(tid, []) if e["recommended_update"]]
+        ai_tech = {x["id"]: x.get("reason", "") for x in _j(t["ai_techniques"])}
+        out[tid] = {
+            "id": tid, "title": t["title"], "source": t["source"], "kind": t["kind"], "url": t["url"],
+            "published": t["published_at"], "first_seen": t["first_seen_at"], "is_test": t["is_test"],
+            "text": (t["text"] or "")[:8000], "score": t["score"], "rating": t["rating"], "factors": _j(t["factors"]),
+            "why": t["why"], "summary": t["summary"], "threat_type": t["threat_type"], "confidence": t["confidence"],
+            "ai_status": t["ai_status"], "ai_model": t["ai_model"], "dropped": _j(t["dropped"]) or {},
+            "analysed_at": t["analysed_at"],
+            "actions": list(dict.fromkeys(fixes + _j(t["actions"]))),
+            "cves": [{"id": v, "origin": o, **{k: cves.get(v, {}).get(k) for k in (
+                "cvss", "severity", "epss", "epss_percentile", "kev_added", "kev_due", "kev_ransomware")},
+                "description": (cves.get(v, {}).get("description") or "")[:400]} for v, o in lk.get("cve", [])][:80],
+            "techniques": [{"id": v, "origin": o, "name": techniques.get(v, {}).get("name", ""),
+                            "tactics": techniques.get(v, {}).get("tactics", ""), "url": techniques.get(v, {}).get("url", ""),
+                            "reason": ai_tech.get(v, "")} for v, o in lk.get("technique", [])],
+            "products": [{"value": v.replace("|", " · "), "origin": o} for v, o in lk.get("product", [])][:30],
+            "ioc_count": len(lk.get("ioc", [])),
+            "iocs": [{"type": v.split("|", 1)[0], "value": defang(v.split("|", 1)[1]), "origin": o}
+                     for v, o in lk.get("ioc", [])[:60]],
+            "exposure": exposure.get(tid, []), "findings": findings.get(tid, []), "hunts": hunts.get(tid, []),
+            "fix": threat_fixes.get(tid) if exposure.get(tid) else None,
+        }
+    path = settings.dashboard_dir / "site_data.json"
+    path.write_text(json.dumps(out, default=str, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def export_clues(store: Store, settings: Settings) -> Path:
+    """Every clue (IP, domain, web link, file hash) we ever collected, one row each, as data/dashboard/clues.json:
+    found on our computers first, then newest first. "collected" is when we last got it (the portal's period filter uses
+    it). Values are made safe (hxxp, [.]) so they can't be clicked."""
+    q = store.query
+    seen: dict[str, set[str]] = {}
+    for f in q("SELECT device_name, detail FROM findings WHERE kind = 'ioc_hit'"):
+        _, kind, value = ((f["detail"] or "") + "  ").split(" ", 2)      # "matched <type> <value>"
+        seen.setdefault(f"{kind}|{value.strip()}", set()).add(f["device_name"])
+    out: dict[str, dict] = {}
+    for r in q("""SELECT l.value, l.threat_id, t.title, t.source, t.is_test, t.first_seen_at, i.malware, i.first_seen
+                  FROM threat_links l JOIN threats t USING (threat_id)
+                  LEFT JOIN iocs i ON i.ioc_type || '|' || i.value = l.value
+                  WHERE l.link_type = 'ioc' ORDER BY t.first_seen_at DESC"""):   # latest sighting first
+        key = r["value"]
+        if key in out:
+            continue
+        kind, _, value = key.partition("|")
+        out[key] = {"type": kind, "value": defang(value), "malware": r["malware"] or "", "source": r["source"],
+                    "first_seen": str(r["first_seen"] or r["first_seen_at"])[:16],
+                    "collected": str(r["first_seen_at"])[:16], "test": r["is_test"],
+                    "threat_id": r["threat_id"], "threat": r["title"], "seen_on": sorted(seen.get(key, ()))}
+    clues = sorted(out.values(), key=lambda c: c["first_seen"], reverse=True)
+    clues.sort(key=lambda c: not c["seen_on"])      # stable: found on our computers first, each part newest first
+    path = settings.dashboard_dir / "clues.json"
+    path.write_text(json.dumps(clues, ensure_ascii=False), encoding="utf-8")
     return path

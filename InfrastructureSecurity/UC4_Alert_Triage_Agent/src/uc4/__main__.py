@@ -1,13 +1,13 @@
 """UC4 command line: `python -m uc4 <command>` (run from the UC4 folder with its own .venv).
 
   check            settings present (names only), folders writable, database opens
-  live-test        tiny real calls: Microsoft login, incidents, hunting, devices, Gemini, threat intel
+  live-test        tiny real calls: Microsoft login, incidents, hunting, devices, AI (Azure Foundry or Gemini), threat intel
   run              ingest new/changed incidents -> triage -> (comments) -> ledger -> metrics -> export
   triage --incident ID [--no-ai]   triage one incident now (re-runs even if unchanged)
   ledger           load the lab ledger (data/inbox/ledger/*.txt) and match lab incidents
   backtest [--guide N] [--no-ai]   grade the agent on N GUIDE incidents + all matched lab incidents
   metrics          print the metrics (MEASURED / ASSUMPTION)
-  serve [--port 8900]              the triage website (this computer only)
+  serve [--port 8900]              the service the portal calls (this computer only; no web pages)
   demo             today's numbers for the demo script
 """
 
@@ -77,14 +77,14 @@ def cmd_triage(settings: Settings, incident_id: str, no_ai: bool) -> int:
 
 def cmd_backtest(settings: Settings, n: int, no_ai: bool) -> int:
     from uc4 import backtest, ledger
-    from uc4.llm import GeminiLLM
+    from uc4.llm import make_llm
     store = Store(settings.db_path)
     try:
         ledger.load_inbox(store, settings)
         ledger.match_incidents(store, settings)
         print("Lab set:", backtest.grade_lab(store))
         if n:
-            llm = None if no_ai or not settings.has_gemini else GeminiLLM(settings, store)
+            llm = None if no_ai else make_llm(settings, store)
             try:
                 print("GUIDE set:", backtest.run_guide(settings, store, llm, n))
             except FileNotFoundError as exc:
@@ -153,7 +153,6 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--no-ai", action="store_true", help="rules + history baseline only")
     s = sub.add_parser("serve")
     s.add_argument("--port", type=int, default=8900)
-    s.add_argument("--no-browser", action="store_true")
     args = parser.parse_args(argv)
 
     settings = load_settings()
@@ -190,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_demo(settings)
     if args.command == "serve":
         from uc4.site import serve
-        serve(settings, args.port, open_browser=not args.no_browser)
+        serve(settings, args.port)
         return 0
     return 1
 

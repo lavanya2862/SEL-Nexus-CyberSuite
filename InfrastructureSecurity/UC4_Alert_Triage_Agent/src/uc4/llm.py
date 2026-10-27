@@ -1,6 +1,11 @@
-"""Gemini API client (free tier), adapted from UC1: model auto-selection, adaptive per-minute rate limiting, daily
-cap, retries, JSON output. One interface (`LLM`) so a client-approved model can replace Gemini later without
-touching the triage code.
+"""AI clients behind one interface (`LLM`), so the triage code does not care which model answers:
+
+- AzureFoundryLLM: a model deployment in Azure AI Foundry (AZURE_FOUNDRY_ENDPOINT / _API_KEY / _DEPLOYMENT), over its
+  OpenAI-compatible chat API. Used whenever it is set (AI_PROVIDER=auto, the default).
+- GeminiLLM: the Gemini API (free tier), adapted from UC1: model auto-selection, adaptive per-minute rate limiting,
+  daily cap, retries, JSON output.
+
+`make_llm` picks the one AI_PROVIDER asks for.
 
 The agent works without AI: if no key / quota is exhausted, `available` is False and the triage falls back to a
 deterministic rules-only verdict.
@@ -15,6 +20,8 @@ import re
 import threading
 import time
 
+import requests
+
 from uc4.api import RateLimiter
 from uc4.config import Settings
 from uc4.store import Store
@@ -27,7 +34,7 @@ class AIUnavailable(RuntimeError):
 
 
 class LLM:
-    """Interface the triage code depends on. GeminiLLM implements it; a stub implements it in tests."""
+    """Interface the triage code depends on. AzureFoundryLLM and GeminiLLM implement it; a stub in tests."""
 
     available: bool = False
 
@@ -149,6 +156,142 @@ class GeminiLLM(LLM):
         raise AIUnavailable(f"Gemini failed: {_short(last)}")
 
 
+JSON_ONLY = "\n\nAnswer with one JSON object only: no markdown, no text before or after it."
+TUNABLE = ("reasoning_effort", "temperature", "max_completion_tokens", "response_format")  # options some deployments refuse
+REASONING_ROOM = 8000   # extra tokens a reasoning model (gpt-5, o-series) may spend thinking before it answers
+
+
+def chat_url(endpoint: str) -> str:
+    """Chat-completions URL from what the Foundry portal shows: the resource endpoint
+    (https://<resource>.openai.azure.com or https://<resource>.services.ai.azure.com), its /openai/v1 address,
+    a project endpoint (.../api/projects/<name>), or the full .../chat/completions URL (used as it is)."""
+    url = endpoint.strip().rstrip("/")
+    if "/chat/completions" in url:
+        return url
+    url = re.sub(r"/api/projects/[^/]+$", "", url)
+    return url + "/chat/completions" if url.endswith("/openai/v1") else url + "/openai/v1/chat/completions"
+
+
+class AzureFoundryLLM(LLM):
+    """A model deployment in Azure AI Foundry, over its OpenAI-compatible chat API (key in the api-key header)."""
+
+    def __init__(self, settings: Settings, store: Store | None = None, session=None, sleep=time.sleep):
+        self.settings = settings
+        self.store = store
+        self.sleep = sleep
+        self.available = settings.has_azure or session is not None
+        self.url = chat_url(settings.azure_endpoint or "")
+        self.session = session or requests.Session()
+        self.session.headers.update({"api-key": settings.azure_api_key or ""})
+        self.limiter = RateLimiter(settings.azure_rpm, sleep=sleep)
+        self._lock = threading.Lock()
+        self._dropped: set[str] = set()       # options this deployment refused (e.g. temperature on reasoning models)
+
+    def model(self) -> str:
+        return self.settings.azure_deployment or "?"
+
+    def _count(self, purpose: str, ok: bool) -> None:
+        if self.store is not None:
+            self.store.count_ai_call(self.model(), purpose, ok)
+
+    def _body(self, system: str, prompt: str, max_tokens: int) -> dict:
+        effort = None if "reasoning_effort" in self._dropped else self.settings.azure_reasoning_effort
+        budget = max_tokens + REASONING_ROOM if effort else max_tokens   # a reasoning model thinks inside this budget
+        body = {"model": self.model(), "temperature": 0.0, "max_completion_tokens": budget,
+                "response_format": {"type": "json_object"},
+                "messages": [{"role": "system", "content": system + JSON_ONLY}, {"role": "user", "content": prompt}]}
+        if effort:
+            body["reasoning_effort"] = effort
+        for name in self._dropped:
+            body.pop(name, None)
+        if "max_completion_tokens" in self._dropped:
+            body["max_tokens"] = budget       # older chat APIs only know max_tokens
+        return body
+
+    def _adapt(self, detail: str) -> bool:
+        """A 400 that names one of the TUNABLE options: leave it out from now on. False when there is none left."""
+        low = detail.lower()
+        with self._lock:
+            name = next((n for n in TUNABLE if n in low and n not in self._dropped), None)
+            if name:
+                self._dropped.add(name)
+        if name:
+            log.info("Azure AI Foundry deployment %s refused '%s'; sending without it", self.model(), name)
+        return name is not None
+
+    def json(self, purpose: str, system: str, prompt: str, max_tokens: int = 1500) -> dict:
+        if not self.available:
+            raise AIUnavailable("Azure AI Foundry is not configured")
+        if self.store is not None and self.store.ai_calls_today() >= self.settings.azure_daily_cap:
+            raise AIUnavailable(f"Daily AI cap reached ({self.settings.azure_daily_cap})")
+        attempt = 0
+        while True:
+            self.limiter.wait()
+            try:
+                resp = self.session.post(self.url, json=self._body(system, prompt, max_tokens), timeout=120)
+            except requests.RequestException as exc:
+                self._count(purpose, False)
+                attempt += 1
+                if attempt >= 5:
+                    raise AIUnavailable(f"Azure AI Foundry unreachable: {_short(exc)}") from exc
+                self.sleep(2 ** attempt)
+                continue
+            code = resp.status_code
+            self._count(purpose, code == 200)
+            if code == 200:
+                return _parse_json(_answer(resp))
+            detail = resp.text
+            if code == 400 and self._adapt(detail):
+                continue
+            if code in (400, 401, 403, 404):
+                raise AIUnavailable(f"Azure AI Foundry refused the request ({code}): {_short(detail)}{_hint(code)}")
+            attempt += 1
+            if attempt >= 5:
+                raise AIUnavailable(f"Azure AI Foundry failed after {attempt} attempts ({code}): {_short(detail)}")
+            if code == 429:
+                with self._lock:
+                    if self.limiter.interval < 6.0:
+                        self.limiter.interval = min(6.0, self.limiter.interval * 2)
+                        log.info("Azure AI Foundry rate limit: slowing to %.0f/min", 60 / self.limiter.interval)
+            self.sleep((_retry_after(resp) or min(30, 2 ** attempt)) * random.uniform(1.0, 1.3))
+
+
+def _answer(resp) -> str:
+    choice = (resp.json().get("choices") or [{}])[0]
+    text = (choice.get("message") or {}).get("content") or ""
+    if not text.strip():
+        reason = choice.get("finish_reason")
+        tip = (" (the model used all its tokens thinking: set AZURE_FOUNDRY_REASONING_EFFORT=minimal in .env)"
+               if reason == "length" else "")
+        raise AIUnavailable(f"Azure AI Foundry gave an empty answer (finish_reason {reason}){tip}")
+    return text
+
+
+def _retry_after(resp) -> float | None:
+    """Seconds Azure asks us to wait (retry-after-ms, then Retry-After)."""
+    for name, scale in (("retry-after-ms", 1000.0), ("Retry-After", 1.0)):
+        try:
+            return float(resp.headers[name]) / scale + 1
+        except (KeyError, TypeError, ValueError):
+            continue
+    return None
+
+
+def _hint(code: int) -> str:
+    return {401: " - check AZURE_FOUNDRY_API_KEY",
+            403: " - check AZURE_FOUNDRY_API_KEY and the resource's network rules",
+            404: " - check AZURE_FOUNDRY_ENDPOINT and AZURE_FOUNDRY_DEPLOYMENT"}.get(code, "")
+
+
+def make_llm(settings: Settings, store: Store | None = None) -> LLM | None:
+    """The AI that AI_PROVIDER picks (Azure AI Foundry first when set), or None for rules-only triage."""
+    if settings.ai_provider == "azure":
+        return AzureFoundryLLM(settings, store)
+    if settings.ai_provider == "gemini":
+        return GeminiLLM(settings, store)
+    return None
+
+
 def _parse_json(text: str) -> dict:
     text = (text or "").strip()
     if text.startswith("```"):
@@ -160,7 +303,7 @@ def _parse_json(text: str) -> dict:
         start, end = text.find("{"), text.rfind("}")
         if 0 <= start < end:
             return json.loads(text[start:end + 1])
-        raise AIUnavailable("Gemini did not return JSON")
+        raise AIUnavailable("The AI did not return JSON")
 
 
 def _short(exc) -> str:

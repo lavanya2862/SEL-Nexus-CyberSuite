@@ -35,6 +35,8 @@ def run_checks(settings: Settings, run_date: date | None = None) -> dict:
     run_date = run_date or latest_run_date(settings)
     raw = settings.raw_dir / run_date.isoformat()
     manifest = json.loads((raw / "manifest.json").read_text())
+    load_file = raw / "load.json"
+    dropped = json.loads(load_file.read_text()).get("duplicates_dropped", 0) if load_file.is_file() else 0
     day = f"DATE '{run_date.isoformat()}'"
     checks: list[Check] = []
     add = lambda *args: checks.append(Check(*args))
@@ -45,10 +47,11 @@ def run_checks(settings: Settings, run_date: date | None = None) -> dict:
             f"SELECT count(*), count(cve_id), count(DISTINCT device_id) FROM lake_vulnerabilities WHERE snapshot_date = {day}")
         device_rows = one(f"SELECT count(*) FROM lake_devices WHERE snapshot_date = {day}")[0]
 
-        # 1. Everything downloaded made it into the lake
-        expected = manifest["counts"]["vulnerability_rows"]
+        # 1. Everything downloaded made it into the lake (less the repeated copies the load step dropped)
+        expected = manifest["counts"]["vulnerability_rows"] - dropped
         add("completeness", "PASS" if rows == expected else "FAIL", f"{rows:,} rows loaded",
-            f"{expected:,} rows downloaded", "Rows in the data lake match the downloaded export files."
+            f"{expected:,} rows downloaded" + (f" less {dropped:,} repeats" if dropped else ""),
+            "Rows in the data lake match the downloaded export files."
             if rows == expected else "Rows were lost or duplicated between download and data lake.")
 
         # 2. Coverage against Defender's own count (a KQL count is never capped at 100,000)
@@ -57,6 +60,7 @@ def run_checks(settings: Settings, run_date: date | None = None) -> dict:
             add("coverage_vs_defender", "WARN", f"{with_cve:,} rows", "Defender's own count",
                 "Defender's count wasn't available (" + manifest.get("source_count_error", "unknown reason") + ").")
         else:
+            with_cve += dropped     # Defender's count includes the repeated copies
             coverage = with_cve / source if source else 1.0
             add("coverage_vs_defender", "PASS" if with_cve == source else "WARN", f"{coverage:.1%} ({with_cve:,} rows)",
                 f"100% ({source:,} rows in Defender)",
@@ -86,6 +90,10 @@ def run_checks(settings: Settings, run_date: date | None = None) -> dict:
               GROUP BY device_id, software_vendor, software_name, software_version, cve_id HAVING count(*) > 1)""")[0]
         add("no_duplicates", "PASS" if duplicates == 0 else "FAIL", f"{duplicates:,} duplicated keys", "0",
             "Each device/software/version/CVE appears once." if duplicates == 0 else "Some records appear more than once.")
+        if dropped:
+            add("defender_repeats", "INFO", f"{dropped:,} repeated rows dropped", "info",
+                "Defender's export listed some findings twice (an older copy next to the current one); "
+                "only the newest copy was kept.")
 
         # 6. Mandatory fields are filled
         missing = one(f"""SELECT count(*) FROM lake_vulnerabilities WHERE snapshot_date = {day}

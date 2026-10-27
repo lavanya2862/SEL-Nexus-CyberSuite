@@ -62,7 +62,8 @@ def uc3_steps() -> list[Step]:
         Step("download", "Download from Defender", "The full list of weaknesses, plus what Defender changed since the last run"),
         Step("check", "Validate", "Save today's copy and check nothing is missing"),
         Step("score", "Score and report", "Rate each problem and prepare the report numbers"),
-        Step("advice", "Advice agent", "AI writes the steps to fix every problem"),
+        Step("advice", "Remediation agent", "AI writes the steps to fix every problem"),
+        Step("fix", "Fix", "Propose the fixes that are new in this run; you approve each one below"),
     ]
 
 
@@ -76,6 +77,7 @@ def uc1_steps() -> list[Step]:
              ("fix_advice",)),
         Step("outputs", "Write the report", "The new threats that affect us and how to fix them, alerts and the report",
              ("alerts", "report", "dashboard", "metrics")),
+        Step("fix", "Fix", "Propose the fixes that are new in this run; you approve each one below", ("fix_plan",)),
     ]
 
 
@@ -88,7 +90,10 @@ def attack_steps() -> list[Step]:
              ("correlate", "exposure", "rescore")),
         Step("resolve", "Write resolution steps", "AI writes how to resolve each new sign of attack, checked against the evidence",
              ("resolve",)),
-        Step("publish", "Publish", "Update the Attack detection page and raise alerts", ("alerts", "dashboard")),
+        Step("publish", "Publish", "Update the Attack detection page, raise alerts and write the report",
+             ("alerts", "report", "dashboard")),
+        Step("fix", "Fix", "Propose a Defender scan-and-clean for every new sign of attack; you approve each one below",
+             ("fix_plan",)),
     ]
 
 
@@ -100,7 +105,7 @@ def uc4_steps() -> list[Step]:
              ("triage",)),
         Step("act", "Take action", "Close false alarms, escalate real threats, ask Defender to scan or clean up (when switched on)",
              ("auto_resolve", "respond", "writeback", "actions")),
-        Step("publish", "Update the queue", "Results ready to review on the Alert triage page", ("metrics", "export")),
+        Step("publish", "Update the queue", "Results ready to review on the Alert triage page", ("metrics", "export", "report")),
     ]
 
 
@@ -152,32 +157,27 @@ def download_words(info: dict) -> str:
     return text + (f" · {fixed:,} fixed" if fixed else "")
 
 
-def advice_status(info: dict, stopped: str = "") -> tuple[str, str]:
-    """UC3 advice agent result as (value, hint), e.g. ("24 waiting", "AI daily limit reached: ...").
+def advice_summary(info: dict, stopped: str = "") -> str:
+    """The Remediation agent step in plain words: "Fix steps ready for every vulnerability", no counts.
 
-    A fix card needs new AI text when its app or setting changed. Cards the AI could not write this run keep basic
-    steps ("rules") or the older AI text ("previous facts": ai minus reused minus asked); both are "waiting".
-    `stopped` is the reason from the "AI stopped" / "AI explanations off" warning, if the log had one.
+    Counts confused people: the total ("111 fix guides") read as "111 new", and the rewritten count ("14 new") as
+    "only 14 problems get a fix". Only a problem is spelled out: guides the AI could not update this run keep basic
+    steps ("rules") or the older AI text (ai minus reused minus asked). `stopped` is the reason from the
+    "AI stopped" / "AI explanations off" warning, if the log had one.
     """
-    asked = info.get("asked", 0)
-    waiting = info.get("rules", 0) + max(0, info.get("ai", 0) - info.get("reused", 0) - asked)
+    behind = info.get("rules", 0) + max(0, info.get("ai", 0) - info.get("reused", 0) - info.get("asked", 0))
+    if not behind:
+        return "Fix steps ready for every vulnerability"
     why = ("AI daily limit reached" if "quota" in stopped.lower() else "AI not available" if stopped
            else "AI answers did not pass the checks")
-    if asked:
-        return f"{asked} new", f"fixes written by AI" + (f" · {waiting} still waiting ({why})" if waiting else "")
-    if waiting:
-        return f"{waiting} waiting", f"{why}: basic or older steps shown until the next run"
-    return "Up to date", "nothing changed, so no new advice was needed"
+    return f"Fix steps ready · some are basic: {why}"
 
 
-def advice_summary(info: dict, stopped: str = "") -> str:
-    """The advice step in a few words: "3 new fixes written by AI", "AI daily limit reached: 24 fixes wait"…"""
-    value, hint = advice_status(info, stopped)
-    if value.endswith("new"):
-        return f"{value} {hint}"
-    if value.endswith("waiting"):
-        return f"{hint.split(':')[0]}: {value.split()[0]} fixes wait for the next run"
-    return "All fixes up to date"
+def fix_words(info: dict) -> str:
+    """The Fix stage in a few words: "6 new fixes to approve · 102 waiting from earlier runs"."""
+    new, waiting = int(info.get("new") or 0), int(info.get("waiting") or 0)
+    text = f"{new} new fix{'es' if new > 1 else ''} to approve" if new else "No new fixes this run"
+    return text + (f" · {waiting:,} waiting from earlier runs" if waiting else "")
 
 
 def _short(text: str, limit: int = 110) -> str:
@@ -212,7 +212,7 @@ def _searched(d: dict) -> str:
 
 def threats_words(ex: dict) -> str:
     """Only what this run found: "No new threats affect our computers" / "3 new threats affect our computers".
-    The running total is on the Threat news page; runs from before the new count say only that the check ran."""
+    The running total is on the Threats page; runs from before the new count say only that the check ran."""
     if "new_threats_exposed" not in ex:
         return "Checked against the software on our computers"
     new = ex["new_threats_exposed"]
@@ -277,6 +277,8 @@ def friendly(name: str, value) -> str | None:
             return "Dashboard rebuilt"
         if name == "metrics":
             return "Benefit metrics updated"
+        if name == "fix_plan":
+            return fix_words(d)
         # UC4
         if name == "feedback":
             return f"{_plural(d.get('feedback', 0), 'feedback click')} · {_plural(d.get('actions', 0), 'action')} imported"
@@ -314,6 +316,8 @@ def group_summary(key: str, r: dict) -> str | None:
         if key == "fixes":
             new = _new_steps(get("fix_advice"))
             return f"Fix steps written for {_plural(new, 'threat')} that affect us" if new else "No new fix steps needed"
+        if key == "fix":
+            return fix_words(get("fix_plan"))
         if key == "search":
             return _searched(get("hunt"))
         if key == "resolve":
@@ -412,7 +416,22 @@ class RunState:
 
     def _feed_uc3(self, line: str) -> None:
         d, c = self._index("download"), self._index("check")
-        sc, a = self._index("score"), self._index("advice")
+        sc, a, fx = self._index("score"), self._index("advice"), self._index("fix")
+        line = line.replace("Advice agent", "Remediation agent")       # logs from before the rename
+        if "Fix stage started" in line:
+            self._finish(a, detail=self.steps[a].detail or "Fix advice updated")
+            self._start(fx)
+            self.steps[fx].detail = "Fetching the latest software list from Defender and checking which fixes are new"
+            return
+        if "Fix stage finished:" in line:
+            info = _literal(line.split("Fix stage finished:", 1)[1].strip())
+            if isinstance(info, dict):
+                self.results["fix"] = info
+                self._finish(fx, detail=fix_words(info))
+            return
+        if "Fix stage skipped:" in line:
+            self._finish(fx, "skipped", _short(line.split("Fix stage skipped:", 1)[1].strip()))
+            return
         if "Extract finished:" in line:
             info = _literal(line.split("Extract finished:", 1)[1].strip())
             if isinstance(info, dict):
@@ -430,7 +449,11 @@ class RunState:
             self._start(sc)
         elif "Score and report finished:" in line:
             self._finish(sc, detail=REPORT_READY)
-        elif "Advice agent started" in line:
+        elif "Report files:" in line:
+            files = _literal(line.split("Report files:", 1)[1].strip())
+            if isinstance(files, dict):
+                self.results["report"] = files
+        elif "Remediation agent started" in line:
             self._finish(sc, detail=self.steps[sc].detail or REPORT_READY)
             self._start(a)
         elif "AI fix card:" in line:
@@ -439,8 +462,8 @@ class RunState:
                 self._start(a)
             item = line.split("AI fix card:", 1)[1].split("(")[0].strip()
             self.steps[a].detail = f"Writing advice: {item}"
-        elif "Advice agent finished:" in line:
-            info = _literal(line.split("Advice agent finished:", 1)[1].strip())
+        elif "Remediation agent finished:" in line:
+            info = _literal(line.split("Remediation agent finished:", 1)[1].strip())
             if isinstance(info, dict):
                 self.results["advice"] = info
                 self._finish(a, detail=advice_summary(info, self.results.get("ai_stopped", "")))
@@ -566,7 +589,9 @@ class RunState:
         if exit_code == 0:
             for i, s in enumerate(self.steps):
                 if s.status in ("pending", "running"):
-                    self._finish(i, "skipped" if s.status == "pending" and self.uc in ("uc1", "uc4", "attack") else "done")
+                    # UC3's Fix stage is optional (and missing from runs before it existed): never "done" unseen
+                    unseen = s.status == "pending" and (self.uc in ("uc1", "uc4", "attack") or s.key == "fix")
+                    self._finish(i, "skipped" if unseen else "done")
             errors = [s for s in self.steps if s.status == "error"]
             self.status = "partial" if errors else "ok"
             self.message = self.message or ("Finished with problems in: " + ", ".join(s.label for s in errors) if errors else "Finished")
@@ -586,22 +611,25 @@ class RunState:
                 out.append({"label": label, "value": str(value), "hint": hint})
 
         if self.uc == "uc3":
+            # Each card's small text explains its own big number, never a second number
             ex = r.get("extract") or {}
             add("Vulnerabilities in Defender", f"{ex['vulnerability_rows']:,}" if "vulnerability_rows" in ex else None,
-                f"on {ex.get('machines', '?')} computers")
+                f"found on {ex.get('machines', '?')} computers")
             counts = defender_new(ex)
             if counts is not None:
+                stale = ex.get("defender_refreshed") is False
                 add("New in this run", f"{counts[0]:,}",
-                    f"{counts[1]:,} fixed since the last run" if counts[1] else "nothing fixed since the last run")
+                    "Defender has no newer data yet" if stale else "not there in the last run")
+                add("Fixed since the last run", f"{counts[1]:,}",
+                    "Defender has no newer data yet" if stale else "no longer found by Defender")
             sev = r.get("severity") or {}
             if sev:
-                add("Critical findings", f"{sev.get('Critical', 0):,}", f"{sev.get('High', 0):,} high · fix these first")
-            add("Data quality", r.get("quality"), "all automatic checks")
-            adv = r.get("advice") if isinstance(r.get("advice"), dict) else None
-            if adv:
-                add("Advice agent (AI)", *advice_status(adv, r.get("ai_stopped", "")))
-            else:
-                add("Advice agent (AI)", r.get("ai_fixes"))
+                add("Critical vulnerabilities", f"{sev.get('Critical', 0):,}", "most dangerous: fix these first")
+                add("High vulnerabilities", f"{sev.get('High', 0):,}", "fix after the critical ones")
+            quality = r.get("quality")
+            add("Data quality", quality, {"PASS": "every automatic check passed", "WARN": "some checks need a look",
+                                          "FAIL": "a check failed: open Data quality"}.get(quality or "", ""))
+            self._fix_fact(add)
             return out
         if self.uc == "uc4":
             got = re.findall(r"\d+", r.get("ingest_text") or "")
@@ -634,6 +662,7 @@ class RunState:
                 add("Fix steps written this run", _new_steps(rs), "for signs of attack")
             al = r.get("alerts") if isinstance(r.get("alerts"), dict) else {}
             add("Alerts sent", al.get("new_alerts"), "to the security team" if al.get("new_alerts") else "no one needed to be told")
+            self._fix_fact(add)
             return out
         feeds = r.get("collect") if isinstance(r.get("collect"), dict) else {}
         new_items = sum(int(n) for v in feeds.values() for n in re.findall(r"\d+", str(v)))
@@ -651,12 +680,30 @@ class RunState:
             add("New signs of attack", co.get("new_hits", co.get("hit_findings", 0)), "since the last run")
         al = r.get("alerts") if isinstance(r.get("alerts"), dict) else {}
         add("Alerts sent", al.get("new_alerts"), "to the security team" if al.get("new_alerts") else "no one needed to be told")
+        self._fix_fact(add)
         return out
+
+    def _fix_fact(self, add) -> None:
+        fx = self.fix_result()
+        if fx:
+            add("New fixes to approve", f"{int(fx.get('new') or 0):,}", "proposed in this run: approve them below")
 
     def report_file(self) -> str | None:
         rep = self.results.get("report")
         path = rep.get("docx") if isinstance(rep, dict) else None
         return Path(path).name if path else None
+
+    def report_files(self) -> list[str]:
+        """This run's report files (Excel, Word, PDF) by name, for the download buttons."""
+        rep = self.results.get("report")
+        if not isinstance(rep, dict):
+            return []
+        return [Path(rep[k]).name for k in ("xlsx", "docx", "pdf") if isinstance(rep.get(k), str) and rep[k]]
+
+    def fix_result(self) -> dict | None:
+        """The Fix stage's result: UC3 logs it as "Fix stage finished", UC1's two runs as step fix_plan."""
+        fix = self.results.get("fix") or self.results.get("fix_plan")
+        return fix if isinstance(fix, dict) and "new_ids" in fix else None
 
     def to_dict(self) -> dict:
         return {
@@ -664,8 +711,11 @@ class RunState:
             "started_at": self.started_at, "finished_at": self.finished_at, "exit_code": self.exit_code,
             "steps": [{k: getattr(s, k) for k in ("key", "label", "description", "status", "detail", "started_at", "finished_at")}
                       for s in self.steps],
-            "facts": self.facts(), "report_file": self.report_file(), "lines": self.lines,
+            "facts": self.facts(), "report_file": self.report_file(), "report_files": self.report_files(),
+            "files_from": "uc1" if self.uc in ("uc1", "attack") else self.uc, "lines": self.lines,
             "log_tail": list(self.log_tail)[-12:],
+            # UC3's Fix stage: the fixes this run proposed (the run page shows them as cards to approve)
+            "fix": self.fix_result(),
         }
 
 
@@ -695,6 +745,50 @@ def _read_json(path: Path) -> dict | None:
         return None
 
 
+FIX_TO_DO = {"approved", "queued", "running", "done", "failed", "verified", "still_there", "gone"}
+
+
+def fix_waiting(run: dict, fix_dir: Path, read: Callable[[Path], dict | None] = _read_json) -> dict:
+    """The Fix stage ends only when a person has decided on every new fix of the run (Fix or Save for later).
+
+    Decisions live in the fix engine's data/fix/state.json; a new fix that left the plan (Defender stopped listing
+    it) needs no decision any more. Until then the stage is "waiting" and the run page asks for the decisions.
+    """
+    fix, step = run.get("fix"), next((s for s in run.get("steps", []) if s["key"] == "fix"), None)
+    if not fix or not step or run.get("status") not in ("ok", "partial") or step["status"] != "done":
+        return run
+    ids = fix.get("new_ids") or []
+    decided = (read(fix_dir / "state.json") or {}).get("fixes") or {}
+    planned = {i.get("fix_id") for i in (read(fix_dir / "plan.json") or {}).get("items") or []}
+    open_ids = [i for i in ids if i not in decided and i in planned]
+    to_fix = sum(1 for i in ids if (decided.get(i) or {}).get("status") in FIX_TO_DO)
+    saved = sum(1 for i in ids if (decided.get(i) or {}).get("status") == "saved")
+    step = {**step}
+    if open_ids:
+        step.update(status="waiting", finished_at=None,
+                    detail=f"Waiting for you: {len(open_ids)} of {len(ids)} new fix{'es' if len(ids) != 1 else ''} to decide")
+    elif ids:
+        step["detail"] = f"All {len(ids)} handled: {to_fix} to fix, {saved} saved for later"
+    return {**run, "fix": {**fix, "open": len(open_ids), "to_fix": to_fix, "saved_now": saved},
+            "steps": [step if s["key"] == "fix" else s for s in run["steps"]], "waiting_for_you": bool(open_ids)}
+
+
+class _MtimeCache:
+    """Reads a JSON file again only when it changed (the run page asks every few seconds; plan.json is large)."""
+
+    def __init__(self):
+        self._seen: dict[Path, tuple[float, dict | None]] = {}
+
+    def __call__(self, path: Path) -> dict | None:
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            return None
+        if path not in self._seen or self._seen[path][0] != mtime:
+            self._seen[path] = (mtime, _read_json(path))
+        return self._seen[path][1]
+
+
 class RunManager:
     """Runs live in data/runs/<run_id>/; the latest one per use case is what the run page shows."""
 
@@ -706,6 +800,9 @@ class RunManager:
         self.alive = alive
         self.lock = threading.Lock()
         self._cache: dict[str, tuple[tuple, RunState]] = {}
+        self._fix_files = _MtimeCache()
+        # the fix engine (UC1's data/fix) keeps the decisions on every agent's new fixes
+        self.fix_dir = uc_dirs["uc1"] / "data" / "fix" if "uc1" in uc_dirs else None
 
     # ---------- reading ----------
     def _run_dirs(self, uc: str | None = None) -> list[Path]:
@@ -765,7 +862,8 @@ class RunManager:
             out = {}
             for uc in self.uc_dirs:
                 st = self.latest(uc)
-                out[uc] = {**st.to_dict(), "typical_seconds": self.typical_seconds(uc)} if st else None
+                run = {**st.to_dict(), "typical_seconds": self.typical_seconds(uc)} if st else None
+                out[uc] = fix_waiting(run, self.fix_dir, self._fix_files) if run and self.fix_dir else run
             return out
 
     def history(self, limit: int = 12) -> list[dict]:

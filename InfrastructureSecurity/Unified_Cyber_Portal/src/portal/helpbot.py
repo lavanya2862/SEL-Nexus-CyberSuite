@@ -35,13 +35,13 @@ _lock = threading.Lock()
 
 # What each screen is for, so the AI knows where the user is standing (the menu names the user sees).
 SCREENS: dict[str, str] = {
-    "home": "Dashboard: three headline numbers, Top fixes / Threats / Devices tables, risk by app and by VM, agent status.",
-    "threats": "Threat news: attack news from public sources (CISA, NVD, NCSC-NL, CERT-EU, abuse.ch) rated for how much it affects our computers. Tabs: Overview (posture, funnel and the threat landscape charts), Affects us (each threat that matches our computers: the vulnerability, the computer and how to fix it), Explorer (Threats and Clues kept apart: clues are IPs, domains, web links and file hashes), Health & metrics.",
+    "home": "Summary: three headline numbers, Top fixes / Threats / Devices tables, risk by app and by VM, agent status.",
+    "threats": "Threats: attack news from public sources (CISA, NVD, NCSC-NL, CERT-EU, abuse.ch) rated for how much it affects our computers. Tabs: Overview (posture, funnel and the threat landscape charts), Affects us (each threat that matches our computers: the vulnerability, the computer and how to fix it), Explorer (Threats and Clues kept apart: clues are IPs, domains, web links and file hashes), Health & metrics.",
     "threat": "Threat detail: one threat news item, why it matters to us, which devices are affected, and what to do.",
     "hunts": "Attack hunting: searches through Microsoft Defender records for signs an attacker is already inside; hits are real or lab-test matches.",
     "weak": "Vulnerabilities: known software flaws (CVEs) Microsoft Defender found on our computers, by priority, VM, age/SLA, trends, devices.",
     "quality": "Data quality: automatic checks that the vulnerability data is complete and fresh (for example the row count matches Defender).",
-    "fixes": "Fix & protect (Fix Centre): which apps and Windows updates to install, unsupported software to upgrade and security settings to change, most dangerous first; holes with no vendor fix yet are marked 'No fix yet'; 'Fix it for me' adds a computer to the basket, Run updates it.",
+    "fixes": "Fix (Fix Centre): which apps and Windows updates to install, unsupported software to upgrade and security settings to change, most dangerous first; vulnerabilities with no vendor fix yet are marked 'No fix yet'; 'Fix it for me' adds a computer to the basket, Run updates it.",
     "progress": "Fix progress: what the automatic fixing did on each computer and whether the update worked.",
     "respond": "Alert triage: Defender/Sentinel incidents, each with the assistant's verdict (true positive, false positive, needs review).",
     "case": "Incident page: one incident, its evidence, the assistant's verdict, what Defender did, agree/disagree buttons.",
@@ -269,6 +269,6 @@ def ask(settings, summary: dict, runs: dict, run_history: list[dict], body: dict
     return row
 
 
-SCREEN_LABELS = {"home": "Dashboard", "threats": "Threat news", "hunts": "Attack hunting", "weak": "Vulnerabilities",
-                 "quality": "Data quality", "fixes": "Fix & protect", "progress": "Fix progress", "respond": "Alert triage",
+SCREEN_LABELS = {"home": "Summary", "threats": "Threats", "hunts": "Attack hunting", "weak": "Vulnerabilities",
+                 "quality": "Data quality", "fixes": "Fix", "progress": "Fix progress", "respond": "Alert triage",
                  "reports": "Reports", "runs": "Agents"}

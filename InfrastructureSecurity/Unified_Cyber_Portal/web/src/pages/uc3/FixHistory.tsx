@@ -7,14 +7,14 @@ import { useFilters } from '@/lib/filters'
 import { dateTime, num, shortDate } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
-import { groupBy, pretty, sumBy, useFixedFindings, useUc3Data, type FixedFinding } from '@/lib/uc3'
+import { groupBy, pretty, sumBy, useFixedFindings, useGroupAfter, useUc3Data, type FixedFinding } from '@/lib/uc3'
 import { Uc3Loading } from './common'
 
 // the fix engine writes UTC times without a zone
 const utc = (s: string | null | undefined) => (s ? s.replace(' ', 'T') + (s.endsWith('Z') || s.includes('+') ? '' : 'Z') : null)
 const keyOf = (device: string, sw: string, ver: string) => `${device}|${sw}|${ver}`.toLowerCase()
 
-/** Fix & protect › Fixed history: what the portal fixed (with the computer's own output) and everything Defender reported fixed. */
+/** Fix › Fixed history: what the portal fixed (with the computer's own output) and everything Defender reported fixed. */
 export function FixHistory() {
   const { data, error, isLoading } = useUc3Data()
   const fix = useFix()
@@ -77,7 +77,7 @@ function RunCard({ r, cleared, events }: { r: FixRow; cleared: number; events: {
   const setting = isSetting(r)
   const before = setting ? '' : versionOf(res?.before) ?? r.version
   const after = setting ? undefined : versionOf(res?.after)
-  const what = setting ? 'Changed setting:' : r.action === 'remove' ? 'Removed' : r.action === 'replace' ? 'Replaced' : 'Updated'
+  const what = setting ? 'Changed setting:' : r.action === 'respond' ? 'Scanned and cleaned after:' : r.action === 'remove' ? 'Removed' : r.action === 'replace' ? 'Replaced' : 'Updated'
   const mine = events.filter((e) => e.fix_id === r.fix_id).sort((a, b) => a.at.localeCompare(b.at))
   const steps: [string, string | null, React.ReactNode][] = [
     ['Approved', r.approved_at, <>by {r.approved_by ?? 'someone'}{r.method ? ` · ${METHOD_LABEL[r.method]}` : ''}</>],
@@ -183,13 +183,14 @@ function DefenderLog({ fixed, portalKeys }: { fixed: FixedFinding[]; portalKeys:
 function FixedGroup({ rows, byPortal }: { rows: FixedFinding[]; byPortal: boolean }) {
   const [open, setOpen] = useState(false)
   const [limit, setLimit] = useState(50)
+  const groupAfter = useGroupAfter()
   const f = rows[0]
   const crit = rows.filter((x) => x.sev === 'Critical').length
   return (
     <div className="rounded-xl border border-hairline">
       <button onClick={() => setOpen(!open)} className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-left hover:bg-well/60" aria-expanded={open}>
         <span className="font-medium">{pretty(f.sw)} <span className="tabular font-normal text-ink-3">{f.ver}</span></span>
-        <span className="text-sm text-ink-3">on {f.dev?.name} · {f.o}</span>
+        <span className="text-sm text-ink-3">on {f.dev?.name}{groupAfter(f)}</span>
         {byPortal && <Tag><ShieldCheck className="mr-1 inline size-3" />fixed by Cyber Command</Tag>}
         <span className="ml-auto flex items-center gap-3 text-sm">
           {crit > 0 && <span className="text-xs text-ink-3">{num(crit)} critical</span>}

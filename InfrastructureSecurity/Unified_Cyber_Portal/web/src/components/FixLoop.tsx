@@ -3,12 +3,13 @@ import { AlertTriangle, Check, CheckCircle2, Loader2, Minus, Play, RefreshCw, Sh
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { GettingReady, useAutoStart } from '@/lib/services'
 import { Empty, Panel, Tag } from '@/components/kit'
-import { ago, num } from '@/lib/format'
+import { ago, dateTime, num } from '@/lib/format'
+import { UC_NAME } from '@/lib/runs'
 import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import {
-  ACTION_LABEL, FixDown, METHOD_LABEL, STATUS, canApprove, canWithdraw, useFix, useFixAction,
-  type FixMethod, type FixRow, type FixStatus, type FixView,
+  ACTION_LABEL, FixDown, METHOD_LABEL, SOURCE_UC, STATUS, canApprove, canWithdraw, fixTime, useFix, useFixAction,
+  type FixMethod, type FixRow, type FixSource, type FixStatus, type FixView,
 } from '@/lib/fix'
 
 const utc = (s: string | null | undefined) => (s ? s.replace(' ', 'T') + (s.endsWith('Z') || s.includes('+') ? '' : 'Z') : null)
@@ -58,7 +59,7 @@ function Loop({ v }: { v: FixView }) {
           <h2 className="text-lg font-semibold tracking-tight">Fix the lab computers automatically</h2>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-2">
             You approve; the assistant updates or removes the old app on the computer (winget, through {METHOD_LABEL[v.default_method]}),
-            checks the installed version before and after, and the next threat check asks Defender to confirm the hole is gone.
+            checks the installed version before and after, and the next threat check asks Defender to confirm the vulnerability is gone.
             Commands come only from the assistant’s fix catalogue, never from the AI. Nothing runs without your approval.
           </p>
           <ol className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
@@ -74,7 +75,7 @@ function Loop({ v }: { v: FixView }) {
             [v.totals.verified, 'verified by Defender'],
             [v.totals.failed, 'failed'],
             [v.impact.findings_cleared, 'findings cleared'],
-            [v.impact.kev_open, 'exploited holes still open'],
+            [v.impact.kev_open, 'exploited vulnerabilities still open'],
           ] as const).map(([n, l]) => (
             <div key={l} className="rounded-xl bg-well px-3.5 py-3">
               <div className="tabular text-lg font-semibold leading-none" style={{ color: l === 'failed' && n ? statusColor.critical : undefined }}>{num(n ?? 0)}</div>
@@ -322,6 +323,11 @@ function DevicePlan({ device, rows, stages, sel, toggle, setMany }: {
                   <td>
                     <div className="font-medium">{r.app}</div>
                     <div className="text-xs text-ink-3">{r.version}{r.note ? ` · ${r.note}` : ''}</div>
+                    {Object.keys(r.found_by ?? {}).length > 0 && (
+                      <div className="mt-0.5 text-[11px] text-ink-3">
+                        from {(Object.entries(r.found_by ?? {}) as [FixSource, string | null][]).map(([s, at]) => `${UC_NAME[SOURCE_UC[s]]}${at ? ` · ${dateTime(fixTime(at))}` : ''}`).join(' and ')}
+                      </div>
+                    )}
                   </td>
                   <td className="whitespace-nowrap text-ink-2">{ACTION_LABEL[r.action]}</td>
                   <td className="tabular text-right">{num(r.findings)}</td>

@@ -1,7 +1,7 @@
-"""Build the Command Centre: read the reporting tables, pack them into template.html with ECharts and app.js.
+"""The data behind the portal's Vulnerabilities pages: data/dashboard/dashboard_data.json.
 
-Output: data/dashboard/UC3_Dashboard_<snapshot>.html and UC3_Dashboard_latest.html. One file, no server,
-no internet needed; it can be e-mailed. Like every other report it reads ONLY data/reporting/*.parquet.
+The agent makes no web pages of its own: the Unified Cyber Portal reads this file (read-only) and draws it.
+Like every other report it reads ONLY data/reporting/*.parquet.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ import duckdb
 from uc3.config import CONFIG_DIR, Settings
 from uc3.status import read_status
 
-HERE = Path(__file__).parent
 FINDING_COLUMNS = ["d", "sw", "ver", "cve", "sev", "cvss", "ex", "pr", "age", "bk", "br", "kev", "upd", "fs", "ua"]
 FIXED_COLUMNS = ["d", "sw", "ver", "cve", "sev", "fixed", "fs", "days"]
 
@@ -161,26 +160,11 @@ def _posture_meta(settings: Settings, con, rep: Path) -> dict | None:
     return meta
 
 
-def render_html(payload: dict) -> str:
-    template = (HERE / "template.html").read_text(encoding="utf-8")
-    echarts = (HERE / "vendor" / "echarts.min.js").read_text(encoding="utf-8")
-    app = (HERE / "app.js").read_text(encoding="utf-8")
-    data = json.dumps(payload, default=_json_default, separators=(",", ":")).replace("</", "<\\/")
-    # str.replace with plain strings (not regex) so '$' or '\' in the inputs are kept as they are
-    return (template.replace("/*__ECHARTS__*/", echarts.replace("</script", "<\\/script"))
-            .replace("/*__DATA__*/", data)
-            .replace("/*__APP__*/", app))
-
-
 def build_dashboard(settings: Settings) -> Path:
+    """Write data/dashboard/dashboard_data.json: what the portal's Vulnerabilities and Fix pages are drawn from."""
     payload = build_payload(settings)
-    html = render_html(payload)
     out_dir = settings.data_dir / "dashboard"
     out_dir.mkdir(parents=True, exist_ok=True)
-    dated = out_dir / f"UC3_Dashboard_{payload['meta']['snapshot']}.html"
-    for target in (dated, out_dir / "UC3_Dashboard_latest.html"):
-        target.write_text(html, encoding="utf-8")
-    # the same data as plain JSON, for the Unified Cyber Portal (a read-only consumer)
-    (out_dir / "dashboard_data.json").write_text(json.dumps(payload, default=_json_default, separators=(",", ":")),
-                                                 encoding="utf-8")
-    return dated
+    path = out_dir / "dashboard_data.json"
+    path.write_text(json.dumps(payload, default=_json_default, separators=(",", ":")), encoding="utf-8")
+    return path

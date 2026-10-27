@@ -8,7 +8,7 @@ page (`../login`, http://127.0.0.1:8000), which also leads to the other module, 
 |---|---|
 | [Unified_Cyber_Portal](Unified_Cyber_Portal/README.md) | **Infrastructure Security** website (overview, notifications, help chat) for the three tools below |
 | [UC1_Threat_Intel_Hunting_Agent](UC1_Threat_Intel_Hunting_Agent/README.md) | Collects public threat intelligence, checks it against our devices, hunts in Defender, rates risk, and fixes vulnerable apps after approval |
-| [UC3_MDE_Vuln_Extraction](UC3_MDE_Vuln_Extraction/README.md) | Exports 100% of Defender vulnerability data (beyond the KQL row limit) into a data lake, dashboard and Excel summary |
+| [UC3_MDE_Vuln_Extraction](UC3_MDE_Vuln_Extraction/README.md) | Exports 100% of Defender vulnerability data (beyond the KQL row limit) into a data lake, the portal's Vulnerabilities pages and an Excel summary |
 | [UC4_Alert_Triage_Agent](UC4_Alert_Triage_Agent/README.md) | Triages Defender / Sentinel incidents and recommends close, escalate or contain, with the evidence |
 
 ## Getting started

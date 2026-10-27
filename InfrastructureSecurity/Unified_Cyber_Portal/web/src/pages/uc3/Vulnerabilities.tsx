@@ -8,14 +8,15 @@ import { dateTime, num, shortDate } from '@/lib/format'
 import { chartTokens, inkOn, statusColor, useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import {
-  BUCKETS, addDays, daysBetween, downloadCsv, findingHref, findingKey, groupBy, nearEos, pastEos, pretty, sumBy, useUc3Data, useUc3View,
+  BUCKETS, addDays, daysBetween, downloadCsv, findingHref, findingKey, groupBy, nearEos, pastEos, pretty, sumBy, useGroupAfter, useUc3Data, useUc3View,
   type Finding, type Uc3Data, type Uc3View,
 } from '@/lib/uc3'
 import { Card, DTable, Uc3Header, Uc3Loading, legendStyle, sevStack } from './common'
+import { DataQuality } from './DataQuality'
 
-type Tab = 'overview' | 'all' | 'age' | 'trends' | 'computers'
+type Tab = 'overview' | 'all' | 'age' | 'trends' | 'computers' | 'quality'
 const TABS: [Tab, string][] = [
-  ['overview', 'Overview'], ['all', 'All vulnerabilities'], ['age', 'Age & SLA'], ['trends', 'Trends'], ['computers', 'Computers'],
+  ['overview', 'Overview'], ['all', 'All vulnerabilities'], ['age', 'Age & SLA'], ['trends', 'Trends'], ['computers', 'Computers'], ['quality', 'Data quality'],
 ]
 const OLD_TABS: Record<string, Tab> = { opco: 'computers', devices: 'computers', risks: 'all' }   // old addresses still land somewhere
 
@@ -45,10 +46,11 @@ export function Vulnerabilities() {
       />
       <Tabs<Tab> tabs={TABS} value={tab} onChange={(t) => navigate(t === 'overview' ? '/uc3' : `/uc3/${t}`)} />
       {tab === 'overview' && <Overview data={data} v={view} />}
-      {tab === 'all' && <AllVulns key={param} v={view} top={param === 'risks'} />}
+      {tab === 'all' && <AllVulns key={param} v={view} top={param === 'risks'} snap={String(data.meta.snapshot)} />}
       {tab === 'age' && <AgeSla data={data} v={view} />}
       {tab === 'trends' && <Trends data={data} v={view} />}
       {tab === 'computers' && <Computers data={data} v={view} />}
+      {tab === 'quality' && <DataQuality data={data} />}
     </div>
   )
 }
@@ -170,7 +172,7 @@ function Overview({ data, v }: { data: Uc3Data; v: Uc3View }) {
           description={`Our CVEs on the free CISA Known Exploited Vulnerabilities list (${num(data.meta.kev.entries)} entries, version ${data.meta.kev.version ?? 'n/a'})`}
         >
           {kevList.length ? (
-            <DTable head={[['CVE'], ['What it is'], ['App'], ['Severity'], ['CVSS', 'right'], ['VMs'], ['Devices', 'right'], ['On list since'], ['Follow this hole']]} minWidth={960}>
+            <DTable head={[['CVE'], ['What it is'], ['App'], ['Severity'], ['CVSS', 'right'], ['VMs'], ['Devices', 'right'], ['On list since'], ['Follow this vulnerability']]} minWidth={960}>
               {kevList.map(({ cve, fs, info }) => (
                 <tr key={cve} className="hover:bg-well/60">
                   <td className="tabular whitespace-nowrap font-medium">{cve}</td>
@@ -185,8 +187,8 @@ function Overview({ data, v }: { data: Uc3Data; v: Uc3View }) {
                   <td className="tabular whitespace-nowrap text-ink-3">{info?.added ?? ''}</td>
                   <td>
                     <div className="flex gap-1.5">
-                      {kevHref(cve) && <HopLink to={kevHref(cve)!} title="What the outside world says about this hole, and whether anyone used it on us">Threat news</HopLink>}
-                      <HopLink to={`/fixes?sw=${encodeURIComponent(fs[0].sw)}`} title="Open its card in Fix & protect">Fix</HopLink>
+                      {kevHref(cve) && <HopLink to={kevHref(cve)!} title="What the outside world says about this vulnerability, and whether anyone used it on us">Threats</HopLink>}
+                      <HopLink to={`/fixes?sw=${encodeURIComponent(fs[0].sw)}`} title="Open its card on the Fix page">Fix</HopLink>
                     </div>
                   </td>
                 </tr>
@@ -251,7 +253,7 @@ function RunFound({ data, v }: { data: Uc3Data; v: Uc3View }) {
   const tiles = [
     {
       icon: Bug, to: '/fixes', value: v.rows.length, label: 'Software vulnerabilities',
-      text: `Known holes in ${num(new Set(v.rows.map((f) => f.u)).size)} software versions. Fixed by updating the app or Windows.`,
+      text: `Known vulnerabilities in ${num(new Set(v.rows.map((f) => f.u)).size)} software versions. Fixed by updating the app or Windows.`,
       extra: noPatch ? `${num(noPatch)} have no fix from the vendor yet` : null,
     },
     {
@@ -292,33 +294,43 @@ function RunFound({ data, v }: { data: Uc3Data; v: Uc3View }) {
 
 const PRIO_ORDER: Record<string, number> = { P1: 1, P2: 2, P3: 3, P4: 4 }
 
-/** Top risks: Priority 1, or on the list of holes attackers really use (CISA KEV). */
+/** Top risks: Priority 1, or on the list of vulnerabilities attackers really use (CISA KEV). */
 const isTopRisk = (f: Finding) => f.pr === 'P1' || !!f.kev
 
-function AllVulns({ v, top: topAtStart }: { v: Uc3View; top: boolean }) {
+/** "Added" = the day Defender first saw the finding; the quick picks count back from the data's own date, not today. */
+const ADDED_PICKS: [number, string][] = [[0, 'Any time'], [1, 'Latest run'], [7, 'Last 7 days'], [30, 'Last 30 days']]
+
+function AllVulns({ v, top: topAtStart, snap }: { v: Uc3View; top: boolean; snap: string }) {
   const navigate = useNavigate()
+  const groupAfter = useGroupAfter()
   const [params] = useSearchParams()
-  const [q, setQ] = useState(params.get('q') ?? '')   // ?q= comes from "Vulnerabilities" links on Threat news and Fix & protect
+  const [q, setQ] = useState(params.get('q') ?? '')   // ?q= comes from "Vulnerabilities" links on Threats and Fix
   const [top, setTop] = useState(topAtStart)
   const [limit, setLimit] = useState(100)
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
   const sorted = useMemo(
     () => [...v.rows].sort((a, b) => (PRIO_ORDER[a.pr] ?? 9) - (PRIO_ORDER[b.pr] ?? 9) || b.kev - a.kev || (b.cvss ?? 0) - (a.cvss ?? 0) || b.age - a.age),
     [v.rows],
   )
-  const topCount = useMemo(() => sorted.filter(isTopRisk).length, [sorted])
+  const firstDay = useMemo(() => v.all.map((f) => f.fs).filter(Boolean).sort()[0] ?? '', [v.all])
+  const dated = useMemo(() => sorted.filter((f) => (!from || f.fs >= from) && (!to || f.fs <= to)), [sorted, from, to])
+  const topCount = useMemo(() => dated.filter(isTopRisk).length, [dated])
   const ql = q.trim().toLowerCase()
-  const shown = sorted.filter((f) => (!top || isTopRisk(f))
+  const shown = dated.filter((f) => (!top || isTopRisk(f))
     && (!ql || [f.cve, f.sw, pretty(f.sw), f.ver, f.dev?.name, f.o].some((s) => (s ?? '').toLowerCase().includes(ql))))
+  const pick = (days: number) => { setFrom(days ? addDays(snap, 1 - days) : ''); setTo(''); setLimit(100) }
+  const picked = (days: number) => !to && from === (days ? addDays(snap, 1 - days) : '')
   return (
     <Card
       title={top ? 'Top risks' : 'All vulnerabilities'}
       description={top
-        ? 'Priority 1 findings and holes known to be used by attackers (CISA KEV). Most urgent first. Click a row for its details.'
+        ? 'Priority 1 findings and vulnerabilities known to be used by attackers (CISA KEV). Most urgent first. Click a row for its details.'
         : 'Every vulnerability Defender found: one row per vulnerability, app version and computer. Most urgent first. Click a row for its details.'}
       action={
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-xs">
-            {([[false, 'All', sorted.length], [true, 'Top risks', topCount]] as const).map(([on, label, n]) => (
+            {([[false, 'All', dated.length], [true, 'Top risks', topCount]] as const).map(([on, label, n]) => (
               <button key={label} onClick={() => { setTop(on); setLimit(100) }} aria-pressed={top === on}
                 className={cn('flex items-center gap-2 rounded-full border px-3 py-1', top === on ? 'pill-on' : 'border-hairline bg-panel hover:bg-well')}>
                 {label} <span className="tabular opacity-60">{num(n)}</span>
@@ -332,16 +344,36 @@ function AllVulns({ v, top: topAtStart }: { v: Uc3View; top: boolean }) {
         </div>
       }
     >
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+        <span className="font-medium text-ink-2">Added</span>
+        {ADDED_PICKS.map(([days, label]) => (
+          <button key={label} onClick={() => pick(days)} aria-pressed={picked(days)}
+            className={cn('rounded-full border px-3 py-1', picked(days) ? 'pill-on' : 'border-hairline bg-panel hover:bg-well')}>
+            {label}
+          </button>
+        ))}
+        <label className="ml-1 flex items-center gap-1.5 text-ink-3">
+          from
+          <input type="date" value={from} min={firstDay} max={to || snap} onChange={(e) => { setFrom(e.target.value); setLimit(100) }}
+            className="tabular rounded-lg border border-hairline-strong bg-field px-2 py-1 text-ink outline-none focus:border-blue/60" />
+        </label>
+        <label className="flex items-center gap-1.5 text-ink-3">
+          to
+          <input type="date" value={to} min={from || firstDay} max={snap} onChange={(e) => { setTo(e.target.value); setLimit(100) }}
+            className="tabular rounded-lg border border-hairline-strong bg-field px-2 py-1 text-ink outline-none focus:border-blue/60" />
+        </label>
+      </div>
       {shown.length ? (
         <>
-          <DTable head={[['Vulnerability'], ['App'], ['Computer'], ['Severity'], ['Priority'], ['Days open', 'right'], ['Deadline']]} minWidth={900} maxHeight={640}>
+          <DTable head={[['Vulnerability'], ['App'], ['Computer'], ['Severity'], ['Priority'], ['Added'], ['Days open', 'right'], ['Deadline']]} minWidth={980} maxHeight={640}>
             {shown.slice(0, limit).map((f) => (
               <tr key={findingKey(f)} onClick={() => navigate(findingHref(f))} className="cursor-pointer hover:bg-well/60">
                 <td className="tabular whitespace-nowrap font-medium">{f.cve} {f.kev ? <Tag tone="warn">used by attackers</Tag> : null}</td>
                 <td className="max-w-[220px] truncate" title={`${pretty(f.sw)} ${f.ver}`}>{pretty(f.sw)} <span className="text-ink-3">{f.ver}</span></td>
-                <td className="whitespace-nowrap">{f.dev?.name} <span className="text-xs text-ink-3">· {f.o}</span></td>
+                <td className="whitespace-nowrap">{f.dev?.name}<span className="text-xs text-ink-3">{groupAfter(f)}</span></td>
                 <td><SevTag sev={f.sev} /></td>
                 <td>{f.pr}</td>
+                <td className="tabular whitespace-nowrap text-ink-2" title={f.fs}>{f.fs ? shortDate(f.fs) : '–'}</td>
                 <td className="tabular text-right">{f.age}</td>
                 <td>{f.br ? <Tag tone="bad">overdue</Tag> : <span className="text-ink-3">on time</span>}</td>
               </tr>
@@ -500,7 +532,7 @@ function Trends({ data, v }: { data: Uc3Data; v: Uc3View }) {
             )
           })}
         </DTable>
-        {rem.length < 20 && <p className="mt-3 text-xs leading-relaxed text-ink-3">Few fixes so far. This fills in as apps get updated, for example after using Fix & protect.</p>}
+        {rem.length < 20 && <p className="mt-3 text-xs leading-relaxed text-ink-3">Few fixes so far. This fills in as apps get updated, for example after using the Fix page.</p>}
       </Card>
     </div>
   )
@@ -577,7 +609,7 @@ function Computers({ data, v }: { data: Uc3Data; v: Uc3View }) {
                 <td className="tabular text-right">{num(r.t)}</td>
                 <td className="tabular text-right">{num(r.c)}</td>
                 <td className="tabular text-right">{r.k || ''}</td>
-                <td><Link to={`/fixes?sw=${encodeURIComponent(r.sw)}`} title="Open in Fix & protect (you can let the portal fix it)" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Fix</Link></td>
+                <td><Link to={`/fixes?sw=${encodeURIComponent(r.sw)}`} title="Open on the Fix page (you can let the portal fix it)" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Fix</Link></td>
               </tr>
             ))}
           </DTable>

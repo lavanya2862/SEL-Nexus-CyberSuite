@@ -6,3 +6,5 @@ pyarrow==25.0.1         # Parquet read/write
 python-dotenv==1.2.3    # settings from .env
 pytest==9.1.1           # tests
 openpyxl==3.1.5         # Excel summary (Phase 5); the dashboard needs no Python package (ECharts is vendored)
+python-docx==1.2.0      # Word report (Vulnerability_Report_*.docx; the PDF is converted by LibreOffice)
+matplotlib==3.10.9      # charts in the Word/PDF report

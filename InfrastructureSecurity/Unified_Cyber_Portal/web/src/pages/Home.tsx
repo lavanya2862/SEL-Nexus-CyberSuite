@@ -131,10 +131,6 @@ function HomeView({ s }: { s: Summary }) {
         <AttackPanel />
         <Uc4Panel s={s} />
       </div>
-
-      <p className="pb-2 text-center text-xs text-ink-3">
-        Lab proof of concept · page data refreshed {ago(s.generated_at)} · commands are shown, never run
-      </p>
     </div>
   )
 }
@@ -193,7 +189,7 @@ function PriorityCard({ v }: { v: View }) {
   return (
     <Panel className="card-hero flex flex-col p-6">
       <div className="flex items-start justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm">Priority 1 findings <InfoTip text="Share of all findings that are our most urgent: critical severity, or a hole attackers can already use. The chip shows how many." /></h3>
+        <h3 className="flex items-center gap-1.5 text-sm">Priority 1 findings <InfoTip text="Share of all findings that are our most urgent: critical severity, or a vulnerability attackers can already use. The chip shows how many." /></h3>
         <Chip>{num(v.totals.p1)}</Chip>
       </div>
       <div className="mt-2 text-[34px] font-normal leading-none tracking-tight tabular">{pct.toFixed(1)}%</div>
@@ -350,7 +346,7 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
-/** App fixes open their card in Fix & protect; security settings (no installed version) open the Security settings tab. */
+/** App fixes open their card in Fix; security settings (no installed version) open the Security settings tab. */
 const fixHref = (f: { app: string; installed_versions: string | null }) =>
   f.installed_versions ? `/fixes?app=${encodeURIComponent(f.app)}` : `/fixes/settings?q=${encodeURIComponent(f.app)}`
 
@@ -375,7 +371,7 @@ function FixesView({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'gr
             <div className="mt-3 flex items-center gap-2 border-t border-hairline pt-3 text-sm text-ink-2">
               <span className="flex-1">{f.fix_action}</span>
               {f.command && <CopyButton text={f.command} />}
-                <Link to={fixHref(f)} title="Open in Fix & protect (you can let the portal fix it)" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Fix</Link>
+                <Link to={fixHref(f)} title="Open on the Fix page (you can let the portal fix it)" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Fix</Link>
             </div>
           </div>
         ))}
@@ -400,7 +396,7 @@ function FixesView({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'gr
                 <span className="leading-snug [text-wrap:pretty]">{f.fix_action}</span>
                 <div className="flex items-center gap-1">
                 {f.command && <CopyButton text={f.command} />}
-                <Link to={fixHref(f)} title="Open in Fix & protect (you can let the portal fix it)" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Fix</Link>
+                <Link to={fixHref(f)} title="Open on the Fix page (you can let the portal fix it)" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Fix</Link>
                 </div>
               </div>
             </td>
@@ -529,7 +525,7 @@ function RankingPanel({ s, v }: { s: Summary; v: View }) {
             ))}
           </ul>
           <p className="mt-5 flex items-center gap-1.5 text-xs text-ink-3">
-            <AlertTriangle className="size-3" style={{ color: statusColor.critical }} /> has known exploited holes
+            <AlertTriangle className="size-3" style={{ color: statusColor.critical }} /> has known exploited vulnerabilities
           </p>
         </>
       ) : (

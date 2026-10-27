@@ -8,3 +8,5 @@ pydantic==2.13.5        # checks the AI's JSON answer
 pyyaml==6.0.3           # playbooks and guardrails
 openpyxl==3.1.5         # Excel backtest report
 pytest==9.1.1           # tests
+python-docx==1.2.0      # Word report (Alert_Triage_Report_*.docx; the PDF is converted by LibreOffice)
+matplotlib==3.10.9      # charts in the Word/PDF report

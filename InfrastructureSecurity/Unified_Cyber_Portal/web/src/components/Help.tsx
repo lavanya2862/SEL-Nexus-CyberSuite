@@ -7,10 +7,10 @@ import { cn } from '@/lib/utils'
 const TERMS: [string, string][] = [
   ['Vulnerability', 'A known weak spot in a piece of software that an attacker could use. Fixed by updating or removing the app.'],
   ['CVE', 'The official ID of one vulnerability, for example CVE-2025-8088. One old app can have hundreds.'],
-  ['Known exploited (KEV)', 'On the US government (CISA) list of holes that attackers have really used against organisations. It does not mean they were used against us. Always fix these first.'],
-  ['Used by ransomware', 'A hole that criminal gangs use to lock up computers and demand money.'],
-  ['Priority 1 (P1)', 'Our most urgent findings: critical severity, or a hole attackers can already use.'],
-  ['Severity', 'How bad a hole is if someone uses it: Critical, High, Medium or Low.'],
+  ['Known exploited (KEV)', 'On the US government (CISA) list of vulnerabilities that attackers have really used against organisations. It does not mean they were used against us. Always fix these first.'],
+  ['Used by ransomware', 'A vulnerability that criminal gangs use to lock up computers and demand money.'],
+  ['Priority 1 (P1)', 'Our most urgent findings: critical severity, or a vulnerability attackers can already use.'],
+  ['Severity', 'How bad a vulnerability is if someone uses it: Critical, High, Medium or Low.'],
   ['VM', 'Virtual machine: one of our computers (VM 1, VM 2). Use Filters to look at just one of them.'],
   ['Microsoft Defender', 'The security tool on our computers. It finds the vulnerabilities and records activity we can hunt through.'],
   ['Threat intelligence', 'News about attacks from public security sources (CISA, NVD, NCSC-NL, CERT-EU, abuse.ch). The assistant reads it for us.'],
@@ -46,9 +46,9 @@ export function Glossary({ open, onOpenChange }: { open: boolean; onOpenChange: 
 
 const TOUR = [
   { icon: LayoutGrid, title: 'Dashboard: everything at a glance', text: 'Three headline numbers, the fixes that matter most, and which apps cause the most risk. Use Filters to look at one VM.' },
-  { icon: ScanSearch, title: 'Vulnerabilities, Threat news and Attack hunting', text: 'The vulnerabilities Defender found, threat news that affects us, and whether attackers are already inside.' },
-  { icon: Wrench, title: 'Fix & protect and Alert triage', text: 'Fix & protect: the apps and Windows updates to install, unsupported software to upgrade and security settings to change, most dangerous first. Press ⚡ Fix it for me and the portal does it for you. Triage: every Defender alarm with the AI’s checked verdict; you agree or disagree.' },
-  { icon: Database, title: 'Data quality and Reports', text: 'Data quality checks that every number is complete and fresh. Reports gives Word, PDF and Excel downloads.' },
+  { icon: ScanSearch, title: 'Vulnerabilities, Threats and Attack hunting', text: 'The vulnerabilities Defender found, threat news that affects us, and whether attackers are already inside.' },
+  { icon: Wrench, title: 'Fix and Alert triage', text: 'Fix: the apps and Windows updates to install, unsupported software to upgrade and security settings to change, most dangerous first. Press ⚡ Fix it for me and the portal does it for you. Triage: every Defender alarm with the AI’s checked verdict; you agree or disagree.' },
+  { icon: Database, title: 'Data quality and Reports', text: 'Vulnerabilities › Data quality checks that every number is complete and fresh. Reports gives Word, PDF and Excel downloads.' },
   { icon: Play, title: 'Agents', text: 'Open Agents in the menu (or press Run agents at the top) to fetch new data, see how fresh each agent’s data is, and watch every step finish, live.' },
 ]
 

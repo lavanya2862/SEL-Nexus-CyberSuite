@@ -1,10 +1,10 @@
 software_name,app,action,winget_id,choco_id,match,processes,stage,note
-firefox,Mozilla Firefox,upgrade,Mozilla.Firefox,firefox,Mozilla Firefox*,firefox,1,Known exploited holes (KEV); biggest single source of findings
+firefox,Mozilla Firefox,upgrade,Mozilla.Firefox,firefox,Mozilla Firefox*,firefox,1,Known exploited vulnerabilities (KEV); biggest single source of findings
 acrobat_reader_dc,Adobe Acrobat Reader,upgrade,Adobe.Acrobat.Reader.32-bit,adobereader,Adobe Acrobat*,AcroRd32;Acrobat;AdobeCollabSync;RdrCEF,1,Lab has the 32-bit Reader DC; large download (several minutes)
-thunderbird,Mozilla Thunderbird,upgrade,Mozilla.Thunderbird,thunderbird,Mozilla Thunderbird*,thunderbird,1,Known exploited hole (KEV)
-winrar,WinRAR,upgrade,RARLab.WinRAR,winrar,WinRAR*,WinRAR;Rar;UnRAR,1,Holes used by ransomware gangs (CVE-2025-8088)
-7-zip,7-Zip,upgrade,7zip.7zip,7zip,7-Zip*,7zFM;7zG;7z,1,Known exploited hole (KEV)
-notepad++,Notepad++,upgrade,Notepad++.Notepad++,notepadplusplus,Notepad++*,notepad++,1,Known exploited hole (KEV)
+thunderbird,Mozilla Thunderbird,upgrade,Mozilla.Thunderbird,thunderbird,Mozilla Thunderbird*,thunderbird,1,Known exploited vulnerability (KEV)
+winrar,WinRAR,upgrade,RARLab.WinRAR,winrar,WinRAR*,WinRAR;Rar;UnRAR,1,Vulnerabilities used by ransomware gangs (CVE-2025-8088)
+7-zip,7-Zip,upgrade,7zip.7zip,7zip,7-Zip*,7zFM;7zG;7z,1,Known exploited vulnerability (KEV)
+notepad++,Notepad++,upgrade,Notepad++.Notepad++,notepadplusplus,Notepad++*,notepad++,1,Known exploited vulnerability (KEV)
 python,Python (old version),remove,,,Python {ver2}.*,python;pythonw,2,End-of-life: no fix will ever come - removed (nothing in the lab uses it)
 nodejs,Node.js 16,remove,,,Node.js*,node,2,End-of-life: removed (nothing in the lab uses it)
 powershell,PowerShell 7,upgrade,Microsoft.PowerShell,powershell-core,PowerShell 7*,pwsh,2,7.0 / 7.1 are end-of-life; updated to the current 7.x
