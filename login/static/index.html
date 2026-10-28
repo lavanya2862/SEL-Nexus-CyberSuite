@@ -19,7 +19,7 @@
     <symbol id="i-logout" viewBox="0 0 24 24"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></symbol>
     <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
-    <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
   </svg>
 
@@ -55,11 +55,15 @@
             <label class="field"><span>Password</span>
               <span class="pw"><input type="password" name="password" autocomplete="current-password" placeholder="Enter your password" required>
                 <button type="button" class="pw-toggle" aria-label="Show password" aria-pressed="false"><svg class="ico"><use href="#i-eye"/></svg></button></span></label>
-            <label class="field"><span>Security domain</span>
-              <span class="select"><span class="select-ico tile" aria-hidden="true"><svg class="ico"><use href="#i-shield"/></svg></span>
-                <select name="domain" id="login-domain" required aria-describedby="login-domain-note"></select>
-                <svg class="ico chevron" aria-hidden="true"><use href="#i-chevron"/></svg></span>
-              <small class="hint" id="login-domain-note"></small></label>
+            <div class="field"><span id="login-domain-label">Security domain</span>
+              <div class="picker" id="login-domain">
+                <button type="button" class="picker-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="login-domain-list" aria-labelledby="login-domain-label login-domain-value" aria-describedby="login-domain-note">
+                  <span class="picker-icons" aria-hidden="true"></span><span class="picker-value" id="login-domain-value" data-placeholder="Select a domain"></span>
+                  <svg class="ico chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+                </button>
+                <div class="picker-panel" id="login-domain-list" role="listbox" tabindex="-1" aria-labelledby="login-domain-label" hidden></div>
+              </div>
+              <small class="hint" id="login-domain-note"></small></div>
             <div class="error" role="alert" hidden></div>
             <button type="submit" class="btn" data-busy="Signing in…">Sign in<svg class="ico"><use href="#i-arrow"/></svg></button>
             <p class="switch" data-signup-only>Don’t have an account? <a href="#signup">Create one</a></p>
@@ -77,17 +81,20 @@
               <span class="pw"><input type="password" name="password" autocomplete="new-password" placeholder="Create a password" required aria-describedby="pw-rule">
                 <button type="button" class="pw-toggle" aria-label="Show password" aria-pressed="false"><svg class="ico"><use href="#i-eye"/></svg></button></span>
               <small class="hint" id="pw-rule"></small></label>
-            <label class="field"><span>Domain access</span>
-              <span class="select"><span class="select-ico tile" aria-hidden="true"><svg class="ico"><use href="#i-layers"/></svg></span>
-                <select name="access" id="signup-domain" required aria-describedby="signup-domain-note"></select>
-                <svg class="ico chevron" aria-hidden="true"><use href="#i-chevron"/></svg></span>
-              <small class="hint" id="signup-domain-note"></small></label>
+            <div class="field"><span id="signup-domain-label">Domain access</span>
+              <div class="picker" id="signup-domain">
+                <button type="button" class="picker-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="signup-domain-list" aria-labelledby="signup-domain-label signup-domain-value" aria-describedby="signup-domain-note">
+                  <span class="picker-icons" aria-hidden="true"></span><span class="picker-value" id="signup-domain-value" data-placeholder="Select the domains you need"></span>
+                  <svg class="ico chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+                </button>
+                <div class="picker-panel" id="signup-domain-list" role="listbox" tabindex="-1" aria-labelledby="signup-domain-label" hidden></div>
+              </div>
+              <small class="hint" id="signup-domain-note"></small></div>
             <div class="error" role="alert" hidden></div>
             <button type="submit" class="btn" data-busy="Creating your account…">Create account<svg class="ico"><use href="#i-arrow"/></svg></button>
             <p class="switch">Already have an account? <a href="#">Sign in</a></p>
           </form>
         </div>
-        <p class="card-foot"><svg class="ico"><use href="#i-lock"/></svg>Authorised use only. Sign-in activity is recorded.</p>
       </main>
     </div>
   </div>

@@ -1,14 +1,14 @@
-// SEL Nexus CyberSuite sign-in page. People pick a security domain (Infrastructure Security, Application Security) from
-// a dropdown on the sign-in form and go straight there; at sign-up they choose the domain access their account needs
-// (one domain or both). A domain that finds nobody signed in sends people here with ?next=<its address>; after
+// SEL Nexus CyberSuite sign-in page. People pick a security domain (Infrastructure Security, Application Security) on
+// the sign-in form and go straight there; at sign-up they tick every domain their account needs. A domain that finds nobody signed in sends people here with ?next=<its address>; after
 // sign-in they go straight back. ?switch shows the signed-in person their domains to move between.
 (() => {
   const $ = (sel) => document.querySelector(sel)
   const ICONS = { infrastructure_security: 'i-server', application_security: 'i-code' }
   const RENAMED = { defender_infra: 'infrastructure_security', infrastructure_vulnerabilities: 'infrastructure_security', application_vulnerabilities: 'application_security' } // ids before the rename
   const LAST = 'cybersuite-domain' // the domain picked last time on this browser, picked again by default
-  const ALL = 'all' // the sign-up choice "Both domains"
   let config = null
+  let loginPicker = null
+  let signupPicker = null
 
   async function api(path, body) {
     const res = await fetch(`/api/${path}`, body === undefined ? {} : {
@@ -51,39 +51,118 @@
     box.append(document.createTextNode(message))
   }
 
-  const option = (value, text, disabled = false) => Object.assign(document.createElement('option'), { value, textContent: text, disabled })
+  /** Our own dropdown (no native select): a button that opens the list of domains. One choice on sign-in; check boxes on
+   *  sign-up, where an account can need several. Keyboard: arrows, Home/End, Enter or Space to pick, Esc or Tab to close. */
+  function picker(root, { multiple, items, value }) {
+    const trigger = root.querySelector('.picker-trigger')
+    const panel = root.querySelector('.picker-panel')
+    const shown = root.querySelector('.picker-value')
+    const icons = root.querySelector('.picker-icons')
+    let chosen = new Set(value)
+    let active = 0
+    const usable = (i) => !items[i].disabled
 
-  /** The icon in a dropdown and the line under it follow the choice, so people see what each domain covers. */
-  function describe(select, note, choice) {
-    const icon = select.parentElement.querySelector('.select-ico')
-    const m = moduleById(choice)
-    icon.className = `select-ico ${m ? tileClass(m.id) : choice === ALL ? 'tile tile-mix' : 'tile tile-idle'}`
-    icon.querySelector('use').setAttribute('href', m ? `#${iconOf(m.id)}` : choice === ALL ? '#i-layers' : '#i-shield')
-    note.textContent = m ? (m.url ? m.description : `${m.description} Not yet available on this server.`)
-      : choice === ALL ? `Access to ${config.modules.map((x) => x.name).join(' and ')}. Switch between them at any time from inside the suite.`
-        : select.id === 'signup-domain' ? 'Choose the domain you work in. Select both if you work across infrastructure and application security.'
-          : 'Choose where you want to start. You can switch domains at any time.'
+    panel.setAttribute('aria-multiselectable', String(multiple))
+    panel.replaceChildren(...items.map((m, i) => {
+      const el = document.createElement('div')
+      el.className = 'picker-option'
+      el.id = `${root.id}-option-${i}`
+      el.setAttribute('role', 'option')
+      if (m.disabled) el.setAttribute('aria-disabled', 'true')
+      el.innerHTML = `<span class="${tileClass(m.id)}"><svg class="ico"><use href="#${iconOf(m.id)}"/></svg></span>` +
+        `<span class="opt-text"><b></b><small></small></span><span class="mark ${multiple ? 'mark-box' : 'mark-dot'}"><svg class="ico"><use href="#i-check"/></svg></span>`
+      el.querySelector('b').textContent = m.name
+      el.querySelector('small').textContent = m.disabled ? 'Not yet available on this server.' : m.description
+      el.addEventListener('mousedown', (e) => e.preventDefault()) // keep the keyboard focus on the list
+      el.addEventListener('mousemove', () => setActive(i))
+      el.addEventListener('click', () => pick(i))
+      return el
+    }))
+    const options = [...panel.children]
+
+    function paint() {
+      options.forEach((el, i) => el.setAttribute('aria-selected', String(chosen.has(items[i].id))))
+      const picked = items.filter((m) => chosen.has(m.id))
+      shown.textContent = picked.length ? picked.map((m) => m.name).join(' + ') : shown.dataset.placeholder
+      shown.classList.toggle('placeholder', !picked.length)
+      icons.replaceChildren(...(picked.length ? picked : [null]).map((m) => {
+        const tile = document.createElement('span')
+        tile.className = m ? tileClass(m.id) : 'tile tile-idle'
+        tile.innerHTML = `<svg class="ico"><use href="#${m ? iconOf(m.id) : 'i-layers'}"/></svg>`
+        return tile
+      }))
+    }
+    function setActive(i) {
+      active = i
+      options.forEach((el, j) => el.classList.toggle('active', j === i))
+      panel.setAttribute('aria-activedescendant', options[i].id)
+    }
+    function move(step) {
+      let i = active
+      for (let n = 0; n < items.length; n++) {
+        i = (i + step + items.length) % items.length
+        if (usable(i)) return setActive(i)
+      }
+    }
+    function outside(e) { if (!root.contains(e.target)) close(false) }
+    function open() {
+      if (!panel.hidden || trigger.disabled) return
+      panel.hidden = false
+      root.classList.add('open')
+      trigger.setAttribute('aria-expanded', 'true')
+      const first = items.findIndex((m) => chosen.has(m.id))
+      setActive(first >= 0 ? first : Math.max(0, items.findIndex((_, i) => usable(i))))
+      panel.focus()
+      document.addEventListener('pointerdown', outside, true)
+    }
+    function close(refocus = true) {
+      if (panel.hidden) return
+      panel.hidden = true
+      root.classList.remove('open')
+      trigger.setAttribute('aria-expanded', 'false')
+      document.removeEventListener('pointerdown', outside, true)
+      if (refocus) trigger.focus()
+    }
+    function pick(i) {
+      if (!usable(i)) return
+      const id = items[i].id
+      if (!multiple) chosen = new Set([id])
+      else if (chosen.has(id)) chosen.delete(id)
+      else chosen.add(id)
+      setActive(i)
+      paint()
+      const box = root.closest('form')?.querySelector('.error')
+      if (box) showError(box, null) // a "select a domain" message no longer applies
+      if (!multiple) close()
+    }
+
+    trigger.addEventListener('click', () => (panel.hidden ? open() : close()))
+    trigger.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); open() } })
+    panel.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); move(1) }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1) }
+      else if (e.key === 'Home') { e.preventDefault(); active = items.length - 1; move(1) }
+      else if (e.key === 'End') { e.preventDefault(); active = 0; move(-1) }
+      else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(active) }
+      else if (e.key === 'Escape') { e.preventDefault(); close() }
+      else if (e.key === 'Tab') close(false)
+    })
+    paint()
+    return {
+      get value() { return items.filter((m) => chosen.has(m.id)).map((m) => m.id) },
+      set disabled(off) { trigger.disabled = off; if (off) close(false) },
+    }
   }
 
-  /** Sign-in: one domain to open now. Sign-up: the domain access the account needs (one domain or both). */
+  /** Sign-in: the one domain to open now. Sign-up: every domain the account needs, as check boxes. */
   function renderPickers() {
     const back = moduleOf(safeNext() || '')?.id
-    const wanted = back || store.get() || config.modules.find((m) => m.url)?.id
-
-    const login = $('#login-domain')
-    login.replaceChildren(...config.modules.map((m) => option(m.id, m.url ? m.name : `${m.name} (not yet available)`, !m.url)))
-    login.value = moduleById(wanted)?.url ? wanted : config.modules.find((m) => m.url)?.id || ''
-    const loginNote = $('#login-domain-note')
-    login.onchange = () => describe(login, loginNote, login.value)
-    describe(login, loginNote, login.value)
-
-    const signup = $('#signup-domain')
-    signup.replaceChildren(option('', 'Select the access you need', true), ...config.modules.map((m) => option(m.id, m.name)),
-      ...(config.modules.length > 1 ? [option(ALL, 'Both domains')] : []))
-    signup.value = back || ''
-    const signupNote = $('#signup-domain-note')
-    signup.onchange = () => describe(signup, signupNote, signup.value)
-    describe(signup, signupNote, signup.value)
+    const wanted = back || store.get()
+    const start = moduleById(wanted)?.url ? wanted : config.modules.find((m) => m.url)?.id
+    loginPicker = picker($('#login-domain'), { multiple: false, items: config.modules.map((m) => ({ ...m, disabled: !m.url })), value: start ? [start] : [] })
+    $('#login-domain-note').textContent = 'Choose where you want to start. You can switch domains at any time.'
+    signupPicker = picker($('#signup-domain'), { multiple: true, items: config.modules, value: back ? [back] : [] })
+    $('#signup-domain-note').textContent = 'Select every domain you work in. You can move between them once you’re signed in.'
   }
 
   /** The two domains under the headline, from the same descriptions the dropdowns use. */
@@ -219,19 +298,20 @@
     const fd = new FormData(form)
     const data = { email: String(fd.get('email') || '').trim(), password: fd.get('password') }
     if (action === 'signup') {
-      const access = String(fd.get('access') || '')
       data.name = String(fd.get('name') || '').trim()
-      data.domains = access === ALL ? config.modules.map((m) => m.id) : access ? [access] : []
+      data.domains = signupPicker.value
       const back = moduleOf(safeNext() || '')?.id
       if (back && data.domains.includes(back)) data.domain = back
     } else {
-      data.domain = fd.get('domain')
+      data.domain = loginPicker.value[0]
     }
     showError(box, null)
     if (action === 'signup' && !data.domains.length) return showError(box, 'Select the domain access you need.')
     if (action === 'login' && !data.domain) return showError(box, 'Select a domain to continue.')
-    const fields = form.querySelectorAll('input, select')
+    const fields = form.querySelectorAll('input')
+    const domains = action === 'signup' ? signupPicker : loginPicker
     fields.forEach((i) => { i.disabled = true; i.removeAttribute('aria-invalid') })
+    domains.disabled = true
     button.disabled = true
     button.textContent = button.dataset.busy
     try {
@@ -244,6 +324,7 @@
       form.querySelector('input[name=password]').value = ''
     } finally {
       fields.forEach((i) => { i.disabled = false })
+      domains.disabled = false
       button.disabled = false
       button.innerHTML = label
     }
