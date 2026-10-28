@@ -40,7 +40,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   try {
     res = await fetch(path, { ...init, headers })
   } catch {
-    throw new ApiError('Can’t reach the Application Security server. Start it with Start_Application_Security.cmd.', 0)
+    throw new ApiError('The Application Security service is unavailable. Start it with Start_Application_Security.cmd.', 0)
   }
   if (!res.ok) {
     let detail: unknown = res.statusText
@@ -64,15 +64,15 @@ export const artifactUrl = (jobId: string, name: string, download = true) =>
 
 /** What a run hands over to people: PDFs. [file, short name, what it holds] */
 export const PDF_FILES: [string, string, string][] = [
-  ['report.pdf', 'Report', 'The full report: summary, pipeline, fixes, checks and findings'],
-  ['findings.pdf', 'Findings', 'Every finding with its code, description and references'],
-  ['fixes.pdf', 'Fixes', 'Every fix with its explanation, checks and code changes'],
+  ['report.pdf', 'Report', 'Full assessment report: summary, pipeline, remediations, checks and findings'],
+  ['findings.pdf', 'Findings', 'All findings with affected code, description and references'],
+  ['fixes.pdf', 'Remediations', 'All remediations with rationale, validation checks and code changes'],
 ]
 
 /** What a run hands over to tools, in the formats those tools read. */
 export const TOOL_FILES: [string, string, string][] = [
-  ['findings.sarif', 'SARIF', 'For GitHub code scanning'],
-  ['fixes.patch', 'Patch', 'All changes; apply with git apply'],
+  ['findings.sarif', 'SARIF', 'For import into GitHub code scanning'],
+  ['fixes.patch', 'Patch', 'All code changes; apply with git apply'],
 ]
 
 export const isLive = (j?: Pick<Job, 'status'> | null) => !!j && (j.status === 'running' || j.status === 'queued')

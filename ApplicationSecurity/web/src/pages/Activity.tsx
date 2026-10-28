@@ -20,7 +20,7 @@ export function Activity() {
   const items = log.data?.items ?? []
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Activity log" description="Who started each scan, who approved the fixes and opened the pull request, who ran the tests on GitHub, with their name, email, date and time. Newest first." />
+      <PageHeader title="Activity log" description="A record of who initiated each scan, approved its remediations, raised the pull request and ran CI test validation, with name, email, date and time. Newest first." />
       <Panel className="flex flex-col gap-3 p-6">
         <div className="flex flex-wrap items-center gap-2">
           <Select label="Action" value={action} onChange={setAction}>
@@ -30,7 +30,7 @@ export function Activity() {
           <Search value={text} onChange={setText} placeholder="Filter by person, email or repository…" />
           {log.data && <span className="text-xs text-ink-3">{log.data.total > items.length ? `latest ${items.length} of ${log.data.total}` : `${log.data.total} entries`}</span>}
         </div>
-        {log.isLoading ? <Loading /> : log.error ? <ErrorBox error={log.error} /> : !items.length ? <Empty text={action || q ? 'No activity matches.' : 'Nothing has happened yet. Start a scan and it shows up here.'} /> : (
+        {log.isLoading ? <Loading /> : log.error ? <ErrorBox error={log.error} /> : !items.length ? <Empty text={action || q ? 'No activity matches these filters.' : 'No activity recorded yet. Scans and approvals appear here as soon as someone performs them.'} /> : (
           <DTable head={[['When'], ['Who'], ['Action'], ['Repository'], ['Details']]} minWidth={980} maxHeight={720}>
             {items.map((e) => {
               const a = ACTIVITY[e.action] ?? { label: e.action, tone: 'idle' as const }

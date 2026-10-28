@@ -1,8 +1,8 @@
-"""Audit log: who did what in the portal, and when — kept as evidence.
+"""Activity trail: who did what in the portal, and when; the Activity log page lists it (activity.py).
 
 One line per action in data/audit/audit.jsonl, only ever appended. Recorded: pipeline runs started (or refused) and
 how they finished, every Remediation action (approve, withdraw, save, run, check), Alert Triage agree / disagree and
-Reopen. Sign-ins come from the sign-in log (data/auth/signins.jsonl) and are shown next to them.
+Reopen.
 
 Tamper evidence: every line carries the SHA-256 of its own content plus the hash of the line before it (a hash chain).
 Editing, removing or reordering any line breaks the chain from that line on, and verify() says where.
@@ -23,11 +23,11 @@ from typing import Iterator
 
 GENESIS = "0" * 64
 
-# action key -> what the Audit log page shows
+# action key -> what the Activity log page shows
 ACTIONS = {
     "run.start": "Started a pipeline run",
     "run.refused": "Pipeline run refused",
-    "run.finish": "Pipeline run finished",
+    "run.finish": "Pipeline run completed",
     "fix.approve": "Approved remediation",
     "fix.unapprove": "Withdrew remediation approval",
     "fix.save": "Saved remediation for later",
@@ -153,32 +153,3 @@ class AuditLog:
             prev = row["hash"]
         return {"ok": True, "count": len(rows), "broken_at": None, "last_hash": prev if rows else None,
                 "message": f"All {len(rows)} recorded actions are intact"}
-
-
-def sign_ins(auth_dir: Path, limit: int = 5000) -> list[dict]:
-    """The sign-in log (auth.py and the shared CyberSuite sign-in page), shaped like audit lines (not hash-chained)."""
-    out: list[dict] = []
-    try:
-        lines = (auth_dir / "signins.jsonl").read_text(encoding="utf-8", errors="replace").splitlines()[-limit:]
-    except OSError:
-        return out
-    labels = {"login": "Signed in", "signup": "Created an account", "cognito": "Signed in", "logout": "Signed out"}
-    try:
-        users = json.loads((auth_dir / "users.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        users = {}
-    names = {k: str(v.get("name") or "") for k, v in users.items() if isinstance(v, dict)} if isinstance(users, dict) else {}
-    for line in lines:
-        try:
-            row = json.loads(line)
-        except ValueError:
-            continue
-        event = str(row.get("event") or "")
-        ok = row.get("ok") is not False
-        email = str(row.get("email") or "")
-        out.append({"at": row.get("at"), "user_email": email or "unknown", "user_name": names.get(email) or email.split("@")[0] or "Unknown",
-                    "ip": row.get("ip"), "action": f"auth.{event}",
-                    "label": labels.get(event, event.title()) if ok else f"{labels.get(event, event.title())} — failed",
-                    "agent": "Sign-in", "target": "", "outcome": "success" if ok else "failed",
-                    "detail": str(row.get("detail") or ""), "ref": None, "source": "signin"})
-    return out

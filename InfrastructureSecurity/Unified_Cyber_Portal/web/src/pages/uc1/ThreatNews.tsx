@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowRight, CheckCircle2, ChevronDown, ExternalLink, Search, Zap } from 'lucide-react'
 import { Chart, axisStyle } from '@/components/Chart'
-import { Card, DTable, Empty, Panel, SevTag, Tabs, legendStyle } from '@/components/kit'
+import { Card, Choice, DTable, Empty, Panel, SevTag, Tabs, legendStyle } from '@/components/kit'
 import { Skeleton } from '@/components/ui/skeleton'
 import { num, shortDate } from '@/lib/format'
 import { chartTokens, statusColor, useTheme } from '@/lib/theme'
@@ -463,10 +463,8 @@ function ThreatList({ rows: all }: { rows: ExplorerRow[] }) {
               className={cn('rounded-full border px-3 py-1 text-xs', r === x ? 'pill-on' : 'border-hairline hover:bg-well')}>{x}</button>
           ))}
         </div>
-        <select value={src} onChange={(e) => { setSrc(e.target.value); reset() }} className="rounded-lg border border-hairline bg-panel px-2.5 py-1.5 text-xs" aria-label="Source">
-          <option value="All">All sources</option>
-          {sources.map((s) => <option key={s}>{s}</option>)}
-        </select>
+        <Choice label="Source" value={src} onChange={(v) => { setSrc(v); reset() }} className="w-auto py-1.5 text-xs"
+          options={[{ value: 'All', label: 'All sources' }, ...sources.map((s) => ({ value: s, label: s }))]} />
         <label className="ml-auto flex items-center gap-2 rounded-lg border border-hairline bg-well px-3 py-1.5 text-sm">
           <Search className="size-3.5 text-ink-3" />
           <input value={q} onChange={(e) => { setQ(e.target.value); reset() }} placeholder="Search threats" className="w-44 bg-transparent outline-none placeholder:text-ink-3" />
@@ -540,10 +538,8 @@ function ClueList({ from }: { from: string | null }) {   // from: start of the p
             </button>
           ))}
         </div>
-        <select value={src} onChange={(e) => { setSrc(e.target.value); reset() }} className="rounded-lg border border-hairline bg-panel px-2.5 py-1.5 text-xs" aria-label="Source">
-          <option value="All">All sources</option>
-          {sources.map((s) => <option key={s}>{s}</option>)}
-        </select>
+        <Choice label="Source" value={src} onChange={(v) => { setSrc(v); reset() }} className="w-auto py-1.5 text-xs"
+          options={[{ value: 'All', label: 'All sources' }, ...sources.map((s) => ({ value: s, label: s }))]} />
         <button onClick={() => { setSeenOnly(!seenOnly); reset() }} aria-pressed={seenOnly}
           className={cn('flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs', seenOnly ? 'pill-on' : 'border-hairline hover:bg-well')}>
           {seenOnly && <CheckCircle2 className="size-3" />} Observed on managed devices only <span className="tabular opacity-60">{num(seen)}</span>

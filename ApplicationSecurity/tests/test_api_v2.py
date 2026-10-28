@@ -145,11 +145,11 @@ def test_agent_views_story_and_action_center(fake_world):
         d = c.get(f"/api/v1/jobs/{job_id}/agents").json()
         assert set(d["agents"]) == {"analysis", "remediation", "validation", "reporting"}
         story = d["story"]
-        assert story["headline"].startswith("4 issues found") and story["decision"]["kind"] == "approve"
+        assert story["headline"].startswith("4 findings identified") and story["decision"]["kind"] == "approve"
         rem = d["agents"]["remediation"]
         outs = {o["label"]: o["value"] for o in rem["outputs"]}
-        assert outs["Fix commits"] == 3 and outs["Dependency / Rule / Code"] == "1 / 1 / 1"
-        assert any("Remediation Agent wrote 1 code fix" in l["text"] for l in rem["learnings"])
+        assert outs["Remediation commits"] == 3 and outs["Dependency / Rule-based / AI-assisted"] == "1 / 1 / 1"
+        assert any("Remediation Agent applied 1 AI-assisted remediation" in l["text"] for l in rem["learnings"])
         assert any(l["tone"] == "good" for l in d["agents"]["validation"]["learnings"])
         assert d["agents"]["analysis"]["inputs"][0]["label"] == "Repository"
 
@@ -157,7 +157,7 @@ def test_agent_views_story_and_action_center(fake_world):
         assert att["counts"]["approvals"] == 1 and att["approvals"][0]["id"] == job_id
         # the eval() in test code is left open and explained
         left = att["fixes_needed"]
-        assert len(left) == 1 and left[0]["reason"] == "In test code" and left[0]["action"]
+        assert len(left) == 1 and left[0]["reason"] == "Located in test code" and left[0]["action"]
         assert any(e["kind"] == "No GitHub token" for e in att["config_errors"])
 
         hist = c.get("/api/v1/agents/remediation/history").json()
@@ -174,7 +174,7 @@ def test_running_job_agent_views_have_no_outputs_yet(fake_world):
     job, _ = jobqueue.enqueue("https://github.com/acme/shop", "acme/shop", JobOptions(use_cache=False))
     with _client() as c:
         d = c.get(f"/api/v1/jobs/{job.id}/agents").json()
-        assert d["story"]["headline"].startswith("Working on acme/shop")
+        assert d["story"]["headline"].startswith("Scanning acme/shop")
         assert all(v["outputs"] == [] and v["status"] == "pending" for v in d["agents"].values())
 
 

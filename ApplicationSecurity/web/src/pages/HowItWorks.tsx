@@ -13,37 +13,37 @@ export function HowItWorks() {
   const tool = (name: string, ok?: boolean) => <StatusTag key={name} tone={ok ? 'good' : 'warn'} label={`${name}${ok ? '' : ' (fallback)'}`} />
   const agents: { id: AgentId; title: string; items: string[]; tools: ReactNode }[] = [
     { id: 'analysis', title: 'Vulnerability Analysis & Prioritization Agent', items: [
-      'Runs CodeQL as the main scanner for vulnerabilities in the source code',
-      'Runs Trivy for vulnerable libraries, leaked secrets and Docker / infrastructure misconfigurations',
-      'Puts every result in one format and removes duplicates found by several scanners',
-      'Gives each finding a risk score and ranks them; keeps the surrounding code for context',
-    ], tools: <>{tool('CodeQL', sc.codeql?.available)}{tool('Trivy', sc.trivy?.available)}{tool('Semgrep', sc.semgrep?.available)}{tool('Bandit', sc.bandit?.available)}<StatusTag tone="good" label="OSV.dev" /><StatusTag tone="good" label="Built-in rules" /></> },
+      'Runs CodeQL as the primary static analysis (SAST) engine for source code vulnerabilities',
+      'Runs Trivy for vulnerable dependencies, exposed secrets and Docker and infrastructure misconfigurations',
+      'Normalises all results to a single format and consolidates duplicates reported by multiple scanners',
+      'Assigns each finding a risk score and prioritises accordingly, retaining surrounding code for context',
+    ], tools: <>{tool('CodeQL', sc.codeql?.available)}{tool('Trivy', sc.trivy?.available)}{tool('Semgrep', sc.semgrep?.available)}{tool('Bandit', sc.bandit?.available)}<StatusTag tone="good" label="OSV.dev" /><StatusTag tone="good" label="Built-in SAST rules" /></> },
     { id: 'remediation', title: 'Remediation Agent', items: [
-      'Works on a separate ai-remediation/* Git branch: the original code is never touched',
-      'Safe, predictable fixes first: library upgrades, lockfile refresh, safe rewrites, secrets moved to environment variables',
-      'Code fixes it writes (with its AI model) for findings that need reasoning, corrected by itself when a fix does not apply',
-      'One commit per fix, so each change can be reviewed or reverted on its own',
-    ], tools: <><StatusTag tone={c?.llm.enabled ? 'good' : 'warn'} label={`AI model: ${c?.llm.enabled ? c.llm.model : 'not connected'}`} /><StatusTag tone="good" label="Git" /><StatusTag tone="good" label="npm" /></> },
+      'Operates on an isolated ai-remediation/* Git branch; the source branch is never modified',
+      'Applies deterministic remediations first: dependency upgrades, lockfile refresh, rule-based rewrites and externalised secrets',
+      'Applies AI-assisted remediations to findings that require reasoning, and self-corrects when a change does not apply cleanly',
+      'Creates one commit per remediation, so each change can be reviewed or reverted independently',
+    ], tools: <><StatusTag tone={c?.llm.enabled ? 'good' : 'warn'} label={`AI model: ${c?.llm.enabled ? c.llm.model : 'Not connected'}`} /><StatusTag tone="good" label="Git" /><StatusTag tone="good" label="npm" /></> },
     { id: 'validation', title: 'Testing & Validation Agent', items: [
-      'Static checks: every edited file must still parse',
-      'Security-regression guard: rejects suppressions, disabled TLS, skipped tests or removed security controls',
-      'Security rescan: the findings must be gone and nothing new may appear',
-      'The project’s own tests run on GitHub Actions (Run tests on GitHub); the Remediation Agent fixes failing tests',
-    ], tools: <><StatusTag tone={c?.github_token_configured ? 'good' : 'warn'} label="GitHub Actions tests" /><StatusTag tone="good" label="Rescan" /><StatusTag tone="good" label="Diff guard" /></> },
+      'Static checks: every modified file must still parse',
+      'Security-regression guard: rejects suppressions, disabled TLS, skipped tests and removed security controls',
+      'Confirmation scan: remediated findings must be resolved and no new findings introduced',
+      'CI test validation: the project’s test suite runs on GitHub Actions and the Remediation Agent resolves failing tests',
+    ], tools: <><StatusTag tone={c?.github_token_configured ? 'good' : 'warn'} label="GitHub Actions tests" /><StatusTag tone="good" label="Confirmation scan" /><StatusTag tone="good" label="Diff guard" /></> },
     { id: 'reporting', title: 'Reporting Agent', items: [
-      'A report of what was found, the fixes proposed and applied, and the test results',
-      'The final verdict: validated, or needs review',
-      'A SARIF file for GitHub code scanning, the full patch and one diff per fix',
-      'The pull request description with the evidence reviewers need',
+      'An assessment report covering findings, remediations proposed and applied, and test results',
+      'The final verdict: validated, or review required',
+      'A SARIF file for GitHub code scanning, the full patch and a diff per remediation',
+      'A pull request description with the evidence reviewers require',
     ], tools: <><StatusTag tone="good" label="Markdown" /><StatusTag tone="good" label="SARIF 2.1.0" /><StatusTag tone="good" label="JSON" /></> },
   ]
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="How it works" description="How the four security agents find, fix, validate and report the vulnerabilities in a repository, and where a person decides." />
-      <Card title="From GitHub link to pull request" description="Every scan goes through these six steps, in this order.">
+      <PageHeader title="How it works" description="How the four security agents detect, remediate, validate and report on vulnerabilities in a repository, and where human approval is required." />
+      <Card title="From repository to pull request" description="Every scan proceeds through these six stages, in order.">
         <PipelineFlow stages={mergedStages([]).map((s) => ({ ...s, status: 'completed' }))} />
-        <div className="mt-4"><Notice tone="info" title="Optional: test on GitHub, failures fixed by the Remediation Agent">Press <b>Run tests on GitHub</b> on a run (or tick it on New scan). The fix branch is pushed with a test workflow, GitHub Actions runs every test in the repository, and when a test fails the Remediation Agent reads the failure, fixes the code (or a test that is itself wrong), and pushes again, which runs the tests again. It stops when everything passes or after 3 fixes. Fixes that skip or delete tests are rejected.</Notice></div>
-        <div className="mt-3"><Notice tone="info" title="A person always decides">Validated fixes become a pull request only after you approve them. If validation fails, the change set needs review: it opens as a draft pull request labelled <span className="font-mono">needs-investigation</span> (or is held back).</Notice></div>
+        <div className="mt-4"><Notice tone="info" title="Optional: CI test validation on GitHub Actions">Select <b>Run tests on GitHub</b> on a scan, or enable it on New scan. The remediation branch is pushed with a test workflow and GitHub Actions runs the full test suite. When a test fails, the Remediation Agent analyses the failure, corrects the code (or a defective test) and pushes again, triggering a new test run. The cycle ends when all tests pass or after 3 attempts. Changes that skip or delete tests are rejected.</Notice></div>
+        <div className="mt-3"><Notice tone="info" title="Human approval is always required">Validated remediations are raised as a pull request only after approval. If validation fails, the change set requires review and is raised as a draft pull request labelled <span className="font-mono">needs-investigation</span>, or held.</Notice></div>
       </Card>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {agents.map((a) => (
@@ -58,21 +58,21 @@ export function HowItWorks() {
         ))}
       </div>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <Card title="Behind the scenes">
+        <Card title="Architecture">
           <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-ink-2">
-            <li><b className="text-ink">Python</b> runs the agents in order and records each step live.</li>
-            <li><b className="text-ink">FastAPI</b> service: submit a GitHub link, follow progress, download reports, approve pull requests, chat.</li>
-            <li><b className="text-ink">Workers</b> take jobs from a database queue (SQLite or PostgreSQL) and can be scaled out.</li>
-            <li><b className="text-ink">GitHub Actions</b>: <span className="font-mono">examples/github-actions/ai-remediation.yml</span> runs CodeQL and Trivy in CI and feeds them in.</li>
-            <li><b className="text-ink">SEL Nexus CyberSuite</b>: you sign in once on the suite’s sign-in page; this site checks that sign-in.</li>
+            <li><b className="text-ink">Python</b> orchestrates the agents in sequence and records each stage in real time.</li>
+            <li><b className="text-ink">FastAPI</b> service: submit repositories, monitor progress, download reports, approve pull requests and query the Security Assistant.</li>
+            <li><b className="text-ink">Workers</b> process jobs from a database queue (SQLite or PostgreSQL) and scale horizontally.</li>
+            <li><b className="text-ink">GitHub Actions</b>: <span className="font-mono">examples/github-actions/ai-remediation.yml</span> runs CodeQL and Trivy in CI and submits the results.</li>
+            <li><b className="text-ink">SEL Nexus CyberSuite</b>: single sign-on through the suite’s sign-in page, verified by this application.</li>
           </ul>
         </Card>
-        <Card title="Scanners on this server" description="Ready = installed and switched on.">
+        <Card title="Scanners in this environment" description="Ready: installed and enabled.">
           <DTable head={[['Scanner'], ['State']]} minWidth={420}>
             {Object.entries(sc).map(([k, v]) => (
               <tr key={k}>
-                <td><div className="font-medium">{k} {v.primary && <StatusTag tone="info" label="main" />}</div><div className="text-xs text-ink-3">{v.description}</div></td>
-                <td>{v.available && v.enabled ? <StatusTag tone="good" label="Ready" /> : v.enabled ? <StatusTag tone="warn" label="Not installed" /> : <StatusTag tone="idle" label="Switched off" />}</td>
+                <td><div className="font-medium">{k} {v.primary && <StatusTag tone="info" label="Primary" />}</div><div className="text-xs text-ink-3">{v.description}</div></td>
+                <td>{v.available && v.enabled ? <StatusTag tone="good" label="Ready" /> : v.enabled ? <StatusTag tone="warn" label="Not installed" /> : <StatusTag tone="idle" label="Disabled" />}</td>
               </tr>
             ))}
           </DTable>

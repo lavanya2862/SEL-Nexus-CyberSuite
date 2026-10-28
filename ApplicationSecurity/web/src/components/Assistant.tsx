@@ -13,15 +13,15 @@ import { cn } from '@/lib/utils'
 type Msg = { role: 'user' | 'assistant'; content: string; error?: boolean }
 
 const SUGGEST: Record<ChatContext['type'], string[]> = {
-  general: ['How does the pipeline validate fixes?', 'What is CodeQL vs Trivy?', 'How do I fix SQL injection in Python?'],
-  run: ['Summarise the most critical risks', 'Why does this scan need review?', 'Which findings still need manual work?', 'What should I review before merging?'],
-  finding: ['Explain this vulnerability simply', 'How do I fix it safely?', 'Is this exploitable here?', 'Review the applied fix'],
+  general: ['How does the pipeline validate remediations?', 'How do CodeQL and Trivy differ?', 'How should SQL injection be remediated in Python?'],
+  run: ['Summarise the most critical risks', 'Why does this scan require review?', 'Which findings require manual remediation?', 'What should be reviewed before merging?'],
+  finding: ['Explain this vulnerability', 'What is the recommended remediation?', 'Is this exploitable in this context?', 'Review the applied remediation'],
 }
 
 const INTRO: Record<ChatContext['type'], string> = {
-  general: 'Hi! I can explain how the pipeline works, help you read a security finding, or suggest a secure fix. Open a scan to ask about its results.',
-  run: 'I have this scan’s findings, fixes and validation results. What would you like to know?',
-  finding: 'I have this finding’s details, its source code and any fix that was applied. Ask away.',
+  general: 'I can explain how the pipeline works, help interpret a security finding or recommend a secure remediation. Open a scan to ask about its results.',
+  run: 'I have this scan’s findings, remediations and validation results. What would you like to know?',
+  finding: 'I have this finding’s details, its source code and any remediation applied. What would you like to know?',
 }
 
 export function Assistant() {
@@ -75,7 +75,7 @@ export function Assistant() {
       <button
         onClick={() => (chat.open ? closeChat() : openChat())}
         aria-label={chat.open ? 'Close the Security Assistant' : 'Open the Security Assistant'}
-        title={chat.open ? 'Close chat' : 'Ask the Security Assistant'}
+        title={chat.open ? 'Close the Security Assistant' : 'Ask the Security Assistant'}
         aria-expanded={chat.open}
         className={cn(
           'fixed bottom-4 right-4 z-40 grid size-12 place-items-center rounded-[14px] border border-white/15 bg-blue text-white shadow-float transition-[transform,background-color] duration-200 hover:-translate-y-0.5 hover:bg-blue-hi active:translate-y-0',
@@ -95,7 +95,7 @@ export function Assistant() {
             <span className="tile-signal grid size-9 place-items-center rounded-[9px]"><Bot className="size-5" /></span>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold">Security Assistant</div>
-              <div className="truncate text-xs text-ink-3">{llm?.enabled ? `${llm.provider} · ${llm.model}` : 'No AI model connected yet'}</div>
+              <div className="truncate text-xs text-ink-3">{llm?.enabled ? `${llm.provider} · ${llm.model}` : 'No AI model connected'}</div>
             </div>
             <button onClick={closeChat} aria-label="Close chat" className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-well hover:text-ink">
               <X className="size-4" />
@@ -103,12 +103,12 @@ export function Assistant() {
           </header>
 
           <div className="flex flex-wrap items-center gap-1.5 border-b border-hairline px-4 py-2 text-xs">
-            <span className="text-ink-3">Talking about:</span>
+            <span className="text-ink-3">Context:</span>
             <span className="max-w-[220px] truncate rounded-full border border-hairline bg-well px-2 py-0.5 font-medium text-ink-2" title={'label' in ctx ? ctx.label : undefined}>
               {ctx.type === 'general' ? 'General questions' : `${ctx.type === 'finding' ? 'Finding' : 'Scan'}: ${ctx.label}`}
             </span>
             {ctx.type === 'finding' && (
-              <button onClick={() => setChatContext({ type: 'run', jobId: ctx.jobId, label: 'this scan' })} className="rounded-full px-2 py-0.5 text-sky hover:bg-well">whole scan</button>
+              <button onClick={() => setChatContext({ type: 'run', jobId: ctx.jobId, label: 'this scan' })} className="rounded-full px-2 py-0.5 text-sky hover:bg-well">Entire scan</button>
             )}
             {ctx.type !== 'general' && <button onClick={() => setChatContext({ type: 'general' })} className="ml-auto rounded-full px-2 py-0.5 text-ink-3 hover:bg-well hover:text-ink">general</button>}
           </div>
@@ -116,7 +116,7 @@ export function Assistant() {
           <div ref={listRef} className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
             {llm && !llm.enabled ? (
               <div className="rounded-xl bg-well px-3.5 py-3 text-sm text-ink-2">
-                <b className="text-ink">Connect an AI model to chat.</b> The assistant uses the same model as the Remediation Agent.{' '}
+                <b className="text-ink">Connect an AI model to use the Security Assistant.</b> It uses the same model as the Remediation Agent.{' '}
                 <Link to="/settings" onClick={closeChat} className="inline-flex items-center gap-1 font-medium text-sky">Open Settings <ArrowRight className="size-3" /></Link>
               </div>
             ) : (
@@ -125,7 +125,7 @@ export function Assistant() {
             {msgs.map((m, i) => (
               <Bubble key={i} from={m.role === 'user' ? 'you' : 'bot'} error={m.error}>
                 {m.role === 'assistant' && !m.error ? <Markdown text={m.content} className="text-[13px] [&_p]:my-1.5" /> : m.content}
-                {m.role === 'assistant' && !m.error && <p className="mt-1.5 flex items-center gap-1 text-[10px] text-ink-3"><Sparkles className="size-3" /> Security Assistant answer · check important details in the scan</p>}
+                {m.role === 'assistant' && !m.error && <p className="mt-1.5 flex items-center gap-1 text-[10px] text-ink-3"><Sparkles className="size-3" /> AI-generated response · verify important details against the scan</p>}
               </Bubble>
             ))}
             {busy && <Bubble from="bot"><span className="flex items-center gap-2 text-ink-3"><Loader2 className="size-3.5 animate-spin" /> Thinking…</span></Bubble>}
@@ -152,7 +152,7 @@ export function Assistant() {
                 rows={1}
                 aria-label="Your question"
                 style={{ outline: 'none' }}
-                placeholder="Ask about findings, fixes, validation…"
+                placeholder="Ask about findings, remediations or validation…"
                 className="max-h-28 min-h-6 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-ink-3 disabled:opacity-50 [field-sizing:content]"
               />
               <button onClick={() => send(text)} disabled={!text.trim() || busy || !llm?.enabled} aria-label="Send" className="btn-blue grid size-8 shrink-0 place-items-center rounded-lg disabled:opacity-30">

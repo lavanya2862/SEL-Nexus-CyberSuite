@@ -109,7 +109,12 @@ def _post_with_retries(url: str, headers: dict, payload: dict) -> dict:
 
 def chat(system: str, user_messages: list[dict]) -> str:
     """Send a conversation and return the assistant's text."""
-    s = get_settings()
+    return chat_with(get_settings(), system, user_messages)[0]
+
+
+def chat_with(s, system: str, user_messages: list[dict]) -> tuple[str, str]:
+    """Send a conversation with the provider, model and key in ``s``; return the assistant's text and the model the
+    provider says answered (empty when it does not say)."""
     provider = s.resolved_llm_provider
     if provider == "none" or not s.llm_enabled:
         raise LLMError("No LLM configured (set LLM_API_KEY and LLM_MODEL).")
@@ -122,14 +127,15 @@ def chat(system: str, user_messages: list[dict]) -> str:
                                    "content-type": "application/json"},
                                   {"model": s.llm_model, "max_tokens": s.llm_max_tokens, "system": system,
                                    "messages": user_messages})
-        return "".join(block.get("text", "") for block in data.get("content", []) if block.get("type") == "text")
+        text = "".join(block.get("text", "") for block in data.get("content", []) if block.get("type") == "text")
+        return text, str(data.get("model") or "")
     # OpenAI, Gemini (OpenAI-compatible endpoint), Azure/OpenAI gateways, vLLM, Ollama, LiteLLM...
     data = _post_with_retries(s.effective_llm_base_url + "/chat/completions",
                               {"Authorization": f"Bearer {s.llm_api_key}", "Content-Type": "application/json"},
                               {"model": s.llm_model, "temperature": 0, "max_tokens": s.llm_max_tokens,
                                "messages": [{"role": "system", "content": system}, *user_messages]})
     try:
-        return data["choices"][0]["message"]["content"] or ""
+        return data["choices"][0]["message"]["content"] or "", str(data.get("model") or "").removeprefix("models/")
     except (KeyError, IndexError, TypeError) as exc:
         raise LLMError(f"Unexpected LLM response shape: {str(data)[:300]}") from exc
 

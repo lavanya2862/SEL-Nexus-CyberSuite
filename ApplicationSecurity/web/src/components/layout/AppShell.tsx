@@ -1,13 +1,12 @@
 import { useEffect, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  BookOpen, ChevronRight, CircleAlert, CirclePlus, FileText, FolderGit2, Grip, HelpCircle, LayoutGrid, LogOut, Menu, Moon,
+  ChevronRight, CircleAlert, CirclePlus, FileText, FolderGit2, Grip, HelpCircle, LayoutGrid, LogOut, Menu, Moon,
   PanelLeftClose, PanelLeftOpen, ScrollText, Settings, ShieldCheck, ShieldAlert, Sun, Workflow, Wrench,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Wordmark } from '@/components/Brand'
-import { Glossary, Tour, shouldShowTour } from '@/components/Help'
 import { AttentionBell } from '@/components/AttentionBell'
 import { Assistant } from '@/components/Assistant'
 import { FindingDrawer } from '@/components/FindingDrawer'
@@ -52,7 +51,7 @@ const NAV = GROUPS.flatMap((g) => g.items)
 // Breadcrumb names for the tabs inside a run
 const TAB_NAMES: Record<string, string> = {
   summary: 'Summary', analysis: '① Analysis', remediation: '② Remediation', validation: '③ Validation', reporting: '④ Reporting',
-  tests: '⑤ GitHub tests', findings: 'All findings', logs: 'Activity log',
+  tests: '⑤ CI tests', findings: 'All findings', logs: 'Activity log',
 }
 
 const NAV_KEY = 'appvuln-nav-collapsed'
@@ -100,9 +99,7 @@ function useCounts(): Counts {
 export function AppShell() {
   const { pathname } = useLocation()
   const { theme, toggle } = useTheme()
-  const [tour, setTour] = useState(false)
   const keys = useKeysPrompt()
-  const [glossary, setGlossary] = useState(false)
   const [collapsed, setCollapsed] = useCollapsedNav()
   const counts = useCounts()
   const onHome = pathname === '/'
@@ -110,10 +107,6 @@ export function AppShell() {
   const activeItem = NAV.map((i) => i.to)
     .filter((to) => (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(to + '/')))
     .sort((a, b) => b.length - a.length)[0]
-
-  useEffect(() => {
-    if (shouldShowTour()) setTour(true)
-  }, [])
 
   // A new page always opens at the top.
   useEffect(() => {
@@ -133,28 +126,12 @@ export function AppShell() {
             className="hidden h-9 items-center gap-2 rounded-lg border border-hairline-strong bg-[var(--panel-glass)] px-3 text-sm font-medium text-ink transition-colors hover:bg-well sm:flex"
           >
             {counts.live ? <span className="size-2 animate-pulse rounded-full bg-sky" /> : <CirclePlus className="size-3.5 text-sky" />}
-            {counts.live ? 'Agents working…' : 'New scan'}
+            {counts.live ? 'Scan in progress…' : 'New scan'}
           </NavLink>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button onClick={() => setGlossary(true)} className="grid size-9 place-items-center rounded-lg text-ink-2 hover:bg-well hover:text-ink" aria-label="What does this mean?">
-                <BookOpen className="size-[18px]" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>What does this mean? · Glossary</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button onClick={() => setTour(true)} className="hidden size-9 place-items-center rounded-lg text-ink-2 hover:bg-well hover:text-ink sm:grid" aria-label="Show the tour">
-                <HelpCircle className="size-[18px]" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Where is what? · Tour</TooltipContent>
-          </Tooltip>
           <AttentionBell />
           <Tooltip>
             <TooltipTrigger asChild>
-              <button onClick={toggle} className="grid size-9 place-items-center rounded-lg text-ink-2 hover:bg-well hover:text-ink" aria-label="Switch light or dark">
+              <button onClick={toggle} className="grid size-9 place-items-center rounded-lg text-ink-2 hover:bg-well hover:text-ink" aria-label="Switch between light and dark mode">
                 {theme === 'dark' ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
               </button>
             </TooltipTrigger>
@@ -166,9 +143,9 @@ export function AppShell() {
       <div className="flex">
         <aside
           className={cn(
-            'nav-surface sticky hidden shrink-0 flex-col overflow-hidden border-r border-hairline transition-[width] duration-200 lg:flex',
+            'nav-surface sticky ml-3 mt-3 hidden shrink-0 flex-col overflow-hidden rounded-[20px] border border-hairline shadow-[0_1px_2px_rgb(0_0_0/0.04),0_10px_28px_-14px_rgb(0_0_0/0.18)] transition-[width] duration-200 lg:flex',
             collapsed ? 'w-16' : 'w-64',
-            'top-14 h-[calc(100svh-56px)]',
+            'top-[68px] h-[calc(100svh-80px)]',
           )}
         >
           {collapsed ? <CollapsedMenu activeItem={activeItem} counts={counts} onExpand={() => setCollapsed(false)} /> : <>
@@ -196,8 +173,6 @@ export function AppShell() {
       </div>
 
       <KeysPrompt prompt={keys} />
-      <Tour open={tour && !keys.pending} onOpenChange={setTour} />
-      <Glossary open={glossary} onOpenChange={setGlossary} />
       <FindingDrawer />
       <Assistant />
     </div>
@@ -214,9 +189,9 @@ function AgentDot({ status }: { status?: string }) {
 
 function MenuGroups({ activeItem, counts, onPick }: { activeItem?: string; counts: Counts; onPick?: () => void }) {
   return (
-    <nav className="flex-1 overflow-y-auto px-3 pb-3 pt-1" aria-label="Main menu">
+    <nav className="nav-scroll flex-1 overflow-y-auto px-3 pb-3 pt-1" aria-label="Main menu">
       {GROUPS.map((g) => (
-        <div key={g.heading} className="mt-4 flex flex-col gap-0.5">
+        <div key={g.heading} className="mt-3 flex flex-col gap-0.5">
           <div className="flex items-center gap-2 px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3 after:h-px after:flex-1 after:bg-hairline after:content-['']">
             <span className="size-1.5 shrink-0 rounded-full" style={{ background: g.tone }} aria-hidden />{g.heading}
           </div>
@@ -231,7 +206,7 @@ function MenuGroups({ activeItem, counts, onPick }: { activeItem?: string; count
                 aria-current={active ? 'page' : undefined}
                 style={{ '--area': g.tone, '--area-on': g.on } as CSSProperties}
                 className={cn(
-                  'group relative flex h-10 items-center gap-3 rounded-[10px] px-1.5 pr-2.5 text-sm transition-colors',
+                  'group relative flex h-9 items-center gap-3 rounded-[10px] px-1.5 pr-2.5 text-sm transition-colors',
                   active ? 'nav-on font-semibold text-ink' : 'text-ink-2 hover:bg-well hover:text-ink',
                 )}
               >
@@ -343,7 +318,7 @@ function CollapsedMenu({ activeItem, counts, onExpand }: { activeItem?: string; 
       <div className="flex flex-col items-center gap-1 pt-3">
         <RailButton label="Open the menu" hint="Ctrl+B" onClick={onExpand}><PanelLeftOpen className="size-[18px]" /></RailButton>
       </div>
-      <nav className="flex flex-1 flex-col items-center overflow-y-auto pb-3" aria-label="Main menu">
+      <nav className="nav-scroll flex flex-1 flex-col items-center overflow-y-auto pb-3" aria-label="Main menu">
         {GROUPS.map((g) => (
           <div key={g.heading} className="flex flex-col items-center gap-1">
             <span className="my-2 h-px w-6 bg-hairline" aria-hidden />

@@ -27,7 +27,7 @@ function Body({ jobId, findingId }: { jobId: string; findingId: string }) {
   const { report, findings } = useJobResults(jobId, true)
   const f = findings.data?.find((x) => x.finding_id === findingId)
   if (findings.isLoading || report.isLoading) return <div className="p-6"><SheetTitle className="sr-only">Finding</SheetTitle><Loading /></div>
-  if (!f) return <div className="p-6"><SheetTitle>Finding not found</SheetTitle><SheetDescription>It may belong to an older scan.</SheetDescription></div>
+  if (!f) return <div className="p-6"><SheetTitle>Finding not found</SheetTitle><SheetDescription>It may belong to an earlier scan.</SheetDescription></div>
 
   const fixes = report.data?.fixes ?? []
   const idx = fixes.findIndex((x) => x.finding_ids.includes(findingId))
@@ -42,13 +42,13 @@ function Body({ jobId, findingId }: { jobId: string; findingId: string }) {
       <div className="sticky top-0 z-10 border-b border-hairline bg-panel px-6 pb-4 pt-6 pr-14">
         <div className="flex flex-wrap items-center gap-2">
           <SevTag sev={f.severity} />
-          <Chip>risk <span className="ml-1"><RiskScore score={f.priority_score} /></span></Chip>
+          <Chip>Risk <span className="ml-1"><RiskScore score={f.priority_score} /></span></Chip>
           <Chip>#{f.priority_rank ?? '?'} in this scan</Chip>
           <FixStatusTag s={f.fix_status} />
           <Chip>{findingType(f)}</Chip>
         </div>
         <SheetTitle className="mt-3 text-lg leading-snug">{f.title}</SheetTitle>
-        <SheetDescription className="mt-1">{j ? `${j.repo} · found by ${detectedBy(f)}` : `Found by ${detectedBy(f)}`}</SheetDescription>
+        <SheetDescription className="mt-1">{j ? `${j.repo} · detected by ${detectedBy(f)}` : `Detected by ${detectedBy(f)}`}</SheetDescription>
         <div className="mt-3 flex flex-wrap gap-2">
           <button onClick={() => openChat({ type: 'finding', jobId, findingId, label: f.title })} className="btn-blue inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium">
             <Sparkles className="size-3.5" /> Ask the Security Assistant
@@ -66,7 +66,7 @@ function Body({ jobId, findingId }: { jobId: string; findingId: string }) {
 
 
         {f.package_name && (
-          <Section title="The problem: a vulnerable dependency">
+          <Section title="Vulnerable dependency">
             <dl className="grid grid-cols-[140px_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
               <Row k="Package" v={<span className="font-mono">{f.package_name} <span className="text-ink-3">({f.ecosystem})</span></span>} />
               <Row k="Installed" v={<span className="font-mono">{f.installed_version}</span>} />
@@ -76,24 +76,24 @@ function Body({ jobId, findingId }: { jobId: string; findingId: string }) {
           </Section>
         )}
 
-        {f.description && <Section title={f.package_name ? 'What the vulnerability allows' : 'The problem'}><Markdown text={f.description.slice(0, 4000)} className="text-[13px]" /></Section>}
+        {f.description && <Section title={f.package_name ? 'Impact' : 'Description'}><Markdown text={f.description.slice(0, 4000)} className="text-[13px]" /></Section>}
         {f.code_context && (
-          <Section title="Where it is in the code">
+          <Section title="Affected code">
             <CodeView code={f.code_context} start={f.context_start_line ?? 1} from={f.line ?? 0} to={f.end_line ?? f.line ?? 0} />
           </Section>
         )}
         {!!f.priority_reasons?.length && (
-          <Section title="Why it is ranked this high">
+          <Section title="Risk rationale">
             <div className="flex flex-wrap gap-1.5">{f.priority_reasons.map((r) => <Chip key={r}>{r}</Chip>)}</div>
           </Section>
         )}
-        <Section title="What our agents did about it">
+        <Section title="Remediation status">
           <Notice tone={fixInfo?.tone === 'good' ? 'good' : fixInfo?.tone === 'warn' || fixInfo?.tone === 'bad' ? 'warn' : 'info'} title={fixInfo?.label ?? f.fix_status}>
             {f.fix_note || fixInfo?.hint || 'Not attempted.'}
           </Notice>
           {fix && (
             <div className="mt-3 rounded-xl border border-hairline p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-3">Fix #{idx + 1} · made by the Remediation Agent</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-3">Remediation #{idx + 1} · applied by the Remediation Agent</div>
               <div className="mt-1 text-sm font-semibold">{fix.summary}</div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                 <StatusTag tone="info" label={METHOD[fix.method]?.label ?? fix.method} />
@@ -101,7 +101,7 @@ function Body({ jobId, findingId }: { jobId: string; findingId: string }) {
                 <span className="font-mono text-ink-3">{(fix.commit ?? '').slice(0, 10)}</span>
               </div>
               {fix.explanation && <p className="mt-2 text-sm text-ink-2">{fix.explanation}</p>}
-              {checks.length > 0 && <><div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-3">Checked by the Validation Agent</div><ChecksList checks={checks} /></>}
+              {checks.length > 0 && <><div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-3">Verified by the Validation Agent</div><ChecksList checks={checks} /></>}
               <div className="mt-3"><Diff diff={fix.diff} /></div>
             </div>
           )}

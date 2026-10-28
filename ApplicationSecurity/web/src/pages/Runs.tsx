@@ -17,7 +17,7 @@ export function Runs() {
   const jobs = useJobs({ status, repo, limit: 100 })
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Scan history" description="Every scan of every repository, newest first, including the ones running now. Open a scan to watch it live, review its fixes and approve them.">
+      <PageHeader title="Scan history" description="All scans across all repositories, newest first, including scans in progress. Open a scan to monitor it live, review its remediations and approve them.">
         <LinkBtn to="/scan" kind="primary"><CirclePlus className="size-4" /> New scan</LinkBtn>
       </PageHeader>
       <Panel className="flex flex-col gap-3 p-6">
@@ -28,7 +28,7 @@ export function Runs() {
           </Select>
           <Search value={text} onChange={setText} placeholder="Filter by repository…" />
         </div>
-        {jobs.isLoading ? <Loading /> : jobs.error ? <ErrorBox error={jobs.error} /> : <RunsTable items={jobs.data?.items ?? []} empty="No scans match." />}
+        {jobs.isLoading ? <Loading /> : jobs.error ? <ErrorBox error={jobs.error} /> : <RunsTable items={jobs.data?.items ?? []} empty="No scans match the selected filters." />}
       </Panel>
     </div>
   )

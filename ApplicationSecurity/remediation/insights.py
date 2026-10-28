@@ -13,61 +13,61 @@ from collections import Counter
 AGENTS = {
     "analysis": {
         "name": "Analysis Agent", "stage": "analysis",
-        "role": "Finds every vulnerability and decides what matters most.",
-        "contract_in": ["GitHub repository (cloned)", "Detected languages and dependency files",
-                        "Scanners: CodeQL (primary), Trivy, OSV.dev, Semgrep/Bandit, built-in rules"],
-        "contract_out": ["One de-duplicated list of findings", "Risk score and rank for each finding",
+        "role": "Detects vulnerabilities across the codebase and prioritises them by risk.",
+        "contract_in": ["GitHub repository (cloned)", "Detected languages and dependency manifests",
+                        "Scanners: CodeQL (primary), Trivy, OSV.dev, Semgrep/Bandit, built-in SAST rules"],
+        "contract_out": ["A consolidated, de-duplicated list of findings", "A risk score and priority for each finding",
                          "Source-code context for review"],
     },
     "remediation": {
         "name": "Remediation Agent", "stage": "remediation",
-        "role": "Fixes the issues it safely can, one Git commit per fix.",
+        "role": "Remediates the vulnerabilities it can safely address, one Git commit per remediation.",
         "contract_in": ["Ranked findings from the Analysis Agent", "Isolated Git branch",
-                        "LLM for code changes (optional)"],
-        "contract_out": ["Fix commits (dependency upgrades, rule rewrites, code fixes)",
-                         "Issues it could not fix, with the reason"],
+                        "AI model for AI-assisted remediation (optional)"],
+        "contract_out": ["Remediation commits (dependency upgrades, rule-based and AI-assisted remediations)",
+                         "Findings requiring manual remediation, with the root cause"],
     },
     "validation": {
         "name": "Validation Agent", "stage": "validation",
-        "role": "Proves each fix works and does not make anything worse.",
-        "contract_in": ["Fix commits from the Remediation Agent", "Scanners for a rescan"],
-        "contract_out": ["PASSED or NEEDS REVIEW verdict", "Evidence for every check", "Issues confirmed resolved"],
+        "role": "Verifies each remediation is effective and introduces no regressions.",
+        "contract_in": ["Remediation commits from the Remediation Agent", "Scanners for a confirmation scan"],
+        "contract_out": ["A PASSED or REVIEW REQUIRED verdict", "Evidence for every check", "Findings verified as resolved"],
     },
     "reporting": {
         "name": "Reporting Agent", "stage": "reporting",
-        "role": "Packages the evidence and hands the decision to a human.",
-        "contract_in": ["Findings, fixes and validation results"],
-        "contract_out": ["Report, SARIF, patch", "Pull request for review (draft if it needs review)"],
+        "role": "Compiles the evidence and routes the decision to an authorised reviewer.",
+        "contract_in": ["Findings, remediations and validation results"],
+        "contract_out": ["Assessment report, SARIF file and patch", "Pull request for review (draft when review is required)"],
     },
 }
 
 # (pattern on the fix note, key, short label, what a person should do)
 REASONS = [
-    (r"quota", "llm_quota", "Remediation Agent: AI quota used up",
-     "Enable billing for the LLM key or pick a model with quota in Settings, then re-run."),
-    (r"high demand|overloaded|HTTP 50[234]|unavailable", "llm_unavailable", "Remediation Agent: AI provider busy",
-     "Re-run later; the AI provider the Remediation Agent uses was temporarily overloaded."),
+    (r"quota", "llm_quota", "AI provider quota exhausted",
+     "Enable billing for the API key or select a model with available quota in Settings, then re-run the scan."),
+    (r"high demand|overloaded|HTTP 50[234]|unavailable", "llm_unavailable", "AI provider temporarily unavailable",
+     "Re-run the scan later; the AI provider was temporarily overloaded."),
     (r"HTTP 40[0134]|no longer available|not found for API|invalid api key|permission", "llm_rejected",
-     "Remediation Agent: AI model refused", "Check the model name and API key in Settings (the model may be retired)."),
-    (r"turned off for this run", "ai_off", "Remediation Agent code fixes were off",
-     "Re-run with 'Code fixes by the Remediation Agent' switched on."),
-    (r"configure an LLM|No LLM", "needs_llm", "Remediation Agent needs an AI model",
-     "Add an LLM in Settings and re-run so the Remediation Agent can patch it."),
+     "AI model request rejected", "Verify the model and API key in Settings; the model may have been retired."),
+    (r"turned off for this run", "ai_off", "AI-assisted remediation disabled for this scan",
+     "Re-run the scan with AI-assisted remediation enabled."),
+    (r"configure an LLM|No LLM", "needs_llm", "AI model not configured",
+     "Configure an AI model in Settings and re-run the scan to enable AI-assisted remediation."),
     (r"search text not found|could not produce|did not apply|syntax error|neither the requested",
-     "ai_failed", "Remediation Agent's fix did not apply", "Fix it by hand using the finding details, or re-run."),
-    (r"declined", "ai_declined", "Remediation Agent judged it unsafe to fix", "Review and fix by hand."),
-    (r"No patched version", "no_upstream", "No patched version exists yet",
-     "Replace the package or add mitigations, and watch for a release."),
-    (r"not a direct dependency|lockfile|regenerat|no automatic bump", "transitive", "Indirect dependency",
-     "Upgrade the parent package, or run the lockfile command in the note."),
-    (r"Still reported after", "partial", "Validation Agent still finds it after the fix",
-     "Needs a bigger upgrade or a code change."),
-    (r"reverted|broke", "reverted", "Validation Agent undid a fix that broke tests", "Fix it by hand."),
-    (r"secret|credential|rotate", "secret", "Exposed secret", "Rotate the credential and purge it from Git history."),
-    (r"Third-party library", "vendored", "Third-party library code",
-     "Update the bundled library (e.g. replace the vendored .js file) to a current version."),
-    (r"test code", "tests", "In test code", "Low priority; fix when convenient."),
-    (r"budget", "budget", "Remediation Agent's fix limit reached", "Raise 'Max code fixes per run' in Settings and re-run."),
+     "ai_failed", "Automated remediation could not be applied", "Remediate manually using the finding details, or re-run the scan."),
+    (r"declined", "ai_declined", "Automated remediation assessed as unsafe", "Review the finding and remediate manually."),
+    (r"No patched version", "no_upstream", "No patched version available",
+     "Replace the package or apply compensating controls, and monitor for a patched release."),
+    (r"not a direct dependency|lockfile|regenerat|no automatic bump", "transitive", "Transitive dependency",
+     "Upgrade the parent package, or run the lockfile command provided in the note."),
+    (r"Still reported after", "partial", "Still reported after remediation",
+     "Requires a larger upgrade or a code change."),
+    (r"reverted|broke", "reverted", "Remediation reverted after test failures", "Remediate manually."),
+    (r"secret|credential|rotate", "secret", "Exposed secret", "Rotate the credential and remove it from the Git history."),
+    (r"Third-party library", "vendored", "Vendored third-party code",
+     "Update the bundled library (for example, replace the vendored .js file) to a supported version."),
+    (r"test code", "tests", "Located in test code", "Low priority; remediate as part of routine maintenance."),
+    (r"budget", "budget", "Per-scan remediation limit reached", "Increase 'Maximum remediations per scan' in Settings and re-run the scan."),
 ]
 OPEN_STATUSES = ("manual", "failed", "skipped", "not_attempted")
 
@@ -78,11 +78,11 @@ def classify(finding: dict) -> tuple[str, str, str]:
         if re.search(pattern, note, re.I):
             return key, label, action
     if finding.get("remediation_type") == "secret_removal":
-        return "secret", "Exposed secret", "Rotate the credential and purge it from Git history."
+        return "secret", "Exposed secret", "Rotate the credential and remove it from the Git history."
     if finding.get("fix_status") == "not_attempted":
-        return ("below_threshold", "Below your severity threshold",
-                "Re-run with a lower minimum severity to have it fixed automatically.")
-    return "manual", "Needs a human", "Review the finding and fix it by hand."
+        return ("below_threshold", "Below the severity threshold",
+                "Re-run the scan with a lower minimum severity to remediate it automatically.")
+    return "manual", "Manual remediation required", "Review the finding and remediate it manually."
 
 
 def _stage(job: dict, report: dict | None, stage_id: str) -> dict:
@@ -126,43 +126,43 @@ def analysis_view(job: dict, report: dict | None, findings: list[dict]) -> dict:
     if findings or m.get("unique") is not None:
         sev = r.get("severity_counts") or {}
         outputs = [_kv("Raw scanner results", m.get("raw_results", "–")),
-                   _kv("Unique issues", m.get("unique", len(findings))),
+                   _kv("Unique findings", m.get("unique", len(findings))),
                    _kv("Critical / High", f"{sev.get('critical', 0)} / {sev.get('high', 0)}",
                        "bad" if sev.get("critical") else ""),
-                   _kv("Selected for fixing", m.get("selected", r.get("findings_selected", "–")))]
+                   _kv("In remediation scope", m.get("selected", r.get("findings_selected", "–")))]
         if findings:
             top = findings[0]
             outputs.append(_kv("Top risk", f"{_short(top.get('title'), 60)} ({top.get('priority_score')})", "bad"))
         raw, uniq = m.get("raw_results") or 0, m.get("unique") or len(findings)
         if raw and raw > uniq:
-            learnings.append(_l(f"{raw} raw scanner results collapsed into {uniq} unique issues: "
-                                f"{_pct(raw - uniq, raw)} were the same problem reported more than once."))
+            learnings.append(_l(f"{raw} raw scanner results were consolidated into {uniq} unique findings; "
+                                f"{_pct(raw - uniq, raw)} were duplicates reported by more than one scanner."))
         corroborated = [f for f in findings if f.get("also_reported_by")]
         if corroborated:
-            learnings.append(_l(f"{len(corroborated)} issues were confirmed by two or more scanners, so they are "
-                                "high-confidence.", "good"))
+            learnings.append(_l(f"{len(corroborated)} findings were corroborated by two or more scanners and are "
+                                "considered high-confidence.", "good"))
         codeql_only = [f for f in findings if f.get("scanner") == "CodeQL" and not f.get("also_reported_by")]
         if codeql_only:
-            learnings.append(_l(f"CodeQL's data-flow analysis found {len(codeql_only)} issue(s) no other scanner "
-                                f"caught, e.g. {_short(codeql_only[0].get('title'), 60)}.", "good"))
+            learnings.append(_l(f"CodeQL data-flow analysis identified {len(codeql_only)} finding(s) not detected by any other "
+                                f"scanner, for example {_short(codeql_only[0].get('title'), 60)}.", "good"))
         deps = [f for f in findings if f.get("package_name")]
         if deps:
             pkgs = Counter(f["package_name"] for f in deps)
             name, n = pkgs.most_common(1)[0]
-            learnings.append(_l(f"{len(deps)} of {len(findings)} issues ({_pct(len(deps), len(findings))}) come from "
-                                f"{len(pkgs)} outdated packages; {name} alone has {n} advisories."))
+            learnings.append(_l(f"{len(deps)} of {len(findings)} findings ({_pct(len(deps), len(findings))}) originate from "
+                                f"{len(pkgs)} outdated packages; {name} alone accounts for {n} advisories."))
         code = [f for f in findings if not f.get("package_name") and f.get("file_path")]
         if code:
             file, n = Counter(f["file_path"] for f in code).most_common(1)[0]
             cat, cn = Counter(f.get("category", "") for f in code).most_common(1)[0]
-            learnings.append(_l(f"{file} is the hotspot with {n} code issue(s); the most common class is "
+            learnings.append(_l(f"{file} is the principal hotspot with {n} code finding(s); the most prevalent category is "
                                 f"{cat.replace('_', ' ')} ({cn}).", "warn"))
         missing = [s["name"] for s in scanners if s["status"] in ("unavailable", "failed")]
         if missing:
-            learnings.append(_l(f"Not run: {', '.join(missing)}. Coverage relies on the other scanners.", "warn"))
+            learnings.append(_l(f"Not run: {', '.join(missing)}. Coverage relies on the remaining scanners.", "warn"))
         in_tests = [f for f in findings if (f.get("raw") or {}).get("in_tests")]
         if in_tests:
-            learnings.append(_l(f"{len(in_tests)} issue(s) are in test code and were ranked lower."))
+            learnings.append(_l(f"{len(in_tests)} finding(s) are located in test code and were assigned a lower priority."))
     return _view("analysis", st, inputs, outputs, learnings)
 
 
@@ -170,9 +170,9 @@ def remediation_view(job: dict, report: dict | None, findings: list[dict]) -> di
     st = _stage(job, report, "remediation")
     r = report or {}
     fixes = r.get("fixes") or []
-    inputs = [_kv("Issues selected", r.get("findings_selected", "–")),
+    inputs = [_kv("Findings in scope", r.get("findings_selected", "–")),
               _kv("Isolated branch", r.get("branch") or (job.get("summary") or {}).get("branch") or "–"),
-              _kv("AI model", r.get("llm_model") or ("configured" if r.get("llm_enabled") else "not configured"),
+              _kv("AI model", r.get("llm_model") or ("Configured" if r.get("llm_enabled") else "Not configured"),
                   "" if r.get("llm_enabled") else "warn")]
     outputs, learnings = [], []
     if report:
@@ -180,31 +180,31 @@ def remediation_view(job: dict, report: dict | None, findings: list[dict]) -> di
         files = {p for f in fixes for p in f.get("files", [])}
         status = Counter(f.get("fix_status") for f in findings)
         fixed = status.get("fixed", 0) + status.get("verified", 0)
-        outputs = [_kv("Fix commits", len(fixes)),
-                   _kv("Dependency / Rule / Code", f"{by.get('dependency', 0)} / {by.get('rule', 0)} / {by.get('llm', 0)}"),
+        outputs = [_kv("Remediation commits", len(fixes)),
+                   _kv("Dependency / Rule-based / AI-assisted", f"{by.get('dependency', 0)} / {by.get('rule', 0)} / {by.get('llm', 0)}"),
                    _kv("Files changed", len(files)),
-                   _kv("Issues fixed", fixed, "good" if fixed else ""),
-                   _kv("Still need work", sum(status.get(s, 0) for s in OPEN_STATUSES),
+                   _kv("Findings remediated", fixed, "good" if fixed else ""),
+                   _kv("Manual remediation required", sum(status.get(s, 0) for s in OPEN_STATUSES),
                        "warn" if any(status.get(s) for s in OPEN_STATUSES) else "")]
         selected = r.get("findings_selected") or len(findings)
         if selected:
-            learnings.append(_l(f"Fixed {fixed} of {selected} selected issues automatically ({_pct(fixed, selected)}).",
+            learnings.append(_l(f"Remediated {fixed} of {selected} in-scope findings automatically ({_pct(fixed, selected)}).",
                                 "good" if fixed else "warn"))
         dep_issues = sum(len(f["finding_ids"]) for f in fixes if f["method"] == "dependency")
         if by.get("dependency"):
-            learnings.append(_l(f"{by['dependency']} dependency upgrade(s) cleared {dep_issues} advisories, since one "
-                                "upgrade usually fixes several at once."))
+            learnings.append(_l(f"{by['dependency']} dependency upgrade(s) resolved {dep_issues} advisories; a single "
+                                "upgrade typically addresses several advisories."))
         majors = [f for f in fixes if "[MAJOR]" in f.get("summary", "")]
         if majors:
-            learnings.append(_l(f"{len(majors)} upgrade(s) jump a major version, so expect breaking API changes and "
-                                "test before merging.", "warn"))
+            learnings.append(_l(f"{len(majors)} upgrade(s) cross a major version; breaking API changes are likely, so "
+                                "regression testing is required before merging.", "warn"))
         ai = [f for f in fixes if f["method"] == "llm"]
         if ai:
             ok = sum(1 for f in ai if f.get("verified"))
-            learnings.append(_l(f"The Remediation Agent wrote {len(ai)} code fix(es); the Validation Agent's rescan confirmed {ok} of them.", "good"))
+            learnings.append(_l(f"The Remediation Agent applied {len(ai)} AI-assisted remediation(s); the Validation Agent's confirmation scan verified {ok}.", "good"))
         reasons = Counter(classify(f)[1] for f in findings if f.get("fix_status") in OPEN_STATUSES)
         for label, n in reasons.most_common(4):
-            learnings.append(_l(f"{n} issue(s) still open: {label}.", "warn"))
+            learnings.append(_l(f"{n} finding(s) remain open: {label}.", "warn"))
     return _view("remediation", st, inputs, outputs, learnings)
 
 
@@ -212,36 +212,36 @@ def validation_view(job: dict, report: dict | None, findings: list[dict]) -> dic
     st = _stage(job, report, "validation")
     r = report or {}
     checks = [c for c in r.get("validation_checks") or [] if c["category"] != "functional"]  # older reports had one
-    inputs = [_kv("Fixes to check", len([f for f in r.get("fixes", []) if f.get("status") == "applied"]) if report else "–"),
-              _kv("Check layers", "syntax · regression guard · rescan")]
+    inputs = [_kv("Remediations to verify", len([f for f in r.get("fixes", []) if f.get("status") == "applied"]) if report else "–"),
+              _kv("Validation layers", "Syntax · regression guard · confirmation scan")]
     outputs, learnings = [], []
     if report:
         cnt = Counter(c["status"] for c in checks)
         verdict = r.get("validation_status", "not_run")
-        outputs = [_kv("Verdict", {"passed": "PASSED", "flagged": "NEEDS REVIEW", "not_run": "Not run"}.get(verdict, verdict),
+        outputs = [_kv("Verdict", {"passed": "PASSED", "flagged": "REVIEW REQUIRED", "not_run": "Not run"}.get(verdict, verdict),
                        {"passed": "good", "flagged": "warn"}.get(verdict, "")),
                    _kv("Checks passed", cnt.get("passed", 0), "good"),
                    _kv("Checks failed", cnt.get("failed", 0), "bad" if cnt.get("failed") else ""),
                    _kv("Warnings", cnt.get("warning", 0), "warn" if cnt.get("warning") else ""),
-                   _kv("Issues confirmed gone", r.get("verified_fixed", 0), "good")]
+                   _kv("Findings verified resolved", r.get("verified_fixed", 0), "good")]
         static = [c for c in checks if c["category"] == "static"]
         if static and all(c["status"] == "passed" for c in static):
-            learnings.append(_l(f"All {len(static)} fixes still compile and parse cleanly.", "good"))
+            learnings.append(_l(f"All {len(static)} remediations compile and parse cleanly.", "good"))
         guard = [c for c in checks if c["category"] == "security-regression"]
         bad_guard = [c for c in guard if c["status"] == "failed"]
         if guard and not bad_guard:
-            learnings.append(_l("No fix weakens security (no suppressions, disabled checks, skipped tests or removed "
-                                "controls).", "good"))
+            learnings.append(_l("No remediation weakens the security posture (no suppressions, disabled checks, skipped tests "
+                                "or removed controls).", "good"))
         for c in bad_guard[:3]:
-            learnings.append(_l(f"Fix #{(c.get('fix_index') or 0) + 1} weakens security: {_short(c['detail'], 140)}", "bad"))
+            learnings.append(_l(f"Remediation #{(c.get('fix_index') or 0) + 1} weakens security: {_short(c['detail'], 140)}", "bad"))
         if r.get("verified_fixed"):
-            learnings.append(_l(f"The rescan confirmed {r['verified_fixed']} issues are really gone.", "good"))
+            learnings.append(_l(f"The confirmation scan verified that {r['verified_fixed']} findings are resolved.", "good"))
         for c in checks:
             if c["status"] == "failed" and c["category"] != "security-regression":
-                learnings.append(_l(f"Needs review: {c['name']}. {_short(c['detail'], 160)}", "bad"))
+                learnings.append(_l(f"Review required: {c['name']}. {_short(c['detail'], 160)}", "bad"))
         majors = [c for c in checks if c["name"].startswith("Major-version")]
         if majors:
-            learnings.append(_l(f"{len(majors)} fix(es) are major upgrades and need regression testing.", "warn"))
+            learnings.append(_l(f"{len(majors)} remediation(s) are major-version upgrades and require regression testing.", "warn"))
     return _view("validation", st, inputs, outputs, learnings)
 
 
@@ -250,7 +250,7 @@ def reporting_view(job: dict, report: dict | None, findings: list[dict], artifac
     r = report or {}
     s = job.get("summary") or {}
     inputs = [_kv("Verdict", (r.get("validation_status") or "–").replace("_", " ")),
-              _kv("Fixes", r.get("patches_applied", "–")), _kv("Findings", r.get("findings_input", "–"))]
+              _kv("Remediations", r.get("patches_applied", "–")), _kv("Findings", r.get("findings_input", "–"))]
     outputs, learnings = [], []
     if report:
         outputs += [_kv(name, "PDF") for name in ("report.pdf", "findings.pdf", "fixes.pdf")]
@@ -259,20 +259,20 @@ def reporting_view(job: dict, report: dict | None, findings: list[dict], artifac
                 outputs.append(_kv(a["name"], f"{a['size'] / 1024:.0f} KB"))
         pr = s.get("pull_request_url") or r.get("pull_request_url")
         approval = s.get("approval_status") or r.get("approval_status")
-        outputs.append(_kv("Pull request", "opened" + (" (draft)" if s.get("pull_request_draft") else "") if pr
+        outputs.append(_kv("Pull request", "Raised" + (" (draft)" if s.get("pull_request_draft") else "") if pr
                            else (approval or "–").replace("_", " "), "good" if pr else "warn"))
         if pr:
-            learnings.append(_l(f"Pull request is open for review: {pr}", "good"))
+            learnings.append(_l(f"Pull request raised for review: {pr}", "good"))
         elif r.get("patches_applied"):
-            learnings.append(_l("Waiting for a reviewer: approve the fixes to push the branch and open a pull "
+            learnings.append(_l("Awaiting review: approve the remediations to push the branch and raise a pull "
                                 "request.", "warn"))
             if r.get("validation_status") == "flagged":
-                learnings.append(_l("Because this scan needs review, the pull request will open as a draft "
+                learnings.append(_l("As this scan requires review, the pull request will be raised as a draft "
                                     "labelled needs-investigation.", "warn"))
         else:
-            learnings.append(_l("There is nothing to merge in this scan."))
-        learnings.append(_l("report.pdf, findings.pdf and fixes.pdf are for people. findings.sarif can be uploaded "
-                            "to GitHub code scanning; fixes.patch applies with git apply."))
+            learnings.append(_l("This scan produced no changes to merge."))
+        learnings.append(_l("report.pdf, findings.pdf and fixes.pdf are intended for stakeholders. findings.sarif imports "
+                            "into GitHub code scanning; fixes.patch applies with git apply."))
     return _view("reporting", st, inputs, outputs, learnings)
 
 
@@ -297,40 +297,40 @@ def run_story(job: dict, report: dict | None, findings: list[dict]) -> dict:
     s = job.get("summary") or {}
     status = job.get("status")
     if status in ("queued", "running"):
-        return {"headline": f"Working on {job.get('repo')}: {job.get('stage')} ({job.get('progress', 0)}%)",
+        return {"headline": f"Scanning {job.get('repo')}: {job.get('stage')} ({job.get('progress', 0)}%)",
                 "lines": [], "decision": None}
     if status != "completed" or not report:
-        return {"headline": f"Run {status}", "lines": [job.get("error") or ""],
-                "decision": {"kind": "retry", "text": "Fix the problem above, then re-run."}}
+        return {"headline": f"Scan {status}", "lines": [job.get("error") or ""],
+                "decision": {"kind": "retry", "text": "Resolve the issue above, then re-run the scan."}}
     r = report
     sev = r.get("severity_counts") or {}
     fixes = r.get("fixes") or []
     ai = sum(1 for f in fixes if f["method"] == "llm")
     open_items = [f for f in findings if f.get("fix_status") in OPEN_STATUSES]
     lines = [
-        f"The Analysis Agent found {r.get('findings_input', 0)} unique issues "
+        f"The Analysis Agent identified {r.get('findings_input', 0)} unique findings "
         f"({sev.get('critical', 0)} critical, {sev.get('high', 0)} high).",
-        f"The Remediation Agent made {len(fixes)} fix(es)" + (f", {ai} of them code fixes" if ai else "") + ".",
+        f"The Remediation Agent applied {len(fixes)} remediation(s)" + (f", {ai} of them AI-assisted" if ai else "") + ".",
     ]
     verdict = r.get("validation_status")
     failed = [c for c in r.get("validation_checks", []) if c["status"] == "failed"]
     if verdict == "passed":
-        lines.append(f"The Validation Agent passed every check and confirmed {r.get('verified_fixed', 0)} issues are gone.")
+        lines.append(f"The Validation Agent passed every check and verified {r.get('verified_fixed', 0)} findings as resolved.")
     elif verdict == "flagged":
-        lines.append(f"The Validation Agent confirmed {r.get('verified_fixed', 0)} issues are gone but the run needs review: "
+        lines.append(f"The Validation Agent verified {r.get('verified_fixed', 0)} findings as resolved, but the scan requires review: "
                      f"{_short(failed[0]['name'] + ' (' + failed[0]['detail'] + ')', 170) if failed else 'see Validation'}.")
     if open_items:
         reasons = Counter(classify(f)[1] for f in open_items).most_common(3)
-        lines.append(f"{len(open_items)} issue(s) still need attention: " + "; ".join(f"{l} ({n})" for l, n in reasons) + ".")
+        lines.append(f"{len(open_items)} finding(s) require attention: " + "; ".join(f"{l} ({n})" for l, n in reasons) + ".")
     decision = None
     if s.get("pull_request_url"):
-        decision = {"kind": "pr", "text": "Review and merge the pull request on GitHub.", "url": s["pull_request_url"]}
+        decision = {"kind": "pr", "text": "Complete the review and merge the pull request on GitHub.", "url": s["pull_request_url"]}
     elif r.get("patches_applied"):
         decision = {"kind": "approve" if verdict != "flagged" else "investigate",
-                    "text": ("Review the fixes and approve to open a pull request." if verdict != "flagged" else
-                             "Investigate the failed check, then approve to open a draft pull request.")}
-    headline = (f"{r.get('findings_input', 0)} issues found · {len(fixes)} fixed automatically · "
-                f"{r.get('verified_fixed', 0)} confirmed resolved")
+                    "text": ("Review the remediations and approve to raise a pull request." if verdict != "flagged" else
+                             "Investigate the failed check, then approve to raise a draft pull request.")}
+    headline = (f"{r.get('findings_input', 0)} findings identified · {len(fixes)} remediated automatically · "
+                f"{r.get('verified_fixed', 0)} verified resolved")
     return {"headline": headline, "lines": lines, "decision": decision}
 
 
@@ -354,28 +354,28 @@ def run_errors(job: dict, report: dict | None, findings: list[dict]) -> list[dic
     base = {"job_id": job["id"], "repo": job.get("repo"), "when": job.get("finished_at") or job.get("created_at")}
     out = []
     if job.get("status") == "failed":
-        out.append({**base, "severity": "high", "kind": "Run failed", "message": job.get("error") or "Unknown error",
-                    "action": "Check the repository link and access, then re-run."})
+        out.append({**base, "severity": "high", "kind": "Scan failed", "message": job.get("error") or "Unknown error",
+                    "action": "Verify the repository URL and access permissions, then re-run the scan."})
     for s in (report or {}).get("scanners") or []:
         if s["status"] == "failed":
             out.append({**base, "severity": "medium", "kind": f"Scanner failed: {s['name']}",
-                        "message": _short(s.get("message"), 300), "action": "Check the scanner installation and re-run."})
+                        "message": _short(s.get("message"), 300), "action": "Verify the scanner installation, then re-run the scan."})
     groups: dict[str, list] = {}
     for f in findings:
         if f.get("fix_status") == "failed":
             groups.setdefault(classify(f)[0], []).append(f)
     for key, items in groups.items():
         _, label, action = classify(items[0])
-        out.append({**base, "severity": "medium", "kind": f"Fix attempt failed: {label}",
-                    "message": f"{len(items)} issue(s), e.g. {_short(items[0].get('title'), 80)}: "
+        out.append({**base, "severity": "medium", "kind": f"Remediation attempt failed: {label}",
+                    "message": f"{len(items)} finding(s), for example {_short(items[0].get('title'), 80)}: "
                                f"{_short(items[0].get('fix_note'), 180)}", "action": action})
     for c in (report or {}).get("validation_checks") or []:
         if c["status"] == "failed":
             out.append({**base, "severity": "high" if c["category"] == "security-regression" else "medium",
                         "kind": f"Validation failed: {c['name']}", "message": _short(c["detail"], 300),
-                        "action": "Open the run's Validation tab, investigate, and decide before approving."})
+                        "action": "Open the scan's Validation tab and investigate before approving."})
     if (job.get("summary") or {}).get("publish_error"):
-        out.append({**base, "severity": "high", "kind": "Pull request could not be opened",
+        out.append({**base, "severity": "high", "kind": "Pull request could not be raised",
                     "message": job["summary"]["publish_error"],
-                    "action": "Check the GitHub token's access to this repository, then approve again."})
+                    "action": "Verify the GitHub token's access to this repository, then approve again."})
     return out

@@ -7,7 +7,7 @@ export function Reports() {
   const jobs = useJobs({ status: 'completed', limit: 100 }, 30_000)
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Reports" description="The evidence for every completed scan: PDF reports to read and share, and files for your tools. Newest first." />
+      <PageHeader title="Reports" description="Audit-ready evidence for every completed scan: PDF reports for stakeholders and machine-readable files for security tooling. Newest first." />
       <div className="card-row gap-4 [--card-min:190px]">
         {[...PDF_FILES, ...TOOL_FILES].map(([name, , text]) => (
           <Panel key={name} className="flex items-center gap-3 p-4">
@@ -18,7 +18,7 @@ export function Reports() {
       </div>
       <Panel className="p-6">
         {jobs.isLoading ? <Loading /> : jobs.error ? <ErrorBox error={jobs.error} /> : jobs.data?.items.length ? (
-          <DTable head={[['Repository'], ['Finished'], ['Validation'], ['Findings', 'right'], ['Fixes', 'right'], ['PDF reports'], ['For tools'], ['']]} minWidth={1180}>
+          <DTable head={[['Repository'], ['Finished'], ['Validation'], ['Findings', 'right'], ['Remediations', 'right'], ['PDF reports'], ['Machine-readable'], ['']]} minWidth={1180}>
             {jobs.data.items.map((j) => {
               const s = j.summary ?? {}
               return (
@@ -30,7 +30,7 @@ export function Reports() {
                   <td className="tabular text-right">{s.fixes_applied ?? '–'}</td>
                   <td><div className="flex flex-nowrap gap-1.5">{PDF_FILES.map(([n, label]) => <LinkBtn key={n} href={artifactUrl(j.id, n)} className="h-8 px-2.5 text-xs"><Download className="size-3.5" /> {label}</LinkBtn>)}</div></td>
                   <td><div className="flex flex-nowrap gap-1.5">{TOOL_FILES.map(([n, label]) => <LinkBtn key={n} href={artifactUrl(j.id, n)} className="h-8 px-2.5 text-xs"><Download className="size-3.5" /> {label}</LinkBtn>)}</div></td>
-                  <td><LinkBtn to={`/runs/${j.id}/reporting`} kind="primary" className="h-8 px-3 text-xs">Read report</LinkBtn></td>
+                  <td><LinkBtn to={`/runs/${j.id}/reporting`} kind="primary" className="h-8 px-3 text-xs">View report</LinkBtn></td>
                 </tr>
               )
             })}

@@ -19,7 +19,7 @@ function useTestActions(job: Job) {
   const refresh = () => qc.invalidateQueries({ queryKey: ['job', job.id] })
   const start = useMutation({
     mutationFn: () => post<{ status: string }>(`/api/v1/jobs/${job.id}/tests`),
-    onSuccess: (r) => { toast(r.status === 'running' ? 'The tests are already running.' : 'Started: pushing the fix branch so GitHub Actions can run the tests…'); refresh() },
+    onSuccess: (r) => { toast(r.status === 'running' ? 'CI test validation is already in progress.' : 'CI test validation started. Pushing the remediation branch to GitHub Actions…'); refresh() },
     onError: (e) => toast((e as Error).message, true),
   })
   const stop = useMutation({
@@ -37,28 +37,28 @@ export function RunTestsButton({ job }: { job: Job }) {
   if (job.status !== 'completed' || job.can_act === false) return null
   return (
     <Btn kind="quiet" disabled={active || start.isPending || !caps.data?.github_token_configured} onClick={() => start.mutate()}
-      title={caps.data?.github_token_configured ? 'Run every test of the repository on GitHub Actions; the Remediation Agent fixes failures' : 'Needs a GitHub token (Settings)'}>
-      {active ? <><Loader2 className="size-4 animate-spin" /> Tests running…</> : <><FlaskConical className="size-4" /> Run tests on GitHub</>}
+      title={caps.data?.github_token_configured ? 'Run the full test suite on GitHub Actions; the Remediation Agent resolves failures' : 'Requires a GitHub token (Settings)'}>
+      {active ? <><Loader2 className="size-4 animate-spin" /> Tests in progress…</> : <><FlaskConical className="size-4" /> Run tests on GitHub</>}
     </Btn>
   )
 }
 
 const STATUS: Record<TestLoop['status'], { tone: 'good' | 'warn' | 'bad' | 'info' | 'idle'; title: string }> = {
-  starting: { tone: 'info', title: 'Starting the tests' },
-  running: { tone: 'info', title: 'Tests are running' },
-  passed: { tone: 'good', title: 'All tests pass' },
-  failed: { tone: 'bad', title: 'Tests still fail: a person needs to look' },
+  starting: { tone: 'info', title: 'Starting CI test validation' },
+  running: { tone: 'info', title: 'CI tests in progress' },
+  passed: { tone: 'good', title: 'All tests passed' },
+  failed: { tone: 'bad', title: 'Tests are still failing: manual investigation required' },
   no_tests: { tone: 'warn', title: 'No tests found' },
-  error: { tone: 'bad', title: 'The test run could not finish' },
+  error: { tone: 'bad', title: 'The test run could not complete' },
   cancelled: { tone: 'warn', title: 'Stopped' },
   interrupted: { tone: 'warn', title: 'Interrupted' },
 }
 
 const HOW = [
-  { icon: Upload, title: 'Push the fix branch', text: 'With a small workflow that runs every test in the repository.' },
-  { icon: FlaskConical, title: 'GitHub Actions runs the tests', text: 'On GitHub’s own machines, exactly as the repo’s CI would.' },
-  { icon: Bot, title: 'Remediation Agent fixes failures', text: 'It reads the failure, fixes the code (or a wrong test) and pushes, which runs the tests again.' },
-  { icon: CheckCircle2, title: 'Until green, or 3 fixes', text: 'Then you approve the branch as a pull request.' },
+  { icon: Upload, title: 'Push the remediation branch', text: 'Together with a workflow that runs the repository’s full test suite.' },
+  { icon: FlaskConical, title: 'GitHub Actions runs the tests', text: 'On GitHub-hosted runners, as the repository’s own CI would.' },
+  { icon: Bot, title: 'Remediation Agent resolves failures', text: 'It analyses each failure, corrects the code (or a defective test) and pushes, triggering a new test run.' },
+  { icon: CheckCircle2, title: 'Until all tests pass, or 3 attempts', text: 'The branch is then ready for approval as a pull request.' },
 ]
 
 /** The "GitHub tests" tab of a run. */
@@ -71,9 +71,9 @@ export function TestsTab({ job }: { job: Job }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <Card title="Tests on GitHub Actions" description="Every test in the repository runs on the run’s fix branch; failing tests are fixed by the Remediation Agent and run again."
+      <Card title="CI test validation on GitHub Actions" description="The repository’s full test suite runs on the remediation branch; the Remediation Agent resolves failing tests and re-runs them."
         action={job.can_act === false ? undefined : active ? <Btn kind="quiet" onClick={() => stop.mutate()} disabled={stop.isPending}><Square className="size-3.5" /> Stop</Btn>
-          : <Btn onClick={() => start.mutate()} disabled={!tokenOk || start.isPending}>{t ? <><RotateCcw className="size-4" /> Run again</> : <><Play className="size-4" /> Run tests on GitHub</>}</Btn>}>
+          : <Btn onClick={() => start.mutate()} disabled={!tokenOk || start.isPending}>{t ? <><RotateCcw className="size-4" /> Re-run</> : <><Play className="size-4" /> Run tests on GitHub</>}</Btn>}>
         <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {HOW.map((s, i) => (
             <li key={s.title} className="flex items-start gap-3 rounded-xl border border-hairline bg-well/40 p-3">
@@ -86,11 +86,11 @@ export function TestsTab({ job }: { job: Job }) {
             </li>
           ))}
         </ol>
-        {!tokenOk && <div className="mt-4"><Notice tone="warn" title="Add a GitHub token first">It pushes the fix branch. It needs Contents and Workflows (read &amp; write) and Actions (read) on the repository. <Link to="/settings" className="text-sky underline">Open Settings</Link></Notice></div>}
-        {tokenOk && caps.data && !caps.data.llm.enabled && <div className="mt-4"><Notice tone="warn" title="No AI model connected">The tests still run, but failures can only be fixed by a person. <Link to="/settings" className="text-sky underline">Connect one in Settings</Link>.</Notice></div>}
+        {!tokenOk && <div className="mt-4"><Notice tone="warn" title="A GitHub token is required">CI test validation pushes the remediation branch and requires Contents and Workflows (read &amp; write) and Actions (read) on the repository. <Link to="/settings" className="text-sky underline">Open Settings</Link></Notice></div>}
+        {tokenOk && caps.data && !caps.data.llm.enabled && <div className="mt-4"><Notice tone="warn" title="No AI model connected">Tests will run, but failures must be resolved manually. <Link to="/settings" className="text-sky underline">Configure a model in Settings</Link>.</Notice></div>}
       </Card>
 
-      {!t ? <Empty text="The tests have not run on GitHub for this scan yet." /> : <Progress job={job} t={t} />}
+      {!t ? <Empty text="CI test validation has not been run for this scan yet." /> : <Progress job={job} t={t} />}
     </div>
   )
 }
@@ -102,14 +102,14 @@ function Progress({ job, t }: { job: Job; t: TestLoop }) {
   return (
     <>
       <Notice tone={s.tone} title={<span className="flex items-center gap-2">{active && <Loader2 className="size-4 animate-spin" />}{s.title}</span>}>
-        {active ? `${t.phase || 'Working…'} · this page updates by itself` : t.message}
+        {active ? `${t.phase || 'In progress…'} · this page updates automatically` : t.message}
       </Notice>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         {t.branch && (branchUrl
           ? <a href={branchUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-md border border-hairline px-2 py-1 text-xs text-ink-2 hover:bg-well"><GitBranch className="size-3.5" /> {t.branch} <ExternalLink className="size-3" /></a>
           : <Chip><GitBranch className="mr-1.5 size-3.5" /> {t.branch}</Chip>)}
-        {t.test_command && <Chip>runs <span className="ml-1 font-mono">{t.test_command}</span></Chip>}
-        <Chip>Remediation Agent fix {t.attempt} of {t.max_attempts}</Chip>
+        {t.test_command && <Chip>Command <span className="ml-1 font-mono">{t.test_command}</span></Chip>}
+        <Chip>Remediation Agent attempt {t.attempt} of {t.max_attempts}</Chip>
         {t.started_at && <span className="text-xs text-ink-3">started {ago(t.started_at)}</span>}
       </div>
       {t.runs.length > 0 && (
@@ -135,7 +135,7 @@ function RunStep({ run, last }: { run: TestRun; last: boolean }) {
           </span>
           <div className="min-w-0 flex-1">
             <div className="font-semibold">Test run {run.n}</div>
-            <div className="text-xs text-ink-3">{!done ? `${run.status === 'queued' ? 'Waiting for GitHub to start it' : 'Running on GitHub Actions'}…` : ok ? 'All tests passed' : `${run.failed.length || 'Some'} test(s) failed`} · commit <span className="font-mono">{run.sha.slice(0, 8)}</span></div>
+            <div className="text-xs text-ink-3">{!done ? `${run.status === 'queued' ? 'Queued on GitHub Actions' : 'Running on GitHub Actions'}…` : ok ? 'All tests passed' : `${run.failed.length || 'Some'} test(s) failed`} · commit <span className="font-mono">{run.sha.slice(0, 8)}</span></div>
           </div>
           {done && <StatusTag tone={ok ? 'good' : 'bad'} label={run.conclusion ?? '?'} />}
           {run.url && <a href={run.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-sky hover:underline">Open on GitHub <ExternalLink className="size-3.5" /></a>}
@@ -146,7 +146,7 @@ function RunStep({ run, last }: { run: TestRun; last: boolean }) {
             {run.failed.length > 8 && <li className="text-ink-3">+{run.failed.length - 8} more</li>}
           </ul>
         )}
-        {run.fix_error && <div className="mt-3"><Notice tone="bad" title="The Remediation Agent could not fix this">{run.fix_error}</Notice></div>}
+        {run.fix_error && <div className="mt-3"><Notice tone="bad" title="The Remediation Agent could not resolve this failure">{run.fix_error}</Notice></div>}
       </Panel>
       {run.fix && (
         <>
@@ -155,10 +155,10 @@ function RunStep({ run, last }: { run: TestRun; last: boolean }) {
             <div className="flex flex-wrap items-center gap-3">
               <span className="grid size-9 place-items-center rounded-[10px]" style={{ color: 'var(--violet)', background: 'color-mix(in oklab, var(--violet) 16%, transparent)' }}><Bot className="size-4" /></span>
               <div className="min-w-0 flex-1">
-                <div className="font-semibold">Remediation Agent fix {run.n}</div>
-                <div className="text-xs text-ink-3">committed <span className="font-mono">{(run.fix.commit ?? '').slice(0, 8)}</span> and pushed, which started test run {run.n + 1}</div>
+                <div className="font-semibold">Remediation Agent correction {run.n}</div>
+                <div className="text-xs text-ink-3">Committed <span className="font-mono">{(run.fix.commit ?? '').slice(0, 8)}</span> and pushed, triggering test run {run.n + 1}</div>
               </div>
-              {run.fix.touched_tests && <StatusTag tone="warn" label="Changed a test: please review" />}
+              {run.fix.touched_tests && <StatusTag tone="warn" label="Test modified: review required" />}
             </div>
             <p className="mt-3 text-sm text-ink-2">{run.fix.explanation}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">{run.fix.files.map((f) => <Chip key={f}><span className="font-mono">{f}</span></Chip>)}</div>

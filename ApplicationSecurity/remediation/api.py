@@ -686,18 +686,33 @@ def write_settings(body: SettingsUpdate, me: str | None = Depends(_settings_owne
     return _settings_view(me)
 
 
+class LLMTestRequest(BaseModel):
+    """The choices on the Settings page, saved or not, so the test checks exactly the model picked there."""
+    llm_provider: str | None = Field(default=None, pattern="^(openai|anthropic|gemini)$")
+    llm_model: str | None = Field(default=None, max_length=200)
+    llm_api_key: str | None = Field(default=None, max_length=500)  # a key typed but not saved yet; else the saved one
+    llm_base_url: str | None = Field(default=None, max_length=300)  # only for a custom OpenAI-compatible address
+
+
 @app.post("/api/v1/settings/test-llm")
-def test_llm(_: str | None = Depends(_settings_owner)):
-    from .llm import LLMError, chat
+def test_llm(body: LLMTestRequest | None = None, _: str | None = Depends(_settings_owner)):
+    from .llm import LLMError, chat_with
     s = get_settings()
+    if body and body.llm_provider and (body.llm_model or "").strip():
+        key = (body.llm_api_key or "").strip()
+        s = s.model_copy(update={
+            "llm_provider": body.llm_provider, "llm_model": body.llm_model.strip(),
+            "llm_api_key": s.llm_api_key if not key or key.startswith("•") else key,
+            "llm_base_url": (body.llm_base_url or "").strip() if body.llm_provider == "openai" else ""})
     if not s.llm_enabled:
-        raise HTTPException(422, "LLM is not configured (provider, model and API key are required).")
+        raise HTTPException(422, "Choose a provider and a model, and add your API key, before testing the connection.")
     try:
-        reply = chat("You are a connectivity check. Reply with the single word OK.",
-                     [{"role": "user", "content": "ping"}])
+        reply, answered_by = chat_with(s, "You are a connectivity check. Reply with the single word OK.",
+                                       [{"role": "user", "content": "ping"}])
     except LLMError as exc:
         raise HTTPException(502, str(exc)[:500])
-    return {"ok": True, "provider": s.resolved_llm_provider, "model": s.llm_model, "reply": reply[:200]}
+    return {"ok": True, "provider": s.resolved_llm_provider, "model": s.llm_model,
+            "answered_by": answered_by or s.llm_model, "reply": reply.strip()[:200]}
 
 
 class ModelsRequest(BaseModel):
@@ -896,18 +911,18 @@ def attention(_: str = Depends(require_api_key), me: str | None = Depends(owner)
     config_errors = []
     if not s.llm_enabled:
         config_errors.append({"severity": "medium", "kind": "No AI model configured",
-                              "message": "Code issues cannot be fixed automatically.",
-                              "action": "Add an LLM provider, model and key in Settings.", "link": "/settings"})
+                              "message": "AI-assisted remediation of source code findings is unavailable.",
+                              "action": "Configure an AI provider, model and API key in Settings.", "link": "/settings"})
     if not s.github_token:
         config_errors.append({"severity": "medium", "kind": "No GitHub token",
-                              "message": "Fixes cannot be pushed and pull requests cannot be opened.",
-                              "action": "Add a GitHub token in Settings.", "link": "/settings"})
+                              "message": "Remediation branches cannot be pushed and pull requests cannot be raised.",
+                              "action": "Configure a GitHub token in Settings.", "link": "/settings"})
     caps = capabilities()
     for name in ("codeql", "trivy"):
         if caps.get(name, {}).get("enabled") and not caps[name]["available"]:
             config_errors.append({"severity": "medium", "kind": f"{name.capitalize()} is not installed",
-                                  "message": "A primary scanner is missing, so coverage is reduced.",
-                                  "action": "Run scripts/install-codeql.ps1" if name == "codeql" else "Install Trivy.",
+                                  "message": "A primary scanner is not installed, reducing detection coverage.",
+                                  "action": "Run scripts/install-codeql.ps1." if name == "codeql" else "Install Trivy.",
                                   "link": "/agents/analysis"})
     needed.sort(key=lambda x: -(x["score"] or 0))
     sev_rank = {"high": 0, "medium": 1, "low": 2}

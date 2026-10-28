@@ -14,8 +14,9 @@ Sign-in (auth.py): every /api/* call except /api/health and /api/auth/* needs a 
 401. The cookie comes from /api/auth/login or /signup (local accounts) or /api/auth/cognito (Amazon Cognito ID
 token); their POSTs need the X-Portal: auth header. PORTAL_AUTH=off switches sign-in off (tests).
 
-Audit (audit.py): every run started or refused, Remediation action, triage agree/disagree and Reopen is written to the
-hash-chained audit log with the signed-in person's name; GET /api/audit lists it (with sign-ins) for the Audit log page.
+Activity (audit.py, activity.py): every run started or refused, Remediation action, triage agree/disagree and Reopen
+is written to the activity trail with the signed-in person's name and email; GET /api/activity lists it, with the
+older run and Remediation history, for the Activity log page.
 """
 from __future__ import annotations
 
@@ -27,7 +28,7 @@ from fastapi import FastAPI, Header, Request
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from portal import audit, devicenames, fixproxy, helpbot, helpready, notifications, services, uc4proxy
+from portal import activity, audit, devicenames, fixproxy, helpbot, helpready, notifications, services, uc4proxy
 from portal.auth import COOKIE, Auth, AuthError
 from portal.config import SUITE_ENV, Settings, _load_env_file, load_settings
 from portal.runs import AGENT_NAMES, RunManager
@@ -367,16 +368,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         body = {"started": started, "message": message, "run": state.to_dict() if state else None}
         return JSONResponse(body, status_code=202 if started else 409)
 
-    # ---- Audit log: who did what and when (audit.py), newest first, with the sign-ins
-    @app.get("/api/audit")
-    def audit_list() -> dict:
-        rows = audit_log.entries()
-        integrity = audit_log.verify(rows)
-        entries = [{**r, "label": audit.ACTIONS.get(r.get("action", ""), r.get("action", "")), "source": "audit"}
-                   for r in rows if "_broken" not in r][-5000:]
-        entries += audit.sign_ins(settings.auth_dir)
-        entries.sort(key=lambda r: str(r.get("at") or ""), reverse=True)
-        return {"entries": entries, "integrity": integrity}
+    # ---- Activity log: who ran which agent pipeline and acted on its results, newest first (activity.py)
+    @app.get("/api/activity")
+    def activity_list(action: str = "", q: str = "", limit: int = 300, offset: int = 0) -> dict:
+        return activity.listing(audit_log.entries(), runs.runs_dir, settings.uc1_dir, action=action, q=q,
+                                limit=limit, offset=offset)
 
     # ---- Help chatbot (the "?" bubble on every screen): answers from the portal's own data, never acts
     @app.get("/api/notifications")
