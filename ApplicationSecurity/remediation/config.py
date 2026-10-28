@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import os
 import threading
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -95,10 +97,24 @@ class Settings(BaseSettings):
     suite_login_url: str = ""  # e.g. http://127.0.0.1:8000; empty = no shared sign-in (local use, tests)
     suite_auth_dir: Path = Path("../login/data/auth")  # the sign-in page's folder holding session.key
 
+    # --- Each person's own keys (credentials.py), used when the shared sign-in is on -------------
+    credentials_key: str = ""  # Fernet key (base64) that encrypts saved keys; best supplied by a secret store
+    credentials_key_file: Path | None = None  # else this file (made on first use); default DATA_DIR/credentials.key
+
     @field_validator("data_dir", "suite_auth_dir", mode="after")
     @classmethod
     def _resolve_dir(cls, value: Path) -> Path:
         return value.expanduser().resolve()
+
+    @field_validator("credentials_key_file", mode="before")
+    @classmethod
+    def _empty_is_default(cls, value):
+        return value or None  # CREDENTIALS_KEY_FILE= in a .env means the default, not the current folder
+
+    @property
+    def per_user(self) -> bool:
+        """With the shared sign-in on, every person brings their own GitHub token and AI model key."""
+        return bool(self.suite_login_url)
 
     # Derived ------------------------------------------------------------------------------
     @property
@@ -216,10 +232,39 @@ def save_runtime_overrides(updates: dict) -> dict:
     return current
 
 
+def base_settings() -> Settings:
+    """Environment settings only: no UI overrides and no person's keys (database, key files, sign-in)."""
+    return _base_settings()
+
+
+# Whose keys get_settings() returns: the signed-in person for a web request, the person who started the scan for the
+# worker, the publish thread and the test loop. Each new thread starts without one, so it must set it (user_scope).
+_current_user: ContextVar[str | None] = ContextVar("appsec_user", default=None)
+
+
+def current_user() -> str | None:
+    return _current_user.get()
+
+
+@contextmanager
+def user_scope(email: str | None):
+    token = _current_user.set(email.strip().lower() if email else None)
+    try:
+        yield
+    finally:
+        _current_user.reset(token)
+
+
 def get_settings() -> Settings:
-    """Environment settings with UI-managed runtime overrides applied (re-read when the file changes)."""
+    """Environment settings with UI-managed runtime overrides applied (re-read when the file changes).
+
+    With the shared sign-in on, the overrides are the current person's own (credentials.py) instead, and the
+    server's own GitHub token and AI key are never used: without a person, there are no keys at all."""
     global _runtime_cache
     base = _base_settings()
+    if base.per_user:
+        from .credentials import settings_for
+        return settings_for(base, _current_user.get())
     path = base.data_dir / "runtime_settings.json"
     try:
         stamp = (id(base), path.stat().st_mtime_ns)
@@ -236,6 +281,8 @@ def reset_settings_cache() -> None:
     global _runtime_cache
     _base_settings.cache_clear()
     _runtime_cache = None
+    from .credentials import clear_cache
+    clear_cache()
 
 
 # Backwards compatible module-level accessor used by older imports.
@@ -247,7 +294,7 @@ class _LazySettings:
 settings = _LazySettings()
 
 
-SECRET_ENV_NAMES = ("LLM_API_KEY", "GITHUB_TOKEN", "API_KEYS", "DATABASE_URL")
+SECRET_ENV_NAMES = ("LLM_API_KEY", "GITHUB_TOKEN", "API_KEYS", "DATABASE_URL", "CREDENTIALS_KEY")
 
 
 def scrubbed_env(extra: dict[str, str] | None = None) -> dict[str, str]:

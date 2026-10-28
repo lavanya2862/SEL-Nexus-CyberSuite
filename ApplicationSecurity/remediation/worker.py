@@ -11,7 +11,7 @@ import time
 import traceback
 
 from . import jobqueue
-from .config import get_settings
+from .config import get_settings, user_scope
 from .db import Job
 from .github import RepoAccessError, RepoURLError, parse_repo_url, resolve_remote_ref
 from .logging_setup import setup_logging
@@ -136,6 +136,10 @@ class Worker:
                 self.active.pop(slot_id, None)
 
     def process(self, job: Job, slot_id: str) -> None:
+        with user_scope(job.owner):  # the scan runs with the keys of the person who started it
+            self._process(job, slot_id)
+
+    def _process(self, job: Job, slot_id: str) -> None:
         s = get_settings()
         lost = threading.Event()
         done = threading.Event()

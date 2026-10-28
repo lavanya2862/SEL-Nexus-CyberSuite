@@ -2,6 +2,7 @@
 .venv
 .env
 data
+secrets
 runs
 worktrees
 **/__pycache__

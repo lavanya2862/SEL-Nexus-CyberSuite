@@ -267,6 +267,9 @@ export interface SettingsView {
   llm_enabled: boolean
   llm_provider: string | null
   llm_endpoint: string | null
+  /** Shared sign-in on: these are the signed-in person's own keys, used only for the scans they start. */
+  per_user: boolean
+  user: string | null
 }
 
 export interface AgentHistory {

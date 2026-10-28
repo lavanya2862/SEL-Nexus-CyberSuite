@@ -25,20 +25,24 @@ class QueueFull(RuntimeError):
     pass
 
 
-def cache_key(repo_full_name: str, ref: str | None, options: JobOptions) -> str:
-    material = json.dumps({"repo": repo_full_name.lower(), "ref": ref, "opts": options.cache_key_material()},
-                          sort_keys=True)
+def cache_key(repo_full_name: str, ref: str | None, options: JobOptions, owner: str | None = None) -> str:
+    """Identical scans share results, but only within one person's scans: another person's results would show them
+    code (and AI fixes) from a repository their own token may not reach."""
+    material = {"repo": repo_full_name.lower(), "ref": ref, "opts": options.cache_key_material()}
+    if owner:
+        material["owner"] = owner
+    material = json.dumps(material, sort_keys=True)
     return hashlib.sha256(material.encode()).hexdigest()[:40]
 
 
 def enqueue(repo_url: str, repo_full_name: str, options: JobOptions, requested_by: str | None = None,
-            priority: int = 0, dedupe: bool = True) -> tuple[Job, bool]:
-    """Create a job. Returns (job, deduplicated) — an identical active job is reused."""
+            priority: int = 0, dedupe: bool = True, owner: str | None = None) -> tuple[Job, bool]:
+    """Create a job. Returns (job, deduplicated) — an identical active job of the same owner is reused."""
     s = get_settings()
-    key = cache_key(repo_full_name, options.ref, options)
+    key = cache_key(repo_full_name, options.ref, options, owner)
     with session_scope() as db:
         if dedupe and not options.create_pr:
-            existing = db.scalars(select(Job).where(Job.cache_key == key, Job.status.in_(ACTIVE))
+            existing = db.scalars(select(Job).where(Job.cache_key == key, Job.status.in_(ACTIVE), _same_owner(owner))
                                   .order_by(Job.created_at.desc()).limit(1)).first()
             if existing:
                 return existing, True
@@ -47,10 +51,14 @@ def enqueue(repo_url: str, repo_full_name: str, options: JobOptions, requested_b
             raise QueueFull(f"Queue is full ({queued} jobs waiting). Try again later.")
         job = Job(id=uuid.uuid4().hex, repo_url=repo_url, repo_full_name=repo_full_name, ref=options.ref,
                   options=options.model_dump(), status="queued", stage="queued", priority=priority,
-                  cache_key=key, requested_by=requested_by)
+                  cache_key=key, requested_by=requested_by, owner=owner)
         db.add(job)
         db.add(JobEvent(job_id=job.id, message=f"Job queued for {repo_url}"))
         return job, False
+
+
+def _same_owner(owner: str | None):
+    return Job.owner.is_(None) if owner is None else Job.owner == owner
 
 
 def claim_next(worker_id: str) -> Job | None:
@@ -204,7 +212,8 @@ def find_cached_result(job: Job, commit_sha: str) -> Job | None:
     s = get_settings()
     cutoff = utcnow() - timedelta(hours=s.result_cache_ttl_hours)
     with session_scope() as db:
-        return db.scalars(select(Job).where(Job.cache_key == job.cache_key, Job.commit_sha == commit_sha,
+        return db.scalars(select(Job).where(Job.cache_key == job.cache_key, _same_owner(job.owner),
+                                            Job.commit_sha == commit_sha,
                                             Job.status == "completed", Job.id != job.id, Job.cached_from.is_(None),
                                             Job.finished_at >= cutoff)
                           .order_by(Job.finished_at.desc()).limit(1)).first()
