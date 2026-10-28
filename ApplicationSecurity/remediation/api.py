@@ -700,6 +700,28 @@ def test_llm(_: str | None = Depends(_settings_owner)):
     return {"ok": True, "provider": s.resolved_llm_provider, "model": s.llm_model, "reply": reply[:200]}
 
 
+class ModelsRequest(BaseModel):
+    llm_provider: str = Field(pattern="^(openai|anthropic|gemini)$")
+    llm_api_key: str | None = Field(default=None, max_length=500)  # a key typed but not saved yet; else the saved one
+    llm_base_url: str | None = Field(default=None, max_length=300)  # only for a custom OpenAI-compatible address
+
+
+@app.post("/api/v1/settings/models")
+def llm_models(body: ModelsRequest, _: str | None = Depends(_settings_owner)):
+    """The models the person's key can use at the chosen provider, to pick from instead of typing a name."""
+    from .llm import LLMError, list_models
+    key = (body.llm_api_key or "").strip()
+    if not key or key.startswith("\u2022"):
+        key = get_settings().llm_api_key
+    if not key:
+        raise HTTPException(422, "Paste your API key first.")
+    base = (body.llm_base_url or "").strip() if body.llm_provider == "openai" else ""
+    try:
+        return {"models": list_models(body.llm_provider, key, base)}
+    except LLMError as exc:
+        raise HTTPException(502, str(exc)[:500])
+
+
 @app.post("/api/v1/settings/test-github")
 def test_github(_: str | None = Depends(_settings_owner)):
     if not get_settings().github_token:

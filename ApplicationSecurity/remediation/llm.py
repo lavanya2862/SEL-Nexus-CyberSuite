@@ -15,7 +15,7 @@ import time
 
 import httpx
 
-from .config import get_settings
+from .config import OPENAI_BASE_URL, PROVIDER_BASE_URLS, get_settings
 from .models import Finding
 
 log = logging.getLogger(__name__)
@@ -87,6 +87,9 @@ def _post_with_retries(url: str, headers: dict, payload: dict) -> dict:
             if resp.is_success:
                 return resp.json()
             last_error = f"HTTP {resp.status_code}: {resp.text[:400]}"
+            if resp.status_code == 404 and re.search(r"not found|not_found|does not exist|not supported", resp.text, re.I):
+                raise LLMError(f"LLM request rejected (HTTP 404: the model '{payload.get('model')}' is not available for "
+                               "this API key. Choose one from the model list in Settings.)")
             if resp.status_code not in (408, 409, 425, 429, 500, 502, 503, 504, 529):
                 raise LLMError(f"LLM request rejected ({last_error})")
             wait = _quota_wait_seconds(resp)
@@ -129,6 +132,41 @@ def chat(system: str, user_messages: list[dict]) -> str:
         return data["choices"][0]["message"]["content"] or ""
     except (KeyError, IndexError, TypeError) as exc:
         raise LLMError(f"Unexpected LLM response shape: {str(data)[:300]}") from exc
+
+
+# Models a provider lists that cannot hold a chat (embeddings, speech, images, video, ...)
+_NOT_CHAT = re.compile(r"embed|tts|whisper|dall-e|moderation|imagen|image|audio|realtime|transcri|search|veo|aqa|"
+                       r"learnlm|computer-use|live|babbage|davinci", re.I)
+
+
+def list_models(provider: str, api_key: str, base_url: str = "") -> list[str]:
+    """The chat models ``api_key`` can use at ``provider``, as the provider itself lists them (newest names first), so
+    people pick a model instead of typing its name. ``base_url`` only for a custom OpenAI-compatible address."""
+    base = (base_url or PROVIDER_BASE_URLS.get(provider) or OPENAI_BASE_URL).rstrip("/")
+    if provider == "anthropic":
+        if not base.endswith("/v1"):
+            base += "/v1"
+        headers, params = {"x-api-key": api_key, "anthropic-version": "2023-06-01"}, {"limit": 1000}
+    else:
+        headers, params = {"Authorization": f"Bearer {api_key}"}, {}
+    try:
+        resp = httpx.get(f"{base}/models", headers=headers, params=params, timeout=30)
+    except httpx.HTTPError as exc:
+        raise LLMError(f"Could not reach {base}: {type(exc).__name__}") from exc
+    if resp.status_code in (400, 401, 403):
+        raise LLMError(f"The provider refused this API key (HTTP {resp.status_code}). Check the key, and that it "
+                       "belongs to the provider you chose.")
+    if not resp.is_success:
+        raise LLMError(f"Could not list the models (HTTP {resp.status_code}: {resp.text[:200]})")
+    try:
+        rows = resp.json().get("data") or resp.json().get("models") or []
+    except ValueError as exc:
+        raise LLMError("The provider answered with something that is not a model list.") from exc
+    names = {str(r.get("id") or r.get("name") or "").removeprefix("models/") for r in rows if isinstance(r, dict)}
+    names = {n for n in names if n and not _NOT_CHAT.search(n)}
+    if provider == "gemini":
+        names = {n for n in names if n.startswith("gemini")}
+    return sorted(names, reverse=True)
 
 
 def extract_json(text: str) -> dict | None:

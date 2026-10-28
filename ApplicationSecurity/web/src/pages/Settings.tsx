@@ -1,22 +1,38 @@
-import { useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Bot, GitPullRequestArrow, KeyRound, Loader2, SlidersHorizontal } from 'lucide-react'
+import { Bot, GitPullRequestArrow, KeyRound, Loader2, RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { Btn, Card, Field, Loading, Notice, PageHeader, StatusTag, inputCls } from '@/components/kit'
 import { ApiError, api, getClientKey, setClientKey, useSettings } from '@/lib/api'
 import { statusColor } from '@/lib/theme'
 import { useToast } from '@/lib/toast'
 import type { SettingEntry, SettingsView } from '@/lib/types'
 
-// Picking a provider fills in its address (unless a custom one was typed) and an example model.
-const PRESETS: Record<string, { url: string; model: string; hint: ReactNode }> = {
-  gemini: { url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'e.g. gemini-2.5-flash or gemini-2.5-pro',
-    hint: <>A Google AI Studio key (<a className="text-sky underline" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com/apikey</a>). Uses Gemini’s OpenAI-compatible address.</> },
-  openai: { url: 'https://api.openai.com/v1', model: 'e.g. gpt-4o', hint: <>OpenAI, Azure / OpenAI-compatible gateways, vLLM, LiteLLM or Ollama (<span className="font-mono">http://localhost:11434/v1</span>).</> },
-  anthropic: { url: 'https://api.anthropic.com/v1', model: 'e.g. a claude-sonnet model', hint: 'Anthropic Messages API.' },
-  auto: { url: '', model: 'e.g. gemini-2.5-flash, gpt-4o or claude-…', hint: 'Detected from the model name or address (gemini-* → Gemini, claude-* → Anthropic, otherwise OpenAI-compatible).' },
-  none: { url: '', model: '', hint: 'The Remediation Agent’s code fixes and the assistant are switched off.' },
+// Pick a provider, paste its key, choose a model from the list the provider gives for that key. The address is known
+// for each provider; only "Other" (Azure OpenAI, a company gateway, vLLM, LiteLLM, Ollama...) needs one.
+type Kind = 'gemini' | 'openai' | 'anthropic' | 'other' | 'none'
+const link = (href: string, text: string) => <a className="text-sky underline" href={href} target="_blank" rel="noopener noreferrer">{text}</a>
+const PROVIDERS: Record<Kind, { label: string; hint: ReactNode }> = {
+  gemini: { label: 'Google Gemini', hint: <>Get a key at {link('https://aistudio.google.com/apikey', 'aistudio.google.com/apikey')}.</> },
+  openai: { label: 'OpenAI', hint: <>Get a key at {link('https://platform.openai.com/api-keys', 'platform.openai.com/api-keys')}.</> },
+  anthropic: { label: 'Anthropic (Claude)', hint: <>Get a key at {link('https://console.anthropic.com/settings/keys', 'console.anthropic.com')}.</> },
+  other: { label: 'Other (OpenAI-compatible address)', hint: <>Azure OpenAI, a company gateway, vLLM, LiteLLM or Ollama (<span className="font-mono">http://localhost:11434/v1</span>): enter its address below.</> },
+  none: { label: 'Switched off', hint: 'The Remediation Agent\u2019s code fixes and the Security Assistant are switched off.' },
 }
-const PRESET_URLS = Object.values(PRESETS).map((p) => p.url).filter(Boolean)
+const KNOWN_URLS = ['https://api.openai.com/v1', 'https://generativelanguage.googleapis.com/v1beta/openai', 'https://api.anthropic.com/v1']
+
+/** Which choice the saved settings amount to ("auto" and a default address are shown as the provider they reach). */
+function savedKind(view: SettingsView): Kind {
+  const saved = String(view.settings.llm_provider.value || 'auto')
+  const base = String(view.settings.llm_base_url.value ?? '').replace(/\/$/, '')
+  const custom = !!base && !KNOWN_URLS.includes(base)
+  if (saved === 'none' || saved === 'gemini' || saved === 'anthropic') return saved
+  if (saved === 'openai') return custom ? 'other' : 'openai'
+  const reached = view.llm_provider
+  if (reached === 'gemini' || reached === 'anthropic') return reached
+  if (reached === 'openai') return custom ? 'other' : 'openai'
+  return 'gemini'
+}
+
 // Changing settings needs this header, which a form on another website cannot send.
 const WRITE = { 'X-CyberSuite': 'settings' }
 
@@ -68,21 +84,49 @@ function Forms({ view }: { view: SettingsView }) {
   const st = view.settings
   const own = view.per_user
   const save = useSave()
-  const [provider, setProvider] = useState(String(st.llm_provider.value || 'auto'))
+  const [kind, setKind] = useState<Kind>(() => savedKind(view))
   const [model, setModel] = useState(String(st.llm_model.value ?? ''))
-  const [base, setBase] = useState(String(st.llm_base_url.value ?? ''))
+  const [base, setBase] = useState(() => (savedKind(view) === 'other' ? String(st.llm_base_url.value ?? '') : ''))
   const [key, setKey] = useState('')
+  const [models, setModels] = useState<string[] | null>(null)
+  const [modelsMsg, setModelsMsg] = useState<{ ok: boolean; text: string } | null | 'busy'>(null)
   const [gh, setGh] = useState('')
   const [max, setMax] = useState(String(st.max_findings_per_run.value ?? ''))
   const [attempts, setAttempts] = useState(String(st.llm_fix_attempts.value ?? ''))
   const [llmMsg, setLlmMsg] = useState<{ ok: boolean; text: string } | null | 'busy'>(null)
   const [ghMsg, setGhMsg] = useState<{ ok: boolean; text: string } | null | 'busy'>(null)
-  const p = PRESETS[provider] ?? PRESETS.auto
+  const keyKnown = !!key.trim() || st.llm_api_key.configured
 
-  const pickProvider = (v: string) => {
-    setProvider(v)
-    const url = PRESETS[v]?.url
-    if (url && (!base.trim() || PRESET_URLS.includes(base.trim().replace(/\/$/, '')))) setBase(url)
+  // The provider's own list of models this key can use, so nobody has to type (or mistype) a model name
+  const loadModels = useCallback(async (k: Kind, typedKey: string, address: string) => {
+    if (k === 'none' || (k === 'other' && !address.trim())) return
+    setModelsMsg('busy')
+    try {
+      const r = await api<{ models: string[] }>('/api/v1/settings/models', { method: 'POST', headers: WRITE, body: JSON.stringify({
+        llm_provider: k === 'other' ? 'openai' : k, llm_api_key: typedKey.trim() || undefined, llm_base_url: k === 'other' ? address.trim() : undefined }) })
+      setModels(r.models)
+      setModel((m) => (r.models.includes(m) ? m : r.models[0] ?? m))
+      setModelsMsg(r.models.length ? null : { ok: false, text: 'This key has no chat models at this provider.' })
+    } catch (e) {
+      setModels(null)
+      setModelsMsg({ ok: false, text: (e as Error).message })
+    }
+  }, [])
+  useEffect(() => {
+    if (st.llm_api_key.configured) void loadModels(savedKind(view), '', String(st.llm_base_url.value ?? ''))
+  }, [loadModels, st.llm_api_key.configured, st.llm_base_url.value, view])
+
+  const pickKind = (k: Kind) => {
+    setKind(k)
+    setModels(null)
+    setModelsMsg(null)
+    if (k !== 'other' && keyKnown) void loadModels(k, key, '')
+  }
+  const saveAi = async () => {
+    const body: Record<string, unknown> = kind === 'none' ? { llm_provider: 'none' }
+      : { llm_provider: kind === 'other' ? 'openai' : kind, llm_model: model.trim(), llm_base_url: kind === 'other' ? base.trim() : null }
+    if (key.trim()) body.llm_api_key = key.trim()
+    if (await save(body, (m) => setLlmMsg({ ok: false, text: m }))) setKey('')
   }
   const test = async (path: string, set: typeof setLlmMsg, ok: (r: Record<string, string>) => string) => {
     set('busy')
@@ -99,23 +143,40 @@ function Forms({ view }: { view: SettingsView }) {
         description="Used by the Remediation Agent to write code fixes, and by the Security Assistant."
         action={view.llm_enabled ? <StatusTag tone="good" label="Connected" /> : <StatusTag tone="warn" label="Not connected" />}>
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label={<>Provider <Source own={own} e={st.llm_provider} /></>}>
-              <select value={provider} onChange={(e) => pickProvider(e.target.value)} className={inputCls}>
-                <option value="auto">Detect automatically</option><option value="gemini">Google Gemini</option>
-                <option value="openai">OpenAI / OpenAI-compatible</option><option value="anthropic">Anthropic (Claude)</option><option value="none">Switched off</option>
-              </select>
+          <Field label={<>Provider <Source own={own} e={st.llm_provider} /></>} hint={PROVIDERS[kind].hint}>
+            <select value={kind} onChange={(e) => pickKind(e.target.value as Kind)} className={inputCls}>
+              {(Object.keys(PROVIDERS) as Kind[]).map((k) => <option key={k} value={k}>{PROVIDERS[k].label}</option>)}
+            </select>
+          </Field>
+          {kind === 'other' && (
+            <Field label={<>Address (base URL) <Source own={own} e={st.llm_base_url} /></>} hint="The OpenAI-compatible address of your gateway or server, ending in /v1.">
+              <input type="url" value={base} onChange={(e) => setBase(e.target.value)} onBlur={() => keyKnown && void loadModels(kind, key, base)} placeholder="https://your-gateway.example.com/v1" className={inputCls} />
             </Field>
-            <Field label={<>Model <Source own={own} e={st.llm_model} /></>}><input value={model} onChange={(e) => setModel(e.target.value)} placeholder={p.model} className={inputCls} /></Field>
-          </div>
-          <Field label={<>Address (base URL) <Source own={own} e={st.llm_base_url} /></>} hint={<>{p.hint}{view.llm_endpoint && <> Requests now go to <span className="font-mono">{view.llm_endpoint}</span>.</>}</>}>
-            <input type="url" value={base} onChange={(e) => setBase(e.target.value)} placeholder="https://api.openai.com/v1" className={inputCls} />
-          </Field>
-          <Field label={<>API key <Source own={own} e={st.llm_api_key} /></>}>
-            <input type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={st.llm_api_key.configured ? `${st.llm_api_key.value} (leave empty to keep)` : 'paste your API key'} className={inputCls} />
-          </Field>
+          )}
+          {kind !== 'none' && (
+            <>
+              <Field label={<>API key <Source own={own} e={st.llm_api_key} /></>}>
+                <input type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} onBlur={() => key.trim() && void loadModels(kind, key, base)}
+                  placeholder={st.llm_api_key.configured ? `${st.llm_api_key.value} (leave empty to keep)` : 'paste your API key'} className={inputCls} />
+              </Field>
+              <Field label={<span className="flex items-center gap-2">Model <Source own={own} e={st.llm_model} />
+                {keyKnown && <button type="button" onClick={() => void loadModels(kind, key, base)} className="ml-auto inline-flex items-center gap-1 text-xs font-normal text-sky hover:underline"><RefreshCw className="size-3" /> refresh list</button>}</span>}
+                hint={modelsMsg === 'busy' ? <span className="flex items-center gap-1.5"><Loader2 className="size-3 animate-spin" /> Asking {PROVIDERS[kind].label} which models your key can use\u2026</span>
+                  : modelsMsg ? <span style={{ color: statusColor.critical }}>{modelsMsg.text}</span>
+                  : models ? `${models.length} models available for your key.` : keyKnown ? undefined : 'Paste your API key: the models it can use are listed here.'}>
+                {models && models.length ? (
+                  <select value={model} onChange={(e) => setModel(e.target.value)} className={inputCls}>
+                    {model && !models.includes(model) && <option value={model}>{model} (not available for this key)</option>}
+                    {models.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                ) : (
+                  <input value={model} onChange={(e) => setModel(e.target.value)} placeholder={keyKnown ? 'or type a model name' : 'appears once your key is in'} className={inputCls} />
+                )}
+              </Field>
+            </>
+          )}
           <div className="flex flex-wrap items-center gap-2">
-            <Btn onClick={async () => { const body: Record<string, unknown> = { llm_provider: provider, llm_model: model.trim(), llm_base_url: base.trim() }; if (key.trim()) body.llm_api_key = key.trim(); if (await save(body, (m) => setLlmMsg({ ok: false, text: m }))) setKey('') }}>Save</Btn>
+            <Btn onClick={saveAi} disabled={kind !== 'none' && (!model.trim() || (kind === 'other' && !base.trim()))}>Save</Btn>
             <Btn kind="quiet" onClick={() => test('/api/v1/settings/test-llm', setLlmMsg, (r) => `✓ ${r.provider} · ${r.model} replied “${r.reply}”`)}>Test connection</Btn>
             {st.llm_api_key.source === 'ui' && <Btn kind="quiet" onClick={() => save({ llm_api_key: null })}>Remove key</Btn>}
             <Msg m={llmMsg} />
