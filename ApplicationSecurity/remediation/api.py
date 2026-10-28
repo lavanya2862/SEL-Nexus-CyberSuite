@@ -20,8 +20,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 
-from . import __version__, jobqueue, testloop
-from .config import RUNTIME_KEYS, SECRET_KEYS, Settings, get_settings, load_runtime_overrides, save_runtime_overrides
+from . import __version__, credentials, jobqueue, testloop
+from .config import (RUNTIME_KEYS, SECRET_KEYS, Settings, base_settings, get_settings, load_runtime_overrides,
+                     save_runtime_overrides, user_scope)
 from .db import Job, JobArtifact, JobEvent, as_aware, engine, session_scope
 from .github import GitHubClient, RepoAccessError, RepoURLError, parse_repo_url
 from .logging_setup import setup_logging
@@ -165,11 +166,30 @@ async def suite_sign_in(request: Request, call_next):
     path = request.url.path
     if not login_url or path in _OPEN_PATHS or path.startswith(("/assets/", "/api/v1/auth/")):
         return await call_next(request)
-    if _suite_user(request):
-        return await call_next(request)
+    user = _suite_user(request)
+    if user and user.get("email"):
+        # whose scans this request may see, and whose keys get_settings() returns while it runs
+        request.state.owner = str(user["email"]).strip().lower()
+        with user_scope(request.state.owner):
+            return await call_next(request)
     if path.startswith("/api/") or path == "/openapi.json":
         return JSONResponse({"detail": "Sign in on the SEL Nexus CyberSuite sign-in page first."}, status_code=401)
     return RedirectResponse(f"{login_url}/?next={quote(str(request.url), safe='')}", status_code=303)
+
+
+def owner(request: Request) -> str | None:
+    """The signed-in person: they see only the scans they started. None without the shared sign-in, where the one
+    local user sees every scan."""
+    if not base_settings().per_user:
+        return None
+    me = getattr(request.state, "owner", None)
+    if not me:
+        raise HTTPException(401, "Sign in on the SEL Nexus CyberSuite sign-in page first.")
+    return me
+
+
+def _mine(stmt, me: str | None):
+    return stmt if me is None else stmt.where(Job.owner == me)
 
 
 @app.get("/api/v1/auth/me")
@@ -230,7 +250,8 @@ def get_capabilities(_: str = Depends(require_api_key)):
 # --- Jobs ------------------------------------------------------------------------------------
 
 @app.post("/api/v1/jobs", status_code=202)
-def create_job(body: JobCreate, response: Response, principal: str = Depends(require_api_key)):
+def create_job(body: JobCreate, response: Response, principal: str = Depends(require_api_key),
+               me: str | None = Depends(owner)):
     s = get_settings()
     if not rate_limiter.allow(principal, s.rate_limit_per_minute):
         raise HTTPException(429, "Rate limit exceeded; slow down.")
@@ -240,9 +261,10 @@ def create_job(body: JobCreate, response: Response, principal: str = Depends(req
         raise HTTPException(422, str(exc))
     options = body.options.model_copy(update={"ref": repo.ref})
     if options.create_pr and not s.github_token:
-        raise HTTPException(422, "create_pr requires GITHUB_TOKEN to be configured on the server.")
+        raise HTTPException(422, "create_pr needs a GitHub token: add yours under Settings → GitHub."
+                            if me else "create_pr requires GITHUB_TOKEN to be configured on the server.")
     try:
-        job, deduped = jobqueue.enqueue(repo.html_url, repo.full_name, options, principal, body.priority)
+        job, deduped = jobqueue.enqueue(repo.html_url, repo.full_name, options, principal, body.priority, owner=me)
     except jobqueue.QueueFull as exc:
         raise HTTPException(503, str(exc), headers={"Retry-After": "60"})
     if deduped:
@@ -254,10 +276,10 @@ def create_job(body: JobCreate, response: Response, principal: str = Depends(req
 @app.get("/api/v1/jobs")
 def list_jobs(status: str | None = Query(None, pattern="^(queued|running|completed|failed|cancelled)$"),
               repo: str | None = Query(None, max_length=200), limit: int = Query(25, ge=1, le=200),
-              offset: int = Query(0, ge=0), _: str = Depends(require_api_key)):
+              offset: int = Query(0, ge=0), _: str = Depends(require_api_key), me: str | None = Depends(owner)):
     with session_scope() as db:
-        stmt = select(Job)
-        count = select(func.count()).select_from(Job)
+        stmt = _mine(select(Job), me)
+        count = _mine(select(func.count()).select_from(Job), me)
         if status:
             stmt, count = stmt.where(Job.status == status), count.where(Job.status == status)
         if repo:
@@ -267,19 +289,20 @@ def list_jobs(status: str | None = Query(None, pattern="^(queued|running|complet
         return {"total": total, "items": [_job_dict(j, include_options=False) for j in jobs]}
 
 
-def _get_job(job_id: str) -> Job:
+def _get_job(job_id: str, me: str | None) -> Job:
+    """The scan, if ``me`` may see it. Another person's scan answers exactly like one that does not exist."""
     if not job_id.isalnum() or len(job_id) > 64:
         raise HTTPException(400, "Invalid job id.")
     with session_scope() as db:
         job = db.get(Job, job_id)
-    if job is None:
+    if job is None or (me is not None and job.owner != me):
         raise HTTPException(404, "Job not found.")
     return job
 
 
 @app.get("/api/v1/jobs/{job_id}")
-def get_job(job_id: str, _: str = Depends(require_api_key)):
-    job = _get_job(job_id)
+def get_job(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner)):
+    job = _get_job(job_id, me)
     data = _job_dict(job)
     with session_scope() as db:
         data["artifacts"] = [{"name": n, "size": sz, "url": f"/api/v1/jobs/{job_id}/artifacts/{n}"}
@@ -290,8 +313,8 @@ def get_job(job_id: str, _: str = Depends(require_api_key)):
 
 @app.get("/api/v1/jobs/{job_id}/events")
 def get_events(job_id: str, after: int = Query(0, ge=0), limit: int = Query(500, ge=1, le=2000),
-               _: str = Depends(require_api_key)):
-    _get_job(job_id)
+               _: str = Depends(require_api_key), me: str | None = Depends(owner)):
+    _get_job(job_id, me)
     with session_scope() as db:
         rows = db.scalars(select(JobEvent).where(JobEvent.job_id == job_id, JobEvent.id > after)
                           .order_by(JobEvent.id).limit(limit)).all()
@@ -307,16 +330,16 @@ def _artifact(job_id: str, name: str) -> JobArtifact:
 
 
 @app.get("/api/v1/jobs/{job_id}/report")
-def get_report(job_id: str, _: str = Depends(require_api_key)):
-    _get_job(job_id)
+def get_report(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner)):
+    _get_job(job_id, me)
     import json
     return json.loads(_artifact(job_id, "report.json").content)
 
 
 @app.get("/api/v1/jobs/{job_id}/findings")
 def get_findings(job_id: str, severity: str | None = None, scanner: str | None = None,
-                 _: str = Depends(require_api_key)):
-    _get_job(job_id)
+                 _: str = Depends(require_api_key), me: str | None = Depends(owner)):
+    _get_job(job_id, me)
     import json
     items = json.loads(_artifact(job_id, "findings.json").content)
     if severity:
@@ -329,10 +352,11 @@ def get_findings(job_id: str, severity: str | None = None, scanner: str | None =
 
 
 @app.get("/api/v1/jobs/{job_id}/artifacts/{name}")
-def download_artifact(job_id: str, name: str, download: bool = False, _: str = Depends(require_api_key)):
+def download_artifact(job_id: str, name: str, download: bool = False, _: str = Depends(require_api_key),
+                      me: str | None = Depends(owner)):
     if name not in ARTIFACT_NAMES and name not in PDF_NAMES:
         raise HTTPException(404, "Unknown artifact.")
-    _get_job(job_id)
+    _get_job(job_id, me)
     if name in PDF_NAMES:
         # PDFs for people are built on request from the run's report and findings, so older runs get them too.
         import json
@@ -347,15 +371,15 @@ def download_artifact(job_id: str, name: str, download: bool = False, _: str = D
 
 
 @app.post("/api/v1/jobs/{job_id}/cancel")
-def cancel_job(job_id: str, _: str = Depends(require_api_key)):
-    _get_job(job_id)
+def cancel_job(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner)):
+    _get_job(job_id, me)
     job = jobqueue.request_cancel(job_id)
     return {"job": _job_dict(job)}
 
 
 @app.post("/api/v1/jobs/{job_id}/retry")
-def retry(job_id: str, _: str = Depends(require_api_key)):
-    job = _get_job(job_id)
+def retry(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner)):
+    job = _get_job(job_id, me)
     if job.status not in jobqueue.TERMINAL:
         raise HTTPException(409, f"Job is {job.status}; only finished jobs can be retried.")
     return {"job": _job_dict(jobqueue.retry_job(job_id))}
@@ -364,9 +388,9 @@ def retry(job_id: str, _: str = Depends(require_api_key)):
 # --- Dashboard -------------------------------------------------------------------------------
 
 @app.get("/api/v1/dashboard")
-def dashboard(_: str = Depends(require_api_key)):
+def dashboard(_: str = Depends(require_api_key), me: str | None = Depends(owner)):
     with session_scope() as db:
-        jobs = db.scalars(select(Job).order_by(Job.created_at.desc()).limit(500)).all()
+        jobs = db.scalars(_mine(select(Job), me).order_by(Job.created_at.desc()).limit(500)).all()
         data = [_job_dict(j, include_options=False) for j in jobs]
     by_status: dict[str, int] = {}
     for j in data:
@@ -404,7 +428,13 @@ _publishing: set[str] = set()
 _publish_lock = threading.Lock()
 
 
-def _publish_job(job_id: str, repo_url: str) -> None:
+def _publish_job(job_id: str, repo_url: str, job_owner: str | None) -> None:
+    # a new thread has no person: push and open the PR with the keys of the person who started the scan
+    with user_scope(job_owner):
+        _publish_as_owner(job_id, repo_url)
+
+
+def _publish_as_owner(job_id: str, repo_url: str) -> None:
     import json as _json
 
     from .publish import publish_from_artifacts, publish_tested_branch
@@ -414,7 +444,7 @@ def _publish_job(job_id: str, repo_url: str) -> None:
         jobqueue.add_event(job_id, msg)
     try:
         report = RemediationReport.model_validate_json(_artifact(job_id, "report.json").content)
-        tests = (_get_job(job_id).summary or {}).get("tests") or {}
+        tests = (_get_job(job_id, None).summary or {}).get("tests") or {}
         if tests.get("branch_pushed") and tests.get("branch"):
             # the Test & Fix loop already pushed (and tested) the fix branch: open the PR from it as it is
             url, draft = publish_tested_branch(repo_url, report, tests, log_fn)
@@ -444,9 +474,9 @@ def _publish_job(job_id: str, repo_url: str) -> None:
 
 
 @app.post("/api/v1/jobs/{job_id}/publish", status_code=202)
-def publish(job_id: str, _: str = Depends(require_api_key)):
+def publish(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner)):
     """Reviewer approval: replay the fix commits onto a fresh clone, push the branch and open a PR."""
-    job = _get_job(job_id)
+    job = _get_job(job_id, me)
     if job.status != "completed":
         raise HTTPException(409, "Only completed runs can be published.")
     summary = job.summary or {}
@@ -465,7 +495,7 @@ def publish(job_id: str, _: str = Depends(require_api_key)):
         _publishing.add(job_id)
     jobqueue.update_summary(job_id, approval_status="publishing", publish_error=None)
     jobqueue.add_event(job_id, "Reviewer approved the fixes — pushing branch and opening pull request")
-    threading.Thread(target=_publish_job, args=(job_id, job.repo_url), name=f"publish-{job_id[:8]}",
+    threading.Thread(target=_publish_job, args=(job_id, job.repo_url, job.owner), name=f"publish-{job_id[:8]}",
                      daemon=True).start()
     return {"status": "publishing"}
 
@@ -477,10 +507,10 @@ def _test_fixes(summary: dict) -> int:
 
 
 @app.post("/api/v1/jobs/{job_id}/tests", status_code=202)
-def start_tests(job_id: str, _: str = Depends(require_api_key)):
+def start_tests(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner)):
     """Push the run's fix branch with a test workflow; GitHub Actions runs every test, the Remediation Agent fixes failures and
     pushes again, up to TEST_FIX_ATTEMPTS times."""
-    job = _get_job(job_id)
+    job = _get_job(job_id, me)
     if job.status != "completed":
         raise HTTPException(409, "Only completed runs can be tested.")
     summary = job.summary or {}
@@ -497,8 +527,8 @@ def start_tests(job_id: str, _: str = Depends(require_api_key)):
 
 
 @app.post("/api/v1/jobs/{job_id}/tests/cancel")
-def cancel_tests(job_id: str, _: str = Depends(require_api_key)):
-    _get_job(job_id)
+def cancel_tests(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner)):
+    _get_job(job_id, me)
     testloop.cancel(job_id)
     return {"status": "cancelling" if testloop.is_running(job_id) else "idle"}
 
@@ -515,21 +545,28 @@ class SettingsUpdate(BaseModel):
     llm_fix_attempts: int | None = Field(default=None, ge=1, le=5)
 
 
-def _require_settings_access(request: Request, principal: str = Depends(require_api_key)) -> str:
-    """Secrets may only be managed from this machine, or by an authenticated client."""
+def _settings_owner(request: Request, _: str = Depends(require_api_key), me: str | None = Depends(owner),
+                    x_cybersuite: str | None = Header(default=None)) -> str | None:
+    """Whose settings these are. With the shared sign-in, every signed-in person manages their own keys, from any
+    computer; changes need the X-CyberSuite header, which a form on another website cannot send. Without it, the
+    server's keys may only be managed from this machine, or by a client with an API key."""
+    if me is not None:
+        if request.method != "GET" and x_cybersuite != "settings":
+            raise HTTPException(400, "Missing X-CyberSuite header.")
+        return me
     host = request.client.host if request.client else ""
     if not get_settings().api_key_set and host not in ("127.0.0.1", "::1", "localhost", "testclient"):
         raise HTTPException(403, "Settings can only be changed from localhost unless API_KEYS is configured.")
-    return principal
+    return None
 
 
 def _mask(value: str) -> str:
     return ("•" * 8 + value[-4:]) if len(value) > 8 else "•" * len(value)
 
 
-def _settings_view() -> dict:
+def _settings_view(me: str | None) -> dict:
     s = get_settings()
-    runtime = load_runtime_overrides()
+    runtime = credentials.load(me) if me else load_runtime_overrides()
     out = {}
     for key in sorted(RUNTIME_KEYS):
         value = getattr(s, key)
@@ -539,29 +576,32 @@ def _settings_view() -> dict:
         out[key] = {"value": _mask(value) if key in SECRET_KEYS and value else value,
                     "configured": value not in ("", None), "source": source, "secret": key in SECRET_KEYS}
     return {"settings": out, "llm_enabled": s.llm_enabled, "llm_provider": s.resolved_llm_provider,
-            "llm_endpoint": s.effective_llm_base_url}
+            "llm_endpoint": s.effective_llm_base_url, "per_user": me is not None, "user": me}
 
 
 @app.get("/api/v1/settings")
-def read_settings(_: str = Depends(_require_settings_access)):
-    return _settings_view()
+def read_settings(me: str | None = Depends(_settings_owner)):
+    return _settings_view(me)
 
 
 @app.put("/api/v1/settings")
-def write_settings(body: SettingsUpdate, _: str = Depends(_require_settings_access)):
+def write_settings(body: SettingsUpdate, me: str | None = Depends(_settings_owner)):
     updates = body.model_dump(exclude_unset=True)
     for key in SECRET_KEYS:  # masked placeholders mean "unchanged"
         if isinstance(updates.get(key), str) and updates[key].startswith("•"):
             updates.pop(key)
     try:
-        save_runtime_overrides(updates)
+        if me:
+            credentials.save(me, updates)
+        else:
+            save_runtime_overrides(updates)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(422, f"Invalid settings: {exc}")
-    return _settings_view()
+    return _settings_view(me)
 
 
 @app.post("/api/v1/settings/test-llm")
-def test_llm(_: str = Depends(_require_settings_access)):
+def test_llm(_: str | None = Depends(_settings_owner)):
     from .llm import LLMError, chat
     s = get_settings()
     if not s.llm_enabled:
@@ -575,7 +615,7 @@ def test_llm(_: str = Depends(_require_settings_access)):
 
 
 @app.post("/api/v1/settings/test-github")
-def test_github(_: str = Depends(_require_settings_access)):
+def test_github(_: str | None = Depends(_settings_owner)):
     if not get_settings().github_token:
         raise HTTPException(422, "No GitHub token configured.")
     try:
@@ -599,7 +639,7 @@ class ChatRequest(BaseModel):
 
 
 @app.post("/api/v1/assistant/chat")
-def assistant_chat(body: ChatRequest, principal: str = Depends(require_api_key)):
+def assistant_chat(body: ChatRequest, principal: str = Depends(require_api_key), me: str | None = Depends(owner)):
     from .assistant import ask
     from .llm import LLMError
     if not rate_limiter.allow("chat:" + principal, max(20, get_settings().rate_limit_per_minute * 2)):
@@ -607,7 +647,7 @@ def assistant_chat(body: ChatRequest, principal: str = Depends(require_api_key))
     if not get_settings().llm_enabled:
         raise HTTPException(503, "The assistant needs an LLM. Configure a provider, model and API key in Settings.")
     if body.job_id:
-        _get_job(body.job_id)
+        _get_job(body.job_id, me)
     try:
         reply = ask([m.model_dump() for m in body.messages], body.job_id, body.finding_id)
     except ValueError as exc:
@@ -638,9 +678,9 @@ def _artifact_list(job_id: str) -> list[dict]:
             select(JobArtifact.name, JobArtifact.size).where(JobArtifact.job_id == job_id)).all()]
 
 
-def _recent_jobs(limit: int = 300) -> list[dict]:
+def _recent_jobs(me: str | None, limit: int = 300) -> list[dict]:
     with session_scope() as db:
-        jobs = db.scalars(select(Job).order_by(Job.created_at.desc()).limit(limit)).all()
+        jobs = db.scalars(_mine(select(Job), me).order_by(Job.created_at.desc()).limit(limit)).all()
         return [_job_dict(j) for j in jobs]
 
 
@@ -654,10 +694,10 @@ def _latest_completed_per_repo(jobs: list[dict]) -> list[dict]:
 
 
 @app.get("/api/v1/jobs/{job_id}/agents")
-def job_agents(job_id: str, _: str = Depends(require_api_key)):
+def job_agents(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner)):
     """What each agent received, produced and learned in this run, plus a plain-English story."""
     from .insights import agent_views, run_story
-    job = _job_dict(_get_job(job_id))
+    job = _job_dict(_get_job(job_id, me))
     report = _json_artifact(job_id, "report.json") if job["status"] == "completed" else None
     findings = (_json_artifact(job_id, "findings.json") or []) if report else []
     return {"story": run_story(job, report, findings),
@@ -665,13 +705,14 @@ def job_agents(job_id: str, _: str = Depends(require_api_key)):
 
 
 @app.get("/api/v1/agents/{agent_id}/history")
-def agent_history(agent_id: str, limit: int = Query(10, ge=1, le=50), _: str = Depends(require_api_key)):
+def agent_history(agent_id: str, limit: int = Query(10, ge=1, le=50), _: str = Depends(require_api_key),
+                  me: str | None = Depends(owner)):
     """One agent's outputs and conclusions across recent runs."""
     from .insights import AGENTS, agent_views
     if agent_id not in AGENTS:
         raise HTTPException(404, "Unknown agent.")
     rows = []
-    for job in _recent_jobs(limit * 3):
+    for job in _recent_jobs(me, limit * 3):
         if job["status"] != "completed" or len(rows) >= limit:
             continue
         report = _json_artifact(job["id"], "report.json")
@@ -692,9 +733,9 @@ def _unreviewed_draft(job: dict) -> bool:
 
 
 @app.post("/api/v1/jobs/{job_id}/draft-reviewed")
-def mark_draft_reviewed(job_id: str, _: str = Depends(require_api_key)):
+def mark_draft_reviewed(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner)):
     """Take an automatically opened draft PR off the Approvals list once a person has looked at it."""
-    job = _job_dict(_get_job(job_id))
+    job = _job_dict(_get_job(job_id, me))
     if not _unreviewed_draft(job):
         raise HTTPException(409, "This scan has no unreviewed draft pull request.")
     jobqueue.update_summary(job_id, draft_reviewed_at=datetime.now(timezone.utc).isoformat())
@@ -702,11 +743,11 @@ def mark_draft_reviewed(job_id: str, _: str = Depends(require_api_key)):
 
 
 @app.get("/api/v1/attention")
-def attention(_: str = Depends(require_api_key)):
+def attention(_: str = Depends(require_api_key), me: str | None = Depends(owner)):
     """The Action Center: approvals waiting, issues still needing a fix, and errors to resolve."""
     from .insights import fixes_needed, run_errors
     s = get_settings()
-    jobs = _recent_jobs()
+    jobs = _recent_jobs(me)
     latest = _latest_completed_per_repo(jobs)
     approvals, needed, errors = [], [], []
     for job in latest:
@@ -762,10 +803,10 @@ def attention(_: str = Depends(require_api_key)):
 
 
 @app.get("/api/v1/vulnerabilities")
-def vulnerabilities(_: str = Depends(require_api_key)):
+def vulnerabilities(_: str = Depends(require_api_key), me: str | None = Depends(owner)):
     """Every finding from the latest completed run of each repository."""
     items = []
-    for job in _latest_completed_per_repo(_recent_jobs()):
+    for job in _latest_completed_per_repo(_recent_jobs(me)):
         for f in _json_artifact(job["id"], "findings.json") or []:
             f.pop("code_context", None)
             items.append({**f, "repo": job["repo"], "job_id": job["id"], "scanned_at": job["finished_at"]})
@@ -774,9 +815,9 @@ def vulnerabilities(_: str = Depends(require_api_key)):
 
 
 @app.get("/api/v1/repositories")
-def repositories(_: str = Depends(require_api_key)):
+def repositories(_: str = Depends(require_api_key), me: str | None = Depends(owner)):
     repos: dict[str, dict] = {}
-    for job in _recent_jobs(500):
+    for job in _recent_jobs(me, 500):
         entry = repos.setdefault(job["repo"], {"repo": job["repo"], "repo_url": job["repo_url"], "runs": 0,
                                                "latest": job, "latest_completed": None, "history": []})
         entry["runs"] += 1

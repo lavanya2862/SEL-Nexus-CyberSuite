@@ -16,6 +16,13 @@ if not exist ".venv\Scripts\python.exe" (
   echo Setting up Python for Application Security, first time only...
   %PY% -m venv .venv || goto :failed
   ".venv\Scripts\python.exe" -m pip install --quiet -r requirements.txt || goto :failed
+  copy /y requirements.txt .venv\requirements.installed >nul
+)
+rem After an update: install the Python packages it added
+fc /b requirements.txt .venv\requirements.installed >nul 2>nul || (
+  echo Installing updated Python packages...
+  ".venv\Scripts\python.exe" -m pip install --quiet -r requirements.txt || goto :failed
+  copy /y requirements.txt .venv\requirements.installed >nul
 )
 rem Optional scanners: scans still run without them. Semgrep gets its own environment because its packages clash with the app's.
 if not exist ".venv\Scripts\bandit.exe" (
@@ -26,8 +33,12 @@ if not exist "tools\semgrep\Scripts\semgrep.exe" (
   echo Installing Semgrep in tools\semgrep, first time only...
   %PY% -m venv tools\semgrep && "tools\semgrep\Scripts\python.exe" -m pip install --quiet semgrep || echo Semgrep could not be installed; scans run without it.
 )
-if not exist "web\dist\index.html" (
-  echo Building the web app, first time only...
+rem The web app is built on the first start, and again whenever an update changed it (else the old pages stay)
+set "WEB_BUILD=0"
+if not exist "web\dist\index.html" set "WEB_BUILD=1"
+if "%WEB_BUILD%"=="0" powershell -NoProfile -Command "$built = (Get-Item 'web\dist\index.html').LastWriteTime; if (Get-ChildItem 'web\src', 'web\public', 'web\index.html', 'web\package.json', 'web\package-lock.json', 'web\vite.config.ts' -Recurse -File | Where-Object { $_.LastWriteTime -gt $built } | Select-Object -First 1) { exit 1 }" || set "WEB_BUILD=1"
+if "%WEB_BUILD%"=="1" (
+  echo Building the web app...
   pushd web
   if not exist node_modules call npm ci --no-audit --no-fund || (popd & goto :failed)
   call npm run build || (popd & goto :failed)
@@ -38,6 +49,8 @@ rem Scan history and settings stay in this folder; sign-in is checked against th
 set "DATA_DIR=%~dp0data"
 set "SUITE_LOGIN_URL=http://127.0.0.1:8000"
 set "SUITE_AUTH_DIR=%~dp0..\login\data\auth"
+rem Each person's own GitHub token and AI key are encrypted with this key, kept apart from the data folder
+set "CREDENTIALS_KEY_FILE=%~dp0secrets\credentials.key"
 
 echo Starting Application Security...
 start "Application Security (keep open)" /min .venv\Scripts\python.exe -m uvicorn remediation.api:app --host 127.0.0.1 --port 8500 --no-access-log

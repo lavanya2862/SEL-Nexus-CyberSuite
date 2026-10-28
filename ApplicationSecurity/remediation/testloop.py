@@ -27,7 +27,7 @@ from sqlalchemy import select
 
 from . import jobqueue
 from .agents.validation import TEST_PATH, diff_guard
-from .config import get_settings
+from .config import get_settings, user_scope
 from .context import resolve_in_repo
 from .db import Job, JobArtifact, session_scope
 from .detect import detect_project, iter_files
@@ -563,7 +563,18 @@ def run_loop(job_id: str, st: _State) -> None:
             remove_tree(workdir)
 
 
+def _owner(job_id: str) -> str | None:
+    with session_scope() as db:
+        return db.scalar(select(Job.owner).where(Job.id == job_id))
+
+
 def _run(job_id: str) -> None:
+    # a new thread has no person: the loop pushes and fixes with the keys of the person who started the scan
+    with user_scope(_owner(job_id)):
+        _run_as_owner(job_id)
+
+
+def _run_as_owner(job_id: str) -> None:
     st = _State(job_id)
     try:
         st.log("started: run the repository's tests on GitHub Actions; the Remediation Agent fixes failures")

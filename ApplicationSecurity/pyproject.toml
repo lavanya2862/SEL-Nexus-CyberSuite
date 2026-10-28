@@ -19,6 +19,7 @@ dependencies = [
   "packaging>=23",
   "PyYAML>=6.0",
   "reportlab>=4.2,<5.0",
+  "cryptography>=42,<47",
 ]
 
 [project.optional-dependencies]

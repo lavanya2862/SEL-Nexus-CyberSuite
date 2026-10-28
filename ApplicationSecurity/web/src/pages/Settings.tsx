@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Bot, GitPullRequestArrow, KeyRound, Loader2, SlidersHorizontal } from 'lucide-react'
 import { Btn, Card, Field, Loading, Notice, PageHeader, StatusTag, inputCls } from '@/components/kit'
-import { ApiError, getClientKey, post, put, setClientKey, useSettings } from '@/lib/api'
+import { ApiError, api, getClientKey, setClientKey, useSettings } from '@/lib/api'
 import { statusColor } from '@/lib/theme'
 import { useToast } from '@/lib/toast'
 import type { SettingEntry, SettingsView } from '@/lib/types'
@@ -17,20 +17,25 @@ const PRESETS: Record<string, { url: string; model: string; hint: ReactNode }> =
   none: { url: '', model: '', hint: 'The Remediation Agent’s code fixes and the assistant are switched off.' },
 }
 const PRESET_URLS = Object.values(PRESETS).map((p) => p.url).filter(Boolean)
+// Changing settings needs this header, which a form on another website cannot send.
+const WRITE = { 'X-CyberSuite': 'settings' }
 
 export function SettingsPage() {
   const s = useSettings()
   if (s.isLoading) return <Loading />
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Settings" description="Connect an AI model and GitHub so the agents can write code fixes and open pull requests. Keys are kept on this server only." />
+      <PageHeader title="Settings" description={s.data?.per_user
+        ? <>Connect your own AI model and GitHub account so the agents can write code fixes and open pull requests for the scans you start. Only you can use these keys{s.data.user && <> (signed in as <span className="font-mono">{s.data.user}</span>)</>}.</>
+        : 'Connect an AI model and GitHub so the agents can write code fixes and open pull requests. Keys are kept on this server only.'} />
       {s.error ? <KeyOnly error={s.error as ApiError} /> : s.data && <Forms view={s.data} />}
     </div>
   )
 }
 
-function Source({ e }: { e: SettingEntry }) {
-  return e.source === 'ui' ? <StatusTag tone="info" label="set here" /> : e.source === 'env' ? <StatusTag tone="idle" label="from .env" />
+function Source({ e, own }: { e: SettingEntry; own?: boolean }) {
+  return e.source === 'ui' ? <StatusTag tone="info" label={own ? 'yours' : 'set here'} />
+    : e.source === 'env' ? <StatusTag tone="idle" label={own ? 'server default' : 'from .env'} />
     : e.source === 'default' ? <StatusTag tone="idle" label="default" /> : <StatusTag tone="warn" label="not set" />
 }
 
@@ -39,7 +44,7 @@ function useSave() {
   const toast = useToast()
   return async (payload: Record<string, unknown>, onError?: (m: string) => void) => {
     try {
-      await put('/api/v1/settings', payload)
+      await api('/api/v1/settings', { method: 'PUT', body: JSON.stringify(payload), headers: WRITE })
       toast('Saved')
       qc.invalidateQueries({ queryKey: ['settings'] })
       qc.invalidateQueries({ queryKey: ['caps'] })
@@ -61,6 +66,7 @@ function Msg({ m }: { m: { ok: boolean; text: string } | null | 'busy' }) {
 
 function Forms({ view }: { view: SettingsView }) {
   const st = view.settings
+  const own = view.per_user
   const save = useSave()
   const [provider, setProvider] = useState(String(st.llm_provider.value || 'auto'))
   const [model, setModel] = useState(String(st.llm_model.value ?? ''))
@@ -81,7 +87,7 @@ function Forms({ view }: { view: SettingsView }) {
   const test = async (path: string, set: typeof setLlmMsg, ok: (r: Record<string, string>) => string) => {
     set('busy')
     try {
-      set({ ok: true, text: ok(await post<Record<string, string>>(path)) })
+      set({ ok: true, text: ok(await api<Record<string, string>>(path, { method: 'POST', headers: WRITE })) })
     } catch (e) {
       set({ ok: false, text: (e as Error).message })
     }
@@ -94,18 +100,18 @@ function Forms({ view }: { view: SettingsView }) {
         action={view.llm_enabled ? <StatusTag tone="good" label="Connected" /> : <StatusTag tone="warn" label="Not connected" />}>
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label={<>Provider <Source e={st.llm_provider} /></>}>
+            <Field label={<>Provider <Source own={own} e={st.llm_provider} /></>}>
               <select value={provider} onChange={(e) => pickProvider(e.target.value)} className={inputCls}>
                 <option value="auto">Detect automatically</option><option value="gemini">Google Gemini</option>
                 <option value="openai">OpenAI / OpenAI-compatible</option><option value="anthropic">Anthropic (Claude)</option><option value="none">Switched off</option>
               </select>
             </Field>
-            <Field label={<>Model <Source e={st.llm_model} /></>}><input value={model} onChange={(e) => setModel(e.target.value)} placeholder={p.model} className={inputCls} /></Field>
+            <Field label={<>Model <Source own={own} e={st.llm_model} /></>}><input value={model} onChange={(e) => setModel(e.target.value)} placeholder={p.model} className={inputCls} /></Field>
           </div>
-          <Field label={<>Address (base URL) <Source e={st.llm_base_url} /></>} hint={<>{p.hint}{view.llm_endpoint && <> Requests now go to <span className="font-mono">{view.llm_endpoint}</span>.</>}</>}>
+          <Field label={<>Address (base URL) <Source own={own} e={st.llm_base_url} /></>} hint={<>{p.hint}{view.llm_endpoint && <> Requests now go to <span className="font-mono">{view.llm_endpoint}</span>.</>}</>}>
             <input type="url" value={base} onChange={(e) => setBase(e.target.value)} placeholder="https://api.openai.com/v1" className={inputCls} />
           </Field>
-          <Field label={<>API key <Source e={st.llm_api_key} /></>}>
+          <Field label={<>API key <Source own={own} e={st.llm_api_key} /></>}>
             <input type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={st.llm_api_key.configured ? `${st.llm_api_key.value} (leave empty to keep)` : 'paste your API key'} className={inputCls} />
           </Field>
           <div className="flex flex-wrap items-center gap-2">
@@ -118,11 +124,11 @@ function Forms({ view }: { view: SettingsView }) {
       </Card>
 
       <Card title={<span className="flex items-center gap-2"><GitPullRequestArrow className="size-4 text-sky" /> GitHub</span>}
-        description="Needed for private repositories, and to push the fix branch and open pull requests."
+        description={own ? 'Your own token: needed for private repositories, and to push the fix branch and open pull requests in your name.' : 'Needed for private repositories, and to push the fix branch and open pull requests.'}
         action={st.github_token.configured ? <StatusTag tone="good" label="Token set" /> : <StatusTag tone="warn" label="No token" />}>
         <div className="flex flex-col gap-4">
           <Notice tone="info" title="Which token?">A fine-grained personal access token on the repositories you want fixed, with <b>Contents: read &amp; write</b> and <b>Pull requests: read &amp; write</b>. For <b>Run tests on GitHub</b> also <b>Workflows: read &amp; write</b> (it adds the test workflow) and <b>Actions: read</b> (it follows the test runs). A classic token needs the <span className="font-mono">repo</span> and <span className="font-mono">workflow</span> scopes.</Notice>
-          <Field label={<>Personal access token <Source e={st.github_token} /></>}>
+          <Field label={<>Personal access token <Source own={own} e={st.github_token} /></>}>
             <input type="password" autoComplete="off" value={gh} onChange={(e) => setGh(e.target.value)} placeholder={st.github_token.configured ? `${st.github_token.value} (leave empty to keep)` : 'github_pat_…'} className={inputCls} />
           </Field>
           <div className="flex flex-wrap items-center gap-2">
@@ -136,15 +142,21 @@ function Forms({ view }: { view: SettingsView }) {
 
       <Card title={<span className="flex items-center gap-2"><SlidersHorizontal className="size-4 text-sky" /> Limits</span>} description="How much the Remediation Agent may do in one scan.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label={<>Max code fixes per scan <Source e={st.max_findings_per_run} /></>}><input type="number" min={1} max={500} value={max} onChange={(e) => setMax(e.target.value)} className={inputCls} /></Field>
-          <Field label={<>Attempts per finding <Source e={st.llm_fix_attempts} /></>}><input type="number" min={1} max={5} value={attempts} onChange={(e) => setAttempts(e.target.value)} className={inputCls} /></Field>
+          <Field label={<>Max code fixes per scan <Source own={own} e={st.max_findings_per_run} /></>}><input type="number" min={1} max={500} value={max} onChange={(e) => setMax(e.target.value)} className={inputCls} /></Field>
+          <Field label={<>Attempts per finding <Source own={own} e={st.llm_fix_attempts} /></>}><input type="number" min={1} max={5} value={attempts} onChange={(e) => setAttempts(e.target.value)} className={inputCls} /></Field>
         </div>
         <div className="mt-4"><Btn onClick={() => save({ max_findings_per_run: Number(max), llm_fix_attempts: Number(attempts) })}>Save</Btn></div>
       </Card>
 
       <Card title={<span className="flex items-center gap-2"><KeyRound className="size-4 text-sky" /> How keys are kept</span>}>
-        <p className="text-sm leading-relaxed text-ink-2">Keys entered here are saved on this server in <span className="font-mono">DATA_DIR/runtime_settings.json</span>, are never shown in full again, and are removed from the environment of every scanner. Settings can only be changed from this computer unless the server sets <span className="font-mono">API_KEYS</span>.</p>
-        <ClientKey />
+        {own ? (
+          <p className="text-sm leading-relaxed text-ink-2">Your keys are saved under your sign-in, encrypted on this server, and never shown in full again, not even to you. Only the scans you start use them: to read your repositories, push fix branches, open pull requests and run your tests on GitHub. Other people cannot see your keys or your scans, and you cannot see theirs. Scanners never receive your keys.</p>
+        ) : (
+          <>
+            <p className="text-sm leading-relaxed text-ink-2">Keys entered here are saved on this server in <span className="font-mono">DATA_DIR/runtime_settings.json</span>, are never shown in full again, and are removed from the environment of every scanner. Settings can only be changed from this computer unless the server sets <span className="font-mono">API_KEYS</span>.</p>
+            <ClientKey />
+          </>
+        )}
       </Card>
     </div>
   )

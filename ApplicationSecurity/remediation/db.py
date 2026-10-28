@@ -10,7 +10,7 @@ from sqlalchemy import (JSON, BigInteger, Boolean, DateTime, ForeignKey, Index, 
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
-from .config import get_settings
+from .config import base_settings
 
 
 def utcnow() -> datetime:
@@ -40,6 +40,9 @@ class Job(Base):
     cache_key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     cached_from: Mapped[str | None] = mapped_column(String(64), nullable=True)
     requested_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # The signed-in person who started the scan (shared sign-in on): only they see it, and it runs with their keys.
+    # Empty for scans made without the shared sign-in, which nobody sees once it is switched on.
+    owner: Mapped[str | None] = mapped_column(String(320), nullable=True, index=True)
     worker_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -72,6 +75,15 @@ class JobArtifact(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class UserCredentials(Base):
+    """One person's own settings (GitHub token, AI model and key), encrypted as a whole (credentials.py)."""
+    __tablename__ = "user_credentials"
+
+    email: Mapped[str] = mapped_column(String(320), primary_key=True)
+    data: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 _engine: Engine | None = None
 _Session: sessionmaker | None = None
 _lock = threading.Lock()
@@ -81,7 +93,7 @@ def engine() -> Engine:
     global _engine, _Session
     with _lock:
         if _engine is None:
-            url = get_settings().effective_database_url
+            url = base_settings().effective_database_url  # never a person's settings: they live in this database
             if url.startswith("sqlite"):
                 _engine = create_engine(url, connect_args={"check_same_thread": False, "timeout": 30},
                                         pool_pre_ping=True)
@@ -105,7 +117,7 @@ def engine() -> Engine:
 def _migrate(eng: Engine) -> None:
     """Additive, idempotent schema upgrades for databases created by older versions."""
     from sqlalchemy import inspect, text
-    added = {"jobs": {"stages": "JSON"}}
+    added = {"jobs": {"stages": "JSON", "owner": "VARCHAR(320)"}}
     insp = inspect(eng)
     for table, columns in added.items():
         existing = {c["name"] for c in insp.get_columns(table)}
@@ -113,6 +125,8 @@ def _migrate(eng: Engine) -> None:
             if name not in existing:
                 with eng.begin() as conn:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+    with eng.begin() as conn:  # every list is filtered by owner
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_jobs_owner ON jobs (owner)"))
 
 
 def reset_engine() -> None:
