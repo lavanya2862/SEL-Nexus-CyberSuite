@@ -72,12 +72,15 @@ class Settings(BaseSettings):
     enable_bandit: bool = True
     enable_codeql: bool = True
     codeql_path: str = ""  # path to the codeql executable when it is not on PATH
+    # CodeQL query suite: code-scanning (GitHub's default, fewest false alarms), security-extended (more security
+    # queries, the default here), or security-and-quality (also code-quality queries)
+    codeql_suite: Literal["code-scanning", "security-extended", "security-and-quality"] = "security-extended"
     enable_osv: bool = True
     enable_builtin_sast: bool = True
     enable_builtin_secrets: bool = True
     enable_lockfile_refresh: bool = True  # npm --package-lock-only --ignore-scripts (no repo code runs)
     osv_api_url: str = "https://api.osv.dev"
-    semgrep_config: str = "p/default"
+    semgrep_config: str = "p/default,p/owasp-top-ten,p/cwe-top-25"  # Semgrep rule packs, comma separated
     trivy_cache_dir: Path | None = None
 
     # --- Test & Fix loop on GitHub Actions (testloop.py) --------------------------------------

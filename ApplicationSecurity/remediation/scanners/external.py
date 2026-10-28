@@ -61,8 +61,10 @@ class SemgrepScanner(Scanner):
     def scan(self, root: Path, workdir: Path) -> list[Finding]:
         s = get_settings()
         out = _ensure(workdir) / "semgrep.sarif"
-        args = [local_tool("semgrep") or "semgrep", "scan", "--config", s.semgrep_config, "--sarif", "--output", str(out), "--metrics", "off",
-                "--quiet", "--timeout", "30", "--max-target-bytes", "1000000", "--disable-version-check"]
+        packs = [c.strip() for c in s.semgrep_config.split(",") if c.strip()] or ["p/default"]
+        args = [local_tool("semgrep") or "semgrep", "scan", *[a for c in packs for a in ("--config", c)], "--sarif",
+                "--output", str(out), "--metrics", "off", "--quiet", "--timeout", "30", "--max-target-bytes", "1000000",
+                "--disable-version-check"]
         for d in SKIP:
             args += ["--exclude", d]
         # UTF-8 mode: on Windows Semgrep otherwise writes the SARIF in the ANSI code page and fails on emoji in it
@@ -138,7 +140,8 @@ class CodeQLScanner(Scanner):
                 continue
             pack = CODEQL_PACKS[lang]
             analyze = run_cmd([exe, "database", "analyze", str(db), "--format=sarif-latest", f"--output={out}",
-                               "--download", "--threads=0", f"codeql/{pack}-queries:codeql-suites/{pack}-code-scanning.qls"],
+                               "--download", "--threads=0",
+                               f"codeql/{pack}-queries:codeql-suites/{pack}-{s.codeql_suite}.qls"],
                               timeout=s.scanner_timeout_seconds)
             if analyze.ok and out.exists():
                 findings.extend(parse_sarif_data(json.loads(out.read_text(encoding="utf-8")), "CodeQL", root))

@@ -83,12 +83,14 @@ Without an LLM, the pipeline still upgrades dependencies and applies determinist
 reasoning wait for an AI patch. Without a GitHub token, you can download `fixes.patch` and run `git apply`.
 
 **CodeQL** is the primary SAST engine. To install it locally, run `scripts/install-codeql.ps1` (Windows) or
-`scripts/install-codeql.sh`. The Docker image and the GitHub Actions workflow include it. If CodeQL is missing, the
+`scripts/install-codeql.sh`. It runs the `security-extended` query suite (`CODEQL_SUITE`; `code-scanning` is GitHub's
+narrower default, `security-and-quality` adds code-quality queries). The Docker image and the GitHub Actions workflow include it. If CodeQL is missing, the
 Analysis Agent falls back to Semgrep, Bandit and the built-in rules, and says so in the run.
 
 **Semgrep** and **Bandit** are installed by the Start script on its first run: Bandit into `.venv`, Semgrep into its own
 environment in `tools/semgrep` (its packages clash with the app's). Semgrep downloads its rules (`SEMGREP_CONFIG`,
-default `p/default`) from semgrep.dev on every scan, so it needs internet access.
+default `p/default,p/owasp-top-ten,p/cwe-top-25`: the curated default plus the OWASP Top 10 and CWE Top 25 packs) from
+semgrep.dev on every scan, so it needs internet access.
 
 ## The website
 
