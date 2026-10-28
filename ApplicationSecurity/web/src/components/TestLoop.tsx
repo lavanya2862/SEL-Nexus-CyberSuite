@@ -34,7 +34,7 @@ export function RunTestsButton({ job }: { job: Job }) {
   const { start } = useTestActions(job)
   const caps = useCaps()
   const active = testsActive(job)
-  if (job.status !== 'completed') return null
+  if (job.status !== 'completed' || job.can_act === false) return null
   return (
     <Btn kind="quiet" disabled={active || start.isPending || !caps.data?.github_token_configured} onClick={() => start.mutate()}
       title={caps.data?.github_token_configured ? 'Run every test of the repository on GitHub Actions; the Remediation Agent fixes failures' : 'Needs a GitHub token (Settings)'}>
@@ -72,7 +72,7 @@ export function TestsTab({ job }: { job: Job }) {
   return (
     <div className="flex flex-col gap-5">
       <Card title="Tests on GitHub Actions" description="Every test in the repository runs on the run’s fix branch; failing tests are fixed by the Remediation Agent and run again."
-        action={active ? <Btn kind="quiet" onClick={() => stop.mutate()} disabled={stop.isPending}><Square className="size-3.5" /> Stop</Btn>
+        action={job.can_act === false ? undefined : active ? <Btn kind="quiet" onClick={() => stop.mutate()} disabled={stop.isPending}><Square className="size-3.5" /> Stop</Btn>
           : <Btn onClick={() => start.mutate()} disabled={!tokenOk || start.isPending}>{t ? <><RotateCcw className="size-4" /> Run again</> : <><Play className="size-4" /> Run tests on GitHub</>}</Btn>}>
         <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {HOW.map((s, i) => (

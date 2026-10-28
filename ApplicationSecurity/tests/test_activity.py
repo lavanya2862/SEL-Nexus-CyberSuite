@@ -1,5 +1,5 @@
-"""Everyone sees every scan (RUNS_VISIBLE_TO=everyone, the default), and the activity log shows who started, re-ran,
-approved and tested what, with their name, email and the time. Every action uses the acting person's own keys."""
+"""Everyone sees every scan (RUNS_VISIBLE_TO=everyone, the default) and can download its reports, but only the person
+who started a scan can act on it, with their own keys. The activity log shows who did what, with name, email and time."""
 import threading
 import time
 
@@ -31,82 +31,101 @@ def test_everyone_sees_every_scan_and_who_started_it(suite):
     assert entry["job_id"] == job_id and entry["repo"] == "acme/shop" and entry["ts"]
 
 
-def test_approval_by_someone_else_uses_their_own_token_and_is_logged(suite, fake_world, monkeypatch):
+def test_others_can_view_and_download_but_not_act(suite, fake_world, monkeypatch):
     job_id = _completed_job(ANA)
-    credentials.save(ANA, {"github_token": "ghp_ana_secret_123456"})
     ben = suite(BEN)
     ben.put("/api/v1/settings", headers=WRITE, json={"github_token": "ghp_ben_secret_abcdef"})
+    pushed = []
+    monkeypatch.setattr("remediation.publish.publish_from_artifacts", lambda *a: pushed.append(a) or ("x", False))
+    monkeypatch.setattr(testloop, "run_loop", lambda *a: pushed.append(a))
+    job = ben.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["can_act"] is False and job["started_by"]["email"] == ANA
+    # looking and downloading is fine
+    for url in (f"/api/v1/jobs/{job_id}/report", f"/api/v1/jobs/{job_id}/findings", f"/api/v1/jobs/{job_id}/agents",
+                f"/api/v1/jobs/{job_id}/events", f"/api/v1/jobs/{job_id}/artifacts/fixes.patch?download=true",
+                f"/api/v1/jobs/{job_id}/artifacts/report.pdf?download=true"):
+        assert ben.get(url).status_code == 200, url
+    # every action is refused, and names who can do it
+    for url in ("publish", "tests", "tests/cancel", "cancel", "retry", "draft-reviewed"):
+        r = ben.post(f"/api/v1/jobs/{job_id}/{url}")
+        assert r.status_code == 403, url
+        assert r.json()["detail"].startswith("Only ana@example.com, who started this scan, can do that."), url
+    assert pushed == [] and ben.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
+    assert not [e for e in _log(ben) if e["action"] != "settings_changed"]  # nothing happened
+    # his own Action Center does not ask him to approve someone else's scan
+    assert ben.get("/api/v1/attention").json()["approvals"] == []
+    # scans from before sign-ins were recorded: everyone may look, nobody may act
+    legacy, _ = jobqueue.enqueue("https://github.com/acme/old", "acme/old", JobOptions())
+    assert ben.get(f"/api/v1/jobs/{legacy.id}").json()["can_act"] is False
+    assert "before sign-ins were recorded" in ben.post(f"/api/v1/jobs/{legacy.id}/cancel").json()["detail"]
+
+
+def test_the_starter_approves_and_tests_with_their_own_token_and_it_is_logged(suite, fake_world, monkeypatch):
+    job_id = _completed_job(ANA)
+    ana = suite(ANA)
+    ana.put("/api/v1/settings", headers=WRITE, json={"github_token": "ghp_ana_secret_123456"})
+    assert ana.get(f"/api/v1/jobs/{job_id}").json()["can_act"] is True
+    assert ana.get("/api/v1/attention").json()["approvals"][0]["id"] == job_id
     used = {}
 
     def fake_publish(repo_url, report, mbox, log):
-        used["token"] = get_settings().github_token
+        used["publish"] = get_settings().github_token
         return "https://github.com/acme/shop/pull/9", False
     monkeypatch.setattr("remediation.publish.publish_from_artifacts", fake_publish)
-    assert ben.post(f"/api/v1/jobs/{job_id}/publish").json()["status"] == "publishing"
+    assert ana.post(f"/api/v1/jobs/{job_id}/publish").json()["status"] == "publishing"
     for _ in range(100):
-        summary = ben.get(f"/api/v1/jobs/{job_id}").json()["summary"]
+        summary = ana.get(f"/api/v1/jobs/{job_id}").json()["summary"]
         if summary.get("approval_status") == "pr_opened":
             break
         time.sleep(0.05)
-    assert used["token"] == "ghp_ben_secret_abcdef"  # Ben approved, so the pull request is Ben's
-    assert summary["approved_by"]["email"] == BEN and summary["approved_by"]["name"] == "Ben" and summary["approved_by"]["at"]
-    events = [e["message"] for e in ben.get(f"/api/v1/jobs/{job_id}/events").json()["items"]]
-    assert any(m.startswith("Ben (ben@example.com) approved the fixes") for m in events)
-    stage = next(s for s in ben.get(f"/api/v1/jobs/{job_id}").json()["stages"] if s["id"] == "approval")
-    assert stage["summary"] == "Approved by Ben (ben@example.com) — PR opened"
-    log = _log(ben)
+    assert used["publish"] == "ghp_ana_secret_123456"
+    assert summary["approved_by"]["email"] == ANA and summary["approved_by"]["name"] == "Ana" and summary["approved_by"]["at"]
+    events = [e["message"] for e in ana.get(f"/api/v1/jobs/{job_id}/events").json()["items"]]
+    assert any(m.startswith("Ana (ana@example.com) approved the fixes") for m in events)
+    stage = next(s for s in ana.get(f"/api/v1/jobs/{job_id}").json()["stages"] if s["id"] == "approval")
+    assert stage["summary"] == "Approved by Ana (ana@example.com) — PR opened"
+    log = _log(ana)
     assert [e["action"] for e in log[:2]] == ["pr_opened", "fixes_approved"]
-    assert all(e["email"] == BEN and e["job_id"] == job_id for e in log[:2])
+    assert all(e["email"] == ANA and e["job_id"] == job_id for e in log[:2])
     assert log[0]["detail"] == "https://github.com/acme/shop/pull/9"
     assert "ghp_" not in str(log)  # settings_changed says which setting, never the value
     settings = next(e for e in log if e["action"] == "settings_changed")
-    assert settings["detail"] == "saved GitHub token" and settings["email"] == BEN
+    assert settings["detail"] == "saved GitHub token" and settings["email"] == ANA
 
-
-def test_a_rerun_and_github_tests_run_as_the_person_who_asked(suite, fake_world, monkeypatch):
-    ana, ben = suite(ANA), suite(BEN)
-    job_id = ana.post("/api/v1/jobs", json={"repo_url": "https://github.com/acme/shop",
-                                            "options": {"use_cache": False}}).json()["job"]["id"]
-    jobqueue.fail(job_id, None, "boom")
-    again = ben.post(f"/api/v1/jobs/{job_id}/retry").json()["job"]
-    assert again["status"] == "queued" and again["started_by"] == {"email": BEN, "name": "Ben"}
-    rerun = _log(ben, action="scan_rerun")[0]
-    assert rerun["email"] == BEN and rerun["detail"] == "first started by Ana (ana@example.com)"
-    # the re-run scan works with Ben's keys
-    from remediation.worker import Worker
-    credentials.save(BEN, {"github_token": "ghp_ben_secret_abcdef"})
-    Worker(1, "t").process(jobqueue.claim_next("t/0"), "t/0")
-    assert ben.get(f"/api/v1/jobs/{job_id}").json()["status"] == "completed"
-
-    credentials.save(ANA, {"github_token": "ghp_ana_secret_123456"})
-    done, used = threading.Event(), {}
+    done = threading.Event()
 
     def fake_loop(jid, st):
-        used["token"] = get_settings().github_token
+        used["tests"] = get_settings().github_token
         done.set()
     monkeypatch.setattr(testloop, "run_loop", fake_loop)
     assert ana.post(f"/api/v1/jobs/{job_id}/tests").json()["status"] == "started"
-    assert done.wait(5) and used["token"] == "ghp_ana_secret_123456"  # Ana asked, so Ana's token pushes
-    tests = _log(ana, action="tests_started")[0]
-    assert tests["email"] == ANA and tests["job_id"] == job_id
-    for _ in range(100):
-        if ana.get(f"/api/v1/jobs/{job_id}").json()["summary"]["tests"].get("started_by"):
-            break
-        time.sleep(0.05)
-    assert ana.get(f"/api/v1/jobs/{job_id}").json()["summary"]["tests"]["started_by"] == {"email": ANA, "name": "Ana"}
+    assert done.wait(5) and used["tests"] == "ghp_ana_secret_123456"
+    assert _log(ana, action="tests_started")[0]["email"] == ANA
 
 
-def test_the_log_filters_and_cancellations(suite):
+def test_the_starter_can_rerun_and_cancel(suite, fake_world):
+    ana = suite(ANA)
+    job_id = ana.post("/api/v1/jobs", json={"repo_url": "https://github.com/acme/shop",
+                                            "options": {"use_cache": False}}).json()["job"]["id"]
+    jobqueue.fail(job_id, None, "boom")
+    again = ana.post(f"/api/v1/jobs/{job_id}/retry").json()["job"]
+    assert again["status"] == "queued" and again["started_by"] == {"email": ANA, "name": "Ana"} and again["can_act"]
+    assert _log(ana, action="scan_rerun")[0]["email"] == ANA
+    assert ana.post(f"/api/v1/jobs/{job_id}/cancel").json()["job"]["status"] == "cancelled"
+    assert _log(ana, action="scan_cancelled")[0]["email"] == ANA
+
+
+def test_the_log_filters(suite):
     ana, ben = suite(ANA), suite(BEN)
     job_id = ana.post("/api/v1/jobs", json={"repo_url": "https://github.com/acme/shop",
                                             "options": {"create_pr": False, "ref": "main"}}).json()["job"]["id"]
     ben.post("/api/v1/jobs", json={"repo_url": "https://github.com/acme/api"})
-    ben.post(f"/api/v1/jobs/{job_id}/cancel")
-    log = _log(ana)
+    ana.post(f"/api/v1/jobs/{job_id}/cancel")
+    log = _log(ben)
     assert [e["action"] for e in log] == ["scan_cancelled", "scan_started", "scan_started"]
-    assert log[0]["email"] == BEN and log[0]["repo"] == "acme/shop"
+    assert log[0]["email"] == ANA and log[0]["repo"] == "acme/shop"
     assert log[2]["detail"] == "ref main"
-    assert [e["email"] for e in _log(ana, q="ben")] == [BEN, BEN]
+    assert [e["email"] for e in _log(ana, q="ben")] == [BEN]
     assert [e["repo"] for e in _log(ana, q="acme/api")] == ["acme/api"]
     assert len(_log(ana, action="scan_started")) == 2
     assert ana.get("/api/v1/activity", params={"limit": 1}).json()["total"] == 3

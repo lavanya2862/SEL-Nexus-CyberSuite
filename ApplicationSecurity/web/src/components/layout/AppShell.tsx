@@ -11,6 +11,7 @@ import { Glossary, Tour, shouldShowTour } from '@/components/Help'
 import { AttentionBell } from '@/components/AttentionBell'
 import { Assistant } from '@/components/Assistant'
 import { FindingDrawer } from '@/components/FindingDrawer'
+import { KeysPrompt, useKeysPrompt } from '@/components/KeysPrompt'
 import { isLive, useJob, useJobs } from '@/lib/api'
 import { goToSharedLogin, useAuth } from '@/lib/auth'
 import { AGENTS, AGENT_STATUS, mergedStages } from '@/lib/labels'
@@ -100,6 +101,7 @@ export function AppShell() {
   const { pathname } = useLocation()
   const { theme, toggle } = useTheme()
   const [tour, setTour] = useState(false)
+  const keys = useKeysPrompt()
   const [glossary, setGlossary] = useState(false)
   const [collapsed, setCollapsed] = useCollapsedNav()
   const counts = useCounts()
@@ -193,7 +195,8 @@ export function AppShell() {
         </main>
       </div>
 
-      <Tour open={tour} onOpenChange={setTour} />
+      <KeysPrompt prompt={keys} />
+      <Tour open={tour && !keys.pending} onOpenChange={setTour} />
       <Glossary open={glossary} onOpenChange={setGlossary} />
       <FindingDrawer />
       <Assistant />

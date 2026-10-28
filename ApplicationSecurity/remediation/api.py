@@ -22,8 +22,8 @@ from sqlalchemy import func, select, text
 
 from . import __version__, activity, credentials, jobqueue, testloop
 from .activity import LOCAL, Actor
-from .config import (RUNTIME_KEYS, SECRET_KEYS, Settings, base_settings, get_settings, load_runtime_overrides,
-                     save_runtime_overrides, user_scope)
+from .config import (RUNTIME_KEYS, SECRET_KEYS, Settings, base_settings, current_user, get_settings,
+                     load_runtime_overrides, save_runtime_overrides, user_scope)
 from .db import Job, JobArtifact, JobEvent, as_aware, engine, session_scope
 from .github import GitHubClient, RepoAccessError, RepoURLError, parse_repo_url
 from .logging_setup import setup_logging
@@ -79,6 +79,26 @@ def require_api_key(request: Request) -> str:
     raise HTTPException(401, "Missing or invalid API key (X-API-Key header).")
 
 
+def _can_act(job: Job) -> bool:
+    """Only the person who started a scan acts on it: approve its fixes, run or stop its tests, cancel, re-run, mark a
+    draft reviewed. Everyone else can look at it and download its reports. Without the shared sign-in, the one local
+    user can do everything."""
+    if not base_settings().per_user:
+        return True
+    return job.owner is not None and job.owner == current_user()
+
+
+def _require_starter(job: Job) -> None:
+    if _can_act(job):
+        return
+    if job.owner:
+        who = f"{job.owner_name} ({job.owner})" if job.owner_name and job.owner_name != job.owner else job.owner
+        raise HTTPException(403, f"Only {who}, who started this scan, can do that. You can view it and download its "
+                                 "reports, or start a scan of your own.")
+    raise HTTPException(403, "This scan was made before sign-ins were recorded, so nobody can act on it. You can view "
+                             "it and download its reports, or start a new scan of the repository.")
+
+
 def _iso(value) -> str | None:
     return as_aware(value).isoformat() if value else None
 
@@ -90,7 +110,8 @@ def _job_dict(job: Job, include_options: bool = True) -> dict:
             "cancel_requested": job.cancel_requested,
             "created_at": _iso(job.created_at), "started_at": _iso(job.started_at),
             "finished_at": _iso(job.finished_at),
-            "started_by": {"email": job.owner, "name": job.owner_name} if job.owner or job.owner_name else None}
+            "started_by": {"email": job.owner, "name": job.owner_name} if job.owner or job.owner_name else None,
+            "can_act": _can_act(job)}
     if include_options:
         data["options"] = job.options
         data["stages"] = job.stages
@@ -400,6 +421,7 @@ def download_artifact(job_id: str, name: str, download: bool = False, _: str = D
 def cancel_job(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner),
                who: Actor = Depends(actor)):
     before = _get_job(job_id, me)
+    _require_starter(before)
     job = jobqueue.request_cancel(job_id)
     if before.status in jobqueue.ACTIVE:
         jobqueue.add_event(job_id, f"Cancelled by {who.label()}", "warning")
@@ -411,6 +433,7 @@ def cancel_job(job_id: str, _: str = Depends(require_api_key), me: str | None = 
 def retry(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner),
           who: Actor = Depends(actor)):
     job = _get_job(job_id, me)
+    _require_starter(job)
     if job.status not in jobqueue.TERMINAL:
         raise HTTPException(409, f"Job is {job.status}; only finished jobs can be retried.")
     # the re-run is the re-runner's own scan: it runs with their keys
@@ -516,6 +539,7 @@ def publish(job_id: str, _: str = Depends(require_api_key), me: str | None = Dep
     """Reviewer approval: replay the fix commits onto a fresh clone, push the branch and open a PR with the approver's
     own GitHub token, so the pull request is theirs."""
     job = _get_job(job_id, me)
+    _require_starter(job)
     if job.status != "completed":
         raise HTTPException(409, "Only completed runs can be published.")
     summary = job.summary or {}
@@ -554,6 +578,7 @@ def start_tests(job_id: str, _: str = Depends(require_api_key), me: str | None =
     """Push the run's fix branch with a test workflow; GitHub Actions runs every test, the Remediation Agent fixes failures and
     pushes again, up to TEST_FIX_ATTEMPTS times."""
     job = _get_job(job_id, me)
+    _require_starter(job)
     if job.status != "completed":
         raise HTTPException(409, "Only completed runs can be tested.")
     summary = job.summary or {}
@@ -575,6 +600,7 @@ def start_tests(job_id: str, _: str = Depends(require_api_key), me: str | None =
 def cancel_tests(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner),
                  who: Actor = Depends(actor)):
     job = _get_job(job_id, me)
+    _require_starter(job)
     if testloop.is_running(job_id):
         jobqueue.add_event(job_id, f"Tests: stop requested by {who.label()}", "warning")
         activity.record(who, "tests_cancelled", job_id, job.repo_full_name)
@@ -796,7 +822,9 @@ def _unreviewed_draft(job: dict) -> bool:
 def mark_draft_reviewed(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner),
                         who: Actor = Depends(actor)):
     """Take an automatically opened draft PR off the Approvals list once a person has looked at it."""
-    job = _job_dict(_get_job(job_id, me))
+    row = _get_job(job_id, me)
+    _require_starter(row)
+    job = _job_dict(row)
     if not _unreviewed_draft(job):
         raise HTTPException(409, "This scan has no unreviewed draft pull request.")
     jobqueue.update_summary(job_id, draft_reviewed_at=datetime.now(timezone.utc).isoformat(),
@@ -819,7 +847,9 @@ def attention(_: str = Depends(require_api_key), me: str | None = Depends(owner)
         report = _json_artifact(job["id"], "report.json")
         failed = [{"name": c["name"], "detail": c["detail"][:240]}
                   for c in (report or {}).get("validation_checks", []) if c["status"] == "failed"]
-        if (summ.get("fixes_applied") or _test_fixes(summ)) and not summ.get("pull_request_url"):
+        if not job["can_act"]:
+            pass  # someone else's scan: only the person who started it decides
+        elif (summ.get("fixes_applied") or _test_fixes(summ)) and not summ.get("pull_request_url"):
             approvals.append({**job, "failed_checks": failed})
         elif _unreviewed_draft(job):
             # Opened automatically while validation flagged it: nobody has looked at it yet.

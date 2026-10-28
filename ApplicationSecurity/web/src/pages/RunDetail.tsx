@@ -93,6 +93,7 @@ function RunView({ job, urlTab }: { job: Job; urlTab?: Tab }) {
 function RunHeader({ job, report }: { job: Job; report?: Report }) {
   const s = job.summary ?? {}
   const done = !isLive(job)
+  const mine = job.can_act !== false
   const { openChat } = usePanels()
   const toast = useToast()
   const qc = useQueryClient()
@@ -127,8 +128,8 @@ function RunHeader({ job, report }: { job: Job; report?: Report }) {
           {s.pull_request_url && <LinkBtn href={s.pull_request_url} external kind="good"><GitPullRequestArrow className="size-4" /> {s.pull_request_draft ? 'View draft PR' : 'View pull request'}</LinkBtn>}
           <RunTestsButton job={job} />
           <Btn kind="quiet" onClick={() => openChat({ type: 'run', jobId: job.id, label: job.repo })}><Sparkles className="size-4" /> Ask the Security Assistant</Btn>
-          {!done && <Btn kind="quiet" onClick={() => act('cancel')}><Square className="size-3.5" /> Cancel</Btn>}
-          {done && <Btn kind="quiet" onClick={() => act('retry')}><RotateCcw className="size-3.5" /> Re-run</Btn>}
+          {mine && !done && <Btn kind="quiet" onClick={() => act('cancel')}><Square className="size-3.5" /> Cancel</Btn>}
+          {mine && done && <Btn kind="quiet" onClick={() => act('retry')}><RotateCcw className="size-3.5" /> Re-run</Btn>}
         </div>
       </div>
       {!done && (
@@ -136,6 +137,13 @@ function RunHeader({ job, report }: { job: Job; report?: Report }) {
           <div className="h-1.5 overflow-hidden rounded-full bg-well"><div className="h-full rounded-full bg-blue transition-[width] duration-500" style={{ width: `${job.progress}%` }} /></div>
           <p className="mt-1.5 text-xs text-ink-3">{job.stage} · {job.progress}% · this page updates by itself</p>
         </div>
+      )}
+      {!mine && (
+        <Notice tone="info" title="View only">
+          {job.started_by ? <>{personLabel(job.started_by)} started this scan, so only they can approve its fixes, run its tests, cancel or re-run it.</>
+            : 'This scan was made before sign-ins were recorded, so nobody can act on it.'}{' '}
+          You can read everything here and download its reports. To work on this repository yourself, <Link to="/scan" className="text-sky underline">start a scan of your own</Link>.
+        </Notice>
       )}
       {job.error && <Notice tone="bad" title={`Run ${job.status}`}>{job.error}</Notice>}
     </Panel>
@@ -158,6 +166,19 @@ function ApprovalBox({ job }: { job: Job }) {
         action={<LinkBtn href={s.pull_request_url} external kind="good">Open on GitHub <ExternalLink className="size-3.5" /></LinkBtn>}>
         The fixes are on branch <span className="font-mono">{s.branch}</span>. Review and merge on GitHub.
         {s.approved_by && <div className="mt-1">Approved by {personLabel(s.approved_by)} on {stamp(s.approved_by.at)}.</div>}
+      </Notice>
+    )
+  }
+  if (job.can_act === false) {
+    return (
+      <Notice tone="info" title={job.started_by ? `Waiting for ${personLabel(job.started_by)} to decide` : 'Nobody can approve this scan'}
+        action={
+          <div className="flex flex-wrap gap-2">
+            <LinkBtn href={artifactUrl(job.id, 'fixes.pdf')}><Download className="size-3.5" /> Fixes (PDF)</LinkBtn>
+            <LinkBtn href={artifactUrl(job.id, 'fixes.patch')}><Download className="size-3.5" /> Patch</LinkBtn>
+          </div>
+        }>
+        {s.fixes_applied ?? 0} fix commit(s) are ready. Only the person who started this scan can approve them and open the pull request; you can review the fixes under ② Remediation and download them.
       </Notice>
     )
   }

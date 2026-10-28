@@ -94,6 +94,8 @@ export interface Job {
   stages?: Stage[]
   artifacts?: { name: string; size: number; url: string }[]
   started_by?: Person | null
+  /** Only the person who started a scan may act on it; everyone else can look and download. */
+  can_act?: boolean
 }
 
 /** One line of the activity log: who did what, when, on which scan. */
