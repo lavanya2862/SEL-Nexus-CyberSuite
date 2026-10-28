@@ -15,7 +15,7 @@ import { PipelineFlow, StageDetail } from '@/components/Pipeline'
 import { FindingsTable } from '@/components/Tables'
 import { RunTestsButton, TestsTab } from '@/components/TestLoop'
 import { PDF_FILES, TOOL_FILES, api, artifactUrl, isLive, post, testsActive, useCaps, useJob, useJobAgents, useJobEvents, useJobResults } from '@/lib/api'
-import { ago } from '@/lib/format'
+import { ago, personLabel, stamp } from '@/lib/format'
 import { AGENT_IDS, METHOD, SEVERITIES, dur, mergedStages, sevLabel, where } from '@/lib/labels'
 import { useApprove, usePanels } from '@/lib/panels'
 import { useTheme } from '@/lib/theme'
@@ -118,7 +118,8 @@ function RunHeader({ job, report }: { job: Job; report?: Report }) {
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-3">
             <span className="font-mono">{job.ref || 'default branch'}{job.commit ? ` @ ${job.commit.slice(0, 12)}` : ''}</span>
             {s.branch && <span>fix branch <span className="font-mono text-ink-2">{s.branch}</span></span>}
-            <span>started {ago(job.started_at ?? job.created_at)}</span>
+            <span title={stamp(job.created_at)}>started {ago(job.started_at ?? job.created_at)}{job.started_by && <> by <span className="text-ink-2">{personLabel(job.started_by)}</span></>}</span>
+            {s.approved_by && <span title={stamp(s.approved_by.at)}>approved by <span className="text-ink-2">{personLabel(s.approved_by)}</span> · {stamp(s.approved_by.at)}</span>}
             {report && <span>took {dur(report.duration_seconds)}</span>}
           </div>
         </div>
@@ -156,6 +157,7 @@ function ApprovalBox({ job }: { job: Job }) {
       <Notice tone={flagged ? 'warn' : 'good'} title={s.pull_request_draft ? 'Draft pull request opened: needs review' : 'Pull request opened: waiting for human review'}
         action={<LinkBtn href={s.pull_request_url} external kind="good">Open on GitHub <ExternalLink className="size-3.5" /></LinkBtn>}>
         The fixes are on branch <span className="font-mono">{s.branch}</span>. Review and merge on GitHub.
+        {s.approved_by && <div className="mt-1">Approved by {personLabel(s.approved_by)} on {stamp(s.approved_by.at)}.</div>}
       </Notice>
     )
   }

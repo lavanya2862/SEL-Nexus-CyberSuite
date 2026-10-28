@@ -27,6 +27,7 @@ from sqlalchemy import select
 
 from . import jobqueue
 from .agents.validation import TEST_PATH, diff_guard
+from .activity import Actor
 from .config import get_settings, user_scope
 from .context import resolve_in_repo
 from .db import Job, JobArtifact, session_scope
@@ -356,16 +357,20 @@ def is_running(job_id: str) -> bool:
         return job_id in _running
 
 
-def start(job_id: str) -> bool:
-    """Start the loop for a completed run in the background. False when it is already running."""
+def start(job_id: str, by: Actor | None = None) -> bool:
+    """Start the loop for a completed run in the background. False when it is already running.
+
+    ``by`` is the person who asked for it: the loop pushes and fixes with their keys. None (the "Run tests on GitHub"
+    scan option) means the person who started the scan."""
     with _lock:
         if job_id in _running:
             return False
         _running.add(job_id)
         _cancel.discard(job_id)
     jobqueue.update_summary(job_id, tests={"status": "starting", "phase": "Starting", "runs": [], "attempt": 0,
-                                           "max_attempts": get_settings().test_fix_attempts, "started_at": _now()})
-    threading.Thread(target=_run, args=(job_id,), name=f"tests-{job_id[:8]}", daemon=True).start()
+                                           "max_attempts": get_settings().test_fix_attempts, "started_at": _now(),
+                                           "started_by": by.as_dict() if by else None})
+    threading.Thread(target=_run, args=(job_id, by), name=f"tests-{job_id[:8]}", daemon=True).start()
     return True
 
 
@@ -376,10 +381,11 @@ def cancel(job_id: str) -> None:
 
 
 class _State:
-    def __init__(self, job_id: str):
+    def __init__(self, job_id: str, by: Actor | None = None):
         self.job_id = job_id
         self.data: dict = {"status": "starting", "runs": [], "attempt": 0, "max_attempts": get_settings().test_fix_attempts,
-                           "started_at": _now(), "finished_at": None, "message": "", "phase": "Starting"}
+                           "started_at": _now(), "finished_at": None, "message": "", "phase": "Starting",
+                           "started_by": by.as_dict() if by else None}
 
     def update(self, **changes) -> None:
         self.data.update(changes)
@@ -568,14 +574,14 @@ def _owner(job_id: str) -> str | None:
         return db.scalar(select(Job.owner).where(Job.id == job_id))
 
 
-def _run(job_id: str) -> None:
-    # a new thread has no person: the loop pushes and fixes with the keys of the person who started the scan
-    with user_scope(_owner(job_id)):
-        _run_as_owner(job_id)
+def _run(job_id: str, by: Actor | None = None) -> None:
+    # a new thread has no person: the loop pushes and fixes with the keys of whoever asked for it
+    with user_scope(by.email if by else _owner(job_id)):
+        _run_as(job_id, by)
 
 
-def _run_as_owner(job_id: str) -> None:
-    st = _State(job_id)
+def _run_as(job_id: str, by: Actor | None) -> None:
+    st = _State(job_id, by)
     try:
         st.log("started: run the repository's tests on GitHub Actions; the Remediation Agent fixes failures")
         run_loop(job_id, st)

@@ -2,7 +2,7 @@ import { useEffect, useState, type ComponentType, type CSSProperties, type React
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   BookOpen, ChevronRight, CircleAlert, CirclePlus, FileText, FolderGit2, Grip, HelpCircle, LayoutGrid, LogOut, Menu, Moon,
-  PanelLeftClose, PanelLeftOpen, Settings, ShieldCheck, ShieldAlert, Sun, Workflow, Wrench,
+  PanelLeftClose, PanelLeftOpen, ScrollText, Settings, ShieldCheck, ShieldAlert, Sun, Workflow, Wrench,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
@@ -38,6 +38,7 @@ const GROUPS: { heading: string; tone: string; on: string; items: Item[] }[] = [
     { to: '/vulnerabilities', label: 'Vulnerabilities', icon: ShieldAlert },
     { to: '/repositories', label: 'Repositories', icon: FolderGit2 },
     { to: '/runs', label: 'Scan history', icon: Workflow },
+    { to: '/activity', label: 'Activity log', icon: ScrollText },
     { to: '/reports', label: 'Reports', icon: FileText },
   ] },
   { heading: 'Configure', tone: 'var(--area-act)', on: 'var(--area-act-on)', items: [

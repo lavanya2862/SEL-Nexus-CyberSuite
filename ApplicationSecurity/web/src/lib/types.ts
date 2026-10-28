@@ -7,6 +7,9 @@ export type Verdict = 'passed' | 'flagged' | 'failed' | 'not_run'
 export type FixStatus = 'verified' | 'fixed' | 'failed' | 'manual' | 'skipped' | 'not_attempted'
 export type AgentId = 'analysis' | 'remediation' | 'validation' | 'reporting'
 
+/** A signed-in person (email is null for the local user without the shared sign-in). */
+export interface Person { email: string | null; name: string | null }
+
 export interface JobSummary {
   findings?: number
   severity_counts?: Partial<Record<Severity, number>>
@@ -20,6 +23,8 @@ export interface JobSummary {
   publish_error?: string | null
   branch?: string | null
   tests?: TestLoop
+  approved_by?: Person & { at: string }
+  draft_reviewed_by?: Person
 }
 
 /** The Test & Fix loop on GitHub Actions (remediation/testloop.py), kept in the run's summary. */
@@ -51,6 +56,7 @@ export interface TestLoop {
   runs: TestRun[]
   started_at?: string
   finished_at?: string | null
+  started_by?: Person | null
 }
 
 export interface Step { name: string; status: StageStatus; detail?: string }
@@ -87,6 +93,19 @@ export interface Job {
   options?: Record<string, unknown>
   stages?: Stage[]
   artifacts?: { name: string; size: number; url: string }[]
+  started_by?: Person | null
+}
+
+/** One line of the activity log: who did what, when, on which scan. */
+export interface ActivityEntry {
+  id: number
+  ts: string
+  email: string | null
+  name: string | null
+  action: string
+  job_id: string | null
+  repo: string | null
+  detail: string
 }
 
 export interface KV { label: string; value: string; tone?: 'good' | 'warn' | 'bad' | '' }

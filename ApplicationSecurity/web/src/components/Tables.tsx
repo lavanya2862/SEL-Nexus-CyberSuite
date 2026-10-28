@@ -1,18 +1,29 @@
-// The two tables several pages share: scans, and findings (with filters).
+// The two tables several pages share: scans, and findings (with filters). Plus who did something.
 import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ExternalLink } from 'lucide-react'
 import { DTable, Empty, FixStatusTag, JobStatusTag, RiskScore, Search, Select, SevTag, StatusTag, VerdictTag } from '@/components/kit'
-import { ago } from '@/lib/format'
+import { ago, stamp } from '@/lib/format'
 import { FINDING_TYPES, FIX_STATUS, SEVERITIES, detectedBy, findingType, sevLabel, where } from '@/lib/labels'
 import { usePanels } from '@/lib/panels'
-import type { Finding, Job } from '@/lib/types'
+import type { Finding, Job, Person } from '@/lib/types'
+
+/** A person: name, with their email underneath. Scans from before sign-ins were recorded have nobody. */
+export function Who({ p, compact }: { p?: Person | null; compact?: boolean }) {
+  if (!p || (!p.name && !p.email)) return <span className="text-ink-3" title="Started before the activity log existed">–</span>
+  return (
+    <div className="min-w-0">
+      <div className={compact ? 'truncate text-xs text-ink-2' : 'truncate font-medium'}>{p.name || p.email}</div>
+      {p.email && p.name && p.name !== p.email && <div className="truncate text-xs text-ink-3">{p.email}</div>}
+    </div>
+  )
+}
 
 export function RunsTable({ items, empty = 'No scans yet.' }: { items: Job[]; empty?: string }) {
   const navigate = useNavigate()
   if (!items.length) return <Empty text={empty} />
   return (
-    <DTable head={[['Repository'], ['Status'], ['Step'], ['Findings', 'right'], ['Fixes', 'right'], ['Validation'], ['Pull request'], ['Started']]} minWidth={900}>
+    <DTable head={[['Repository'], ['Status'], ['Step'], ['Findings', 'right'], ['Fixes', 'right'], ['Validation'], ['Pull request'], ['Started by'], ['Started']]} minWidth={1040}>
       {items.map((j) => {
         const s = j.summary ?? {}
         return (
@@ -31,7 +42,8 @@ export function RunsTable({ items, empty = 'No scans yet.' }: { items: Job[]; em
                 <a href={s.pull_request_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sky hover:underline">{s.pull_request_draft ? 'Draft PR' : 'Open PR'} <ExternalLink className="size-3" /></a>
               ) : s.approval_status === 'awaiting_approval' ? <StatusTag tone="warn" label="Awaiting approval" /> : <span className="text-ink-3">–</span>}
             </td>
-            <td className="whitespace-nowrap text-xs text-ink-3">{ago(j.created_at)}</td>
+            <td className="max-w-[200px]"><Who p={j.started_by} compact /></td>
+            <td className="whitespace-nowrap text-xs text-ink-3" title={stamp(j.created_at)}>{ago(j.created_at)}</td>
           </tr>
         )
       })}

@@ -97,6 +97,10 @@ class Settings(BaseSettings):
     suite_login_url: str = ""  # e.g. http://127.0.0.1:8000; empty = no shared sign-in (local use, tests)
     suite_auth_dir: Path = Path("../login/data/auth")  # the sign-in page's folder holding session.key
 
+    # Who sees a scan when the shared sign-in is on: everyone (the activity log shows who started and approved what),
+    # or only the person who started it.
+    runs_visible_to: Literal["everyone", "owner"] = "everyone"
+
     # --- Each person's own keys (credentials.py), used when the shared sign-in is on -------------
     credentials_key: str = ""  # Fernet key (base64) that encrypts saved keys; best supplied by a secret store
     credentials_key_file: Path | None = None  # else this file (made on first use); default DATA_DIR/credentials.key

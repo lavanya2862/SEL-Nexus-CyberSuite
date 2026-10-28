@@ -10,7 +10,8 @@ import threading
 import time
 import traceback
 
-from . import jobqueue
+from . import activity, jobqueue
+from .activity import Actor
 from .config import get_settings, user_scope
 from .db import Job
 from .github import RepoAccessError, RepoURLError, parse_repo_url, resolve_remote_ref
@@ -172,6 +173,10 @@ class Worker:
             pipeline = RepositoryPipeline(job.repo_url, options, reporter, run_id=job.id)
             result = pipeline.run()
             jobqueue.complete(job.id, slot_id, result.summary(), result.artifacts, result.report.commit)
+            if result.report.pull_request_url:  # the scan was started with "open a pull request"
+                draft = " (draft)" if result.report.pull_request_draft else ""
+                activity.record(Actor(job.owner, job.owner_name), "pr_opened", job.id, job.repo_full_name,
+                                f"{result.report.pull_request_url}{draft} · opened automatically by the scan")
             _after_run(job.id, options)
         except JobCancelled as exc:
             jobqueue.fail(job.id, slot_id, "Lost lease to another worker." if lost.is_set() else str(exc),

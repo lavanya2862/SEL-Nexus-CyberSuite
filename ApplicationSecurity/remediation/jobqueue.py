@@ -36,7 +36,8 @@ def cache_key(repo_full_name: str, ref: str | None, options: JobOptions, owner: 
 
 
 def enqueue(repo_url: str, repo_full_name: str, options: JobOptions, requested_by: str | None = None,
-            priority: int = 0, dedupe: bool = True, owner: str | None = None) -> tuple[Job, bool]:
+            priority: int = 0, dedupe: bool = True, owner: str | None = None,
+            owner_name: str | None = None) -> tuple[Job, bool]:
     """Create a job. Returns (job, deduplicated) — an identical active job of the same owner is reused."""
     s = get_settings()
     key = cache_key(repo_full_name, options.ref, options, owner)
@@ -51,7 +52,7 @@ def enqueue(repo_url: str, repo_full_name: str, options: JobOptions, requested_b
             raise QueueFull(f"Queue is full ({queued} jobs waiting). Try again later.")
         job = Job(id=uuid.uuid4().hex, repo_url=repo_url, repo_full_name=repo_full_name, ref=options.ref,
                   options=options.model_dump(), status="queued", stage="queued", priority=priority,
-                  cache_key=key, requested_by=requested_by, owner=owner)
+                  cache_key=key, requested_by=requested_by, owner=owner, owner_name=owner_name)
         db.add(job)
         db.add(JobEvent(job_id=job.id, message=f"Job queued for {repo_url}"))
         return job, False
@@ -174,14 +175,18 @@ def request_cancel(job_id: str) -> Job | None:
         return job
 
 
-def retry_job(job_id: str) -> Job | None:
+def retry_job(job_id: str, owner: str | None = None, owner_name: str | None = None, by: str = "user") -> Job | None:
+    """Run a finished scan again. It now belongs to whoever re-ran it (``owner``), so it runs with their keys."""
     with session_scope() as db:
         job = db.get(Job, job_id)
         if job is None or job.status not in TERMINAL:
             return job
         job.status, job.stage, job.progress, job.error, job.stages = "queued", "queued", 0, None, None
         job.cancel_requested, job.worker_id, job.attempts, job.finished_at = False, None, 0, None
-        db.add(JobEvent(job_id=job_id, message="Re-queued by user"))
+        if owner_name is not None:
+            job.owner, job.owner_name = owner, owner_name
+            job.cache_key = cache_key(job.repo_full_name, job.ref, JobOptions(**(job.options or {})), owner)
+        db.add(JobEvent(job_id=job_id, message=f"Re-queued by {by}"))
         return job
 
 

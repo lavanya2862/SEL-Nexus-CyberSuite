@@ -12,6 +12,7 @@ import { Vulnerabilities } from '@/pages/Vulnerabilities'
 import { Repositories } from '@/pages/Repositories'
 import { Runs } from '@/pages/Runs'
 import { RunDetail } from '@/pages/RunDetail'
+import { Activity } from '@/pages/Activity'
 import { Reports } from '@/pages/Reports'
 import { HowItWorks } from '@/pages/HowItWorks'
 import { SettingsPage } from '@/pages/Settings'
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="repositories" element={<Repositories />} />
         <Route path="runs" element={<Runs />} />
         <Route path="runs/:id/:tab?" element={<RunDetail />} />
+        <Route path="activity" element={<Activity />} />
         <Route path="reports" element={<Reports />} />
         <Route path="how" element={<HowItWorks />} />
         <Route path="settings" element={<SettingsPage />} />

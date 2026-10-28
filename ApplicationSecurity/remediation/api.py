@@ -20,7 +20,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 
-from . import __version__, credentials, jobqueue, testloop
+from . import __version__, activity, credentials, jobqueue, testloop
+from .activity import LOCAL, Actor
 from .config import (RUNTIME_KEYS, SECRET_KEYS, Settings, base_settings, get_settings, load_runtime_overrides,
                      save_runtime_overrides, user_scope)
 from .db import Job, JobArtifact, JobEvent, as_aware, engine, session_scope
@@ -88,7 +89,8 @@ def _job_dict(job: Job, include_options: bool = True) -> dict:
             "error": job.error, "summary": job.summary, "attempts": job.attempts, "cached_from": job.cached_from,
             "cancel_requested": job.cancel_requested,
             "created_at": _iso(job.created_at), "started_at": _iso(job.started_at),
-            "finished_at": _iso(job.finished_at)}
+            "finished_at": _iso(job.finished_at),
+            "started_by": {"email": job.owner, "name": job.owner_name} if job.owner or job.owner_name else None}
     if include_options:
         data["options"] = job.options
         data["stages"] = job.stages
@@ -170,6 +172,7 @@ async def suite_sign_in(request: Request, call_next):
     if user and user.get("email"):
         # whose scans this request may see, and whose keys get_settings() returns while it runs
         request.state.owner = str(user["email"]).strip().lower()
+        request.state.owner_name = str(user.get("name") or "").strip() or None
         with user_scope(request.state.owner):
             return await call_next(request)
     if path.startswith("/api/") or path == "/openapi.json":
@@ -177,15 +180,29 @@ async def suite_sign_in(request: Request, call_next):
     return RedirectResponse(f"{login_url}/?next={quote(str(request.url), safe='')}", status_code=303)
 
 
-def owner(request: Request) -> str | None:
-    """The signed-in person: they see only the scans they started. None without the shared sign-in, where the one
-    local user sees every scan."""
+def actor(request: Request) -> Actor:
+    """Who is doing this: the signed-in person (their name and email go in the activity log, and their own keys do
+    the work), or the one local user without the shared sign-in."""
     if not base_settings().per_user:
-        return None
-    me = getattr(request.state, "owner", None)
-    if not me:
+        return LOCAL
+    email = getattr(request.state, "owner", None)
+    if not email:
         raise HTTPException(401, "Sign in on the SEL Nexus CyberSuite sign-in page first.")
-    return me
+    return Actor(email, getattr(request.state, "owner_name", None) or email)
+
+
+def owner(request: Request) -> str | None:
+    """Whose scans this request may see: with RUNS_VISIBLE_TO=owner only the signed-in person's own, else (None)
+    every scan."""
+    s = base_settings()
+    if not s.per_user or s.runs_visible_to == "everyone":
+        return None
+    return actor(request).email
+
+
+def _keys_of(who: Actor) -> str | None:
+    """The person whose own keys an action uses (None: the server's keys, without the shared sign-in)."""
+    return who.email if base_settings().per_user else None
 
 
 def _mine(stmt, me: str | None):
@@ -251,7 +268,7 @@ def get_capabilities(_: str = Depends(require_api_key)):
 
 @app.post("/api/v1/jobs", status_code=202)
 def create_job(body: JobCreate, response: Response, principal: str = Depends(require_api_key),
-               me: str | None = Depends(owner)):
+               who: Actor = Depends(actor)):
     s = get_settings()
     if not rate_limiter.allow(principal, s.rate_limit_per_minute):
         raise HTTPException(429, "Rate limit exceeded; slow down.")
@@ -262,11 +279,20 @@ def create_job(body: JobCreate, response: Response, principal: str = Depends(req
     options = body.options.model_copy(update={"ref": repo.ref})
     if options.create_pr and not s.github_token:
         raise HTTPException(422, "create_pr needs a GitHub token: add yours under Settings → GitHub."
-                            if me else "create_pr requires GITHUB_TOKEN to be configured on the server.")
+                            if _keys_of(who) else "create_pr requires GITHUB_TOKEN to be configured on the server.")
     try:
-        job, deduped = jobqueue.enqueue(repo.html_url, repo.full_name, options, principal, body.priority, owner=me)
+        job, deduped = jobqueue.enqueue(repo.html_url, repo.full_name, options, principal, body.priority,
+                                        owner=_keys_of(who), owner_name=who.name)
     except jobqueue.QueueFull as exc:
         raise HTTPException(503, str(exc), headers={"Retry-After": "60"})
+    asked = [f"ref {options.ref}" if options.ref else "default branch"] + \
+        (["open a pull request"] if options.create_pr else []) + (["run tests on GitHub"] if options.github_tests else [])
+    if deduped:
+        activity.record(who, "scan_started", job.id, repo.full_name,
+                        "joined the identical scan already running \u00b7 " + ", ".join(asked))
+    else:
+        jobqueue.add_event(job.id, f"Started by {who.label()}")
+        activity.record(who, "scan_started", job.id, repo.full_name, ", ".join(asked))
     if deduped:
         response.status_code = 200
     response.headers["Location"] = f"/api/v1/jobs/{job.id}"
@@ -371,18 +397,27 @@ def download_artifact(job_id: str, name: str, download: bool = False, _: str = D
 
 
 @app.post("/api/v1/jobs/{job_id}/cancel")
-def cancel_job(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner)):
-    _get_job(job_id, me)
+def cancel_job(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner),
+               who: Actor = Depends(actor)):
+    before = _get_job(job_id, me)
     job = jobqueue.request_cancel(job_id)
+    if before.status in jobqueue.ACTIVE:
+        jobqueue.add_event(job_id, f"Cancelled by {who.label()}", "warning")
+        activity.record(who, "scan_cancelled", job_id, job.repo_full_name)
     return {"job": _job_dict(job)}
 
 
 @app.post("/api/v1/jobs/{job_id}/retry")
-def retry(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner)):
+def retry(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner),
+          who: Actor = Depends(actor)):
     job = _get_job(job_id, me)
     if job.status not in jobqueue.TERMINAL:
         raise HTTPException(409, f"Job is {job.status}; only finished jobs can be retried.")
-    return {"job": _job_dict(jobqueue.retry_job(job_id))}
+    # the re-run is the re-runner's own scan: it runs with their keys
+    again = jobqueue.retry_job(job_id, _keys_of(who), who.name, by=who.label())
+    activity.record(who, "scan_rerun", job_id, job.repo_full_name,
+                    f"first started by {Actor(job.owner, job.owner_name).label()}" if job.owner_name else "")
+    return {"job": _job_dict(again)}
 
 
 # --- Dashboard -------------------------------------------------------------------------------
@@ -428,13 +463,13 @@ _publishing: set[str] = set()
 _publish_lock = threading.Lock()
 
 
-def _publish_job(job_id: str, repo_url: str, job_owner: str | None) -> None:
-    # a new thread has no person: push and open the PR with the keys of the person who started the scan
-    with user_scope(job_owner):
-        _publish_as_owner(job_id, repo_url)
+def _publish_job(job_id: str, repo_url: str, who: Actor) -> None:
+    # a new thread has no person: push and open the PR with the keys of the person who approved
+    with user_scope(_keys_of(who)):
+        _publish_as(job_id, repo_url, who)
 
 
-def _publish_as_owner(job_id: str, repo_url: str) -> None:
+def _publish_as(job_id: str, repo_url: str, who: Actor) -> None:
     import json as _json
 
     from .publish import publish_from_artifacts, publish_tested_branch
@@ -455,8 +490,8 @@ def _publish_as_owner(job_id: str, repo_url: str) -> None:
         for st in report.stages:
             if st.id == "approval":
                 st.status = "warning" if draft else "completed"
-                st.summary = ("Draft PR opened (needs review)" if draft else
-                              "Approved by reviewer — PR opened")
+                st.summary = (f"Approved by {who.label()} \u2014 draft PR opened (needs review)" if draft else
+                              f"Approved by {who.label()} \u2014 PR opened")
                 st.metrics["pull_request"] = url
         findings = [Finding.model_validate(f) for f in _json.loads(_artifact(job_id, "findings.json").content)]
         arts = build_artifacts(report, findings, "")
@@ -464,18 +499,22 @@ def _publish_as_owner(job_id: str, repo_url: str) -> None:
             jobqueue.replace_artifact(job_id, name, *arts[name])
         jobqueue.set_stages(job_id, [st.model_dump() for st in report.stages])
         jobqueue.update_summary(job_id, pull_request_url=url, pull_request_draft=draft, approval_status="pr_opened")
+        activity.record(who, "pr_opened", job_id, report.repo, f"{url}{' (draft)' if draft else ''}")
     except Exception as exc:  # noqa: BLE001
         log.exception("publish failed for %s", job_id)
         jobqueue.add_event(job_id, f"Publishing failed: {exc}", "error")
         jobqueue.update_summary(job_id, approval_status="failed", publish_error=str(exc)[:500])
+        activity.record(who, "pr_failed", job_id, _get_job(job_id, None).repo_full_name, str(exc)[:500])
     finally:
         with _publish_lock:
             _publishing.discard(job_id)
 
 
 @app.post("/api/v1/jobs/{job_id}/publish", status_code=202)
-def publish(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner)):
-    """Reviewer approval: replay the fix commits onto a fresh clone, push the branch and open a PR."""
+def publish(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner),
+            who: Actor = Depends(actor)):
+    """Reviewer approval: replay the fix commits onto a fresh clone, push the branch and open a PR with the approver's
+    own GitHub token, so the pull request is theirs."""
     job = _get_job(job_id, me)
     if job.status != "completed":
         raise HTTPException(409, "Only completed runs can be published.")
@@ -493,9 +532,12 @@ def publish(job_id: str, _: str = Depends(require_api_key), me: str | None = Dep
         if job_id in _publishing:
             return {"status": "publishing"}
         _publishing.add(job_id)
-    jobqueue.update_summary(job_id, approval_status="publishing", publish_error=None)
-    jobqueue.add_event(job_id, "Reviewer approved the fixes — pushing branch and opening pull request")
-    threading.Thread(target=_publish_job, args=(job_id, job.repo_url, job.owner), name=f"publish-{job_id[:8]}",
+    approved = {**who.as_dict(), "at": datetime.now(timezone.utc).isoformat()}
+    jobqueue.update_summary(job_id, approval_status="publishing", publish_error=None, approved_by=approved)
+    jobqueue.add_event(job_id, f"{who.label()} approved the fixes \u2014 pushing branch and opening pull request")
+    activity.record(who, "fixes_approved", job_id, job.repo_full_name,
+                    f"{summary.get('fixes_applied') or 0} fix commit(s) \u00b7 validation {summary.get('validation_status') or 'not run'}")
+    threading.Thread(target=_publish_job, args=(job_id, job.repo_url, who), name=f"publish-{job_id[:8]}",
                      daemon=True).start()
     return {"status": "publishing"}
 
@@ -507,7 +549,8 @@ def _test_fixes(summary: dict) -> int:
 
 
 @app.post("/api/v1/jobs/{job_id}/tests", status_code=202)
-def start_tests(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner)):
+def start_tests(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner),
+                who: Actor = Depends(actor)):
     """Push the run's fix branch with a test workflow; GitHub Actions runs every test, the Remediation Agent fixes failures and
     pushes again, up to TEST_FIX_ATTEMPTS times."""
     job = _get_job(job_id, me)
@@ -521,14 +564,20 @@ def start_tests(job_id: str, _: str = Depends(require_api_key), me: str | None =
                                  "branch so GitHub Actions can test it.")
     if summary.get("approval_status") == "publishing":
         raise HTTPException(409, "The pull request is being opened right now. Try again in a moment.")
-    if not testloop.start(job_id):
+    if not testloop.start(job_id, who):  # pushes and fixes with the keys of whoever asked
         return {"status": "running"}
+    jobqueue.add_event(job_id, f"Tests: started by {who.label()}")
+    activity.record(who, "tests_started", job_id, job.repo_full_name)
     return {"status": "started"}
 
 
 @app.post("/api/v1/jobs/{job_id}/tests/cancel")
-def cancel_tests(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner)):
-    _get_job(job_id, me)
+def cancel_tests(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner),
+                 who: Actor = Depends(actor)):
+    job = _get_job(job_id, me)
+    if testloop.is_running(job_id):
+        jobqueue.add_event(job_id, f"Tests: stop requested by {who.label()}", "warning")
+        activity.record(who, "tests_cancelled", job_id, job.repo_full_name)
     testloop.cancel(job_id)
     return {"status": "cancelling" if testloop.is_running(job_id) else "idle"}
 
@@ -545,11 +594,12 @@ class SettingsUpdate(BaseModel):
     llm_fix_attempts: int | None = Field(default=None, ge=1, le=5)
 
 
-def _settings_owner(request: Request, _: str = Depends(require_api_key), me: str | None = Depends(owner),
+def _settings_owner(request: Request, _: str = Depends(require_api_key), who: Actor = Depends(actor),
                     x_cybersuite: str | None = Header(default=None)) -> str | None:
     """Whose settings these are. With the shared sign-in, every signed-in person manages their own keys, from any
     computer; changes need the X-CyberSuite header, which a form on another website cannot send. Without it, the
     server's keys may only be managed from this machine, or by a client with an API key."""
+    me = _keys_of(who)
     if me is not None:
         if request.method != "GET" and x_cybersuite != "settings":
             raise HTTPException(400, "Missing X-CyberSuite header.")
@@ -584,8 +634,13 @@ def read_settings(me: str | None = Depends(_settings_owner)):
     return _settings_view(me)
 
 
+_SETTING_NAMES = {"github_token": "GitHub token", "llm_api_key": "AI key", "llm_model": "AI model",
+                  "llm_provider": "AI provider", "llm_base_url": "AI address",
+                  "max_findings_per_run": "max code fixes per scan", "llm_fix_attempts": "attempts per finding"}
+
+
 @app.put("/api/v1/settings")
-def write_settings(body: SettingsUpdate, me: str | None = Depends(_settings_owner)):
+def write_settings(body: SettingsUpdate, me: str | None = Depends(_settings_owner), who: Actor = Depends(actor)):
     updates = body.model_dump(exclude_unset=True)
     for key in SECRET_KEYS:  # masked placeholders mean "unchanged"
         if isinstance(updates.get(key), str) and updates[key].startswith("•"):
@@ -597,6 +652,11 @@ def write_settings(body: SettingsUpdate, me: str | None = Depends(_settings_owne
             save_runtime_overrides(updates)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(422, f"Invalid settings: {exc}")
+    saved = [_SETTING_NAMES[k] for k, v in updates.items() if v not in (None, "")]
+    removed = [_SETTING_NAMES[k] for k, v in updates.items() if v in (None, "")]
+    if saved or removed:  # which settings, never their values
+        activity.record(who, "settings_changed", detail=" \u00b7 ".join(
+            ([f"saved {', '.join(saved)}"] if saved else []) + ([f"removed {', '.join(removed)}"] if removed else [])))
     return _settings_view(me)
 
 
@@ -733,12 +793,15 @@ def _unreviewed_draft(job: dict) -> bool:
 
 
 @app.post("/api/v1/jobs/{job_id}/draft-reviewed")
-def mark_draft_reviewed(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner)):
+def mark_draft_reviewed(job_id: str, _: str = Depends(require_api_key), me: str | None = Depends(owner),
+                        who: Actor = Depends(actor)):
     """Take an automatically opened draft PR off the Approvals list once a person has looked at it."""
     job = _job_dict(_get_job(job_id, me))
     if not _unreviewed_draft(job):
         raise HTTPException(409, "This scan has no unreviewed draft pull request.")
-    jobqueue.update_summary(job_id, draft_reviewed_at=datetime.now(timezone.utc).isoformat())
+    jobqueue.update_summary(job_id, draft_reviewed_at=datetime.now(timezone.utc).isoformat(),
+                            draft_reviewed_by=who.as_dict())
+    activity.record(who, "draft_reviewed", job_id, job["repo"], (job["summary"] or {}).get("pull_request_url") or "")
     return {"status": "reviewed"}
 
 
@@ -800,6 +863,14 @@ def attention(_: str = Depends(require_api_key), me: str | None = Depends(owner)
     return {"counts": {"approvals": len(approvals), "fixes_needed": len(needed),
                        "errors": len(errors) + len(config_errors)},
             "approvals": approvals, "fixes_needed": needed[:800], "errors": errors, "config_errors": config_errors}
+
+
+@app.get("/api/v1/activity")
+def activity_log(action: str | None = Query(None, max_length=40), q: str | None = Query(None, max_length=200),
+                 limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0),
+                 _: str = Depends(require_api_key), me: str | None = Depends(owner)):
+    """Who did what and when, newest first. With RUNS_VISIBLE_TO=owner, only the signed-in person's own actions."""
+    return activity.listing(limit, offset, action or None, (q or "").strip() or None, only=me)
 
 
 @app.get("/api/v1/vulnerabilities")

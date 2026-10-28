@@ -69,6 +69,20 @@ export const JOB_STATUS: Record<string, { label: string; tone: 'good' | 'warn' |
   cancelled: { label: 'Cancelled', tone: 'warn' },
 }
 
+// The activity log (remediation/activity.py)
+export const ACTIVITY: Record<string, { label: string; tone: 'good' | 'warn' | 'bad' | 'info' | 'idle' }> = {
+  scan_started: { label: 'Started a scan', tone: 'info' },
+  scan_rerun: { label: 'Re-ran a scan', tone: 'info' },
+  scan_cancelled: { label: 'Cancelled a scan', tone: 'warn' },
+  fixes_approved: { label: 'Approved the fixes', tone: 'good' },
+  pr_opened: { label: 'Pull request opened', tone: 'good' },
+  pr_failed: { label: 'Pull request failed', tone: 'bad' },
+  tests_started: { label: 'Ran tests on GitHub', tone: 'info' },
+  tests_cancelled: { label: 'Stopped the tests', tone: 'warn' },
+  draft_reviewed: { label: 'Reviewed a draft PR', tone: 'good' },
+  settings_changed: { label: 'Changed own settings', tone: 'idle' },
+}
+
 export const METHOD: Record<string, { label: string; tone: string }> = {
   dependency: { label: 'Dependency upgrade', tone: 'var(--sky)' },
   rule: { label: 'Safe rewrite', tone: 'var(--teal)' },

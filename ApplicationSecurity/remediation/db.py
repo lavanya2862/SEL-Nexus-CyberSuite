@@ -40,9 +40,10 @@ class Job(Base):
     cache_key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     cached_from: Mapped[str | None] = mapped_column(String(64), nullable=True)
     requested_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    # The signed-in person who started the scan (shared sign-in on): only they see it, and it runs with their keys.
-    # Empty for scans made without the shared sign-in, which nobody sees once it is switched on.
+    # The signed-in person who started (or last re-ran) the scan: it runs with their keys, and with RUNS_VISIBLE_TO=owner
+    # only they see it. Empty for scans made without the shared sign-in.
     owner: Mapped[str | None] = mapped_column(String(320), nullable=True, index=True)
+    owner_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     worker_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -84,6 +85,21 @@ class UserCredentials(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class Activity(Base):
+    """Who did what and when (activity.py): started, re-ran or cancelled a scan, approved fixes, opened a pull
+    request, ran tests, changed their settings. Kept when a scan is gone, so it is not tied to the jobs table."""
+    __tablename__ = "activity"
+
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True, index=True)
+    name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    action: Mapped[str] = mapped_column(String(40), index=True)
+    job_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    repo: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    detail: Mapped[str] = mapped_column(Text, default="")
+
+
 _engine: Engine | None = None
 _Session: sessionmaker | None = None
 _lock = threading.Lock()
@@ -117,7 +133,7 @@ def engine() -> Engine:
 def _migrate(eng: Engine) -> None:
     """Additive, idempotent schema upgrades for databases created by older versions."""
     from sqlalchemy import inspect, text
-    added = {"jobs": {"stages": "JSON", "owner": "VARCHAR(320)"}}
+    added = {"jobs": {"stages": "JSON", "owner": "VARCHAR(320)", "owner_name": "VARCHAR(200)"}}
     insp = inspect(eng)
     for table, columns in added.items():
         existing = {c["name"] for c in insp.get_columns(table)}

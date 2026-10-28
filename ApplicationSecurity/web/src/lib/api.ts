@@ -2,8 +2,8 @@
 // endpoint so every page shares the same cache and refresh timing.
 import { useQuery } from '@tanstack/react-query'
 import type {
-  AgentHistory, AgentId, AgentView, Attention, Capabilities, Dashboard, Finding, Job, JobStatus, Report, Repository,
-  SettingsView, Story,
+  ActivityEntry, AgentHistory, AgentId, AgentView, Attention, Capabilities, Dashboard, Finding, Job, JobStatus, Report,
+  Repository, SettingsView, Story,
 } from '@/lib/types'
 
 const KEY_STORE = 'appvuln-api-key' // only needed when the server sets API_KEYS
@@ -99,6 +99,17 @@ export function useJobs(params: { status?: JobStatus | ''; repo?: string; limit?
     queryKey: ['jobs', params],
     queryFn: () => api<{ total: number; items: Job[] }>(`/api/v1/jobs?${q}`),
     refetchInterval: refetch,
+  })
+}
+
+export function useActivity(params: { action?: string; q?: string; limit?: number } = {}) {
+  const q = new URLSearchParams({ limit: String(params.limit ?? 200) })
+  if (params.action) q.set('action', params.action)
+  if (params.q) q.set('q', params.q)
+  return useQuery({
+    queryKey: ['activity', params],
+    queryFn: () => api<{ total: number; items: ActivityEntry[] }>(`/api/v1/activity?${q}`),
+    refetchInterval: 10_000,
   })
 }
 

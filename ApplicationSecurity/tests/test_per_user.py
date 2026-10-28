@@ -1,4 +1,5 @@
-"""With the shared sign-in on, every person sees only their own scans and uses only their own keys."""
+"""With the shared sign-in on, every person uses only their own keys; with RUNS_VISIBLE_TO=owner they also see only
+their own scans."""
 import base64
 import hashlib
 import hmac
@@ -42,11 +43,19 @@ def suite(tmp_path, monkeypatch):
 
     def browser(email: str, client: tuple[str, int] = ("testclient", 50000)) -> TestClient:
         now = int(time.time())
-        body = _b64(json.dumps({"sub": email, "name": email, "via": "local", "iat": now, "exp": now + 3600}).encode())
+        name = email.split("@")[0].title()
+        body = _b64(json.dumps({"sub": email, "name": name, "via": "local", "iat": now, "exp": now + 3600}).encode())
         c = TestClient(app, base_url="http://127.0.0.1:8500", client=client)
         c.cookies.set("portal_session", f"{body}.{_b64(hmac.new(key, body.encode(), hashlib.sha256).digest())}")
         return c
     return browser
+
+
+@pytest.fixture
+def private(monkeypatch):
+    """RUNS_VISIBLE_TO=owner: every person sees only the scans they started."""
+    monkeypatch.setenv("RUNS_VISIBLE_TO", "owner")
+    config.reset_settings_cache()
 
 
 def _completed_job(owner):
@@ -65,7 +74,7 @@ def _job_urls(job_id):
             ("post", f"/api/v1/jobs/{job_id}/draft-reviewed")]
 
 
-def test_nobody_sees_or_touches_another_persons_scan(suite, fake_world):
+def test_nobody_sees_or_touches_another_persons_scan(suite, private, fake_world):
     job_id = _completed_job(ANA)
     ana, ben = suite(ANA), suite(BEN)
     for method, url in _job_urls(job_id):
@@ -93,7 +102,7 @@ def test_nobody_sees_or_touches_another_persons_scan(suite, fake_world):
     assert ana.get("/api/v1/agents/remediation/history").json()["runs"][0]["job_id"] == job_id
 
 
-def test_scans_belong_to_whoever_started_them_and_old_scans_are_hidden(suite):
+def test_scans_belong_to_whoever_started_them_and_old_scans_are_hidden(suite, private):
     legacy, _ = jobqueue.enqueue("https://github.com/acme/old", "acme/old", JobOptions())  # made before sign-in
     ana, ben = suite(ANA), suite(BEN)
     r = ana.post("/api/v1/jobs", json={"repo_url": "https://github.com/acme/shop"})
