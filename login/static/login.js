@@ -161,7 +161,8 @@
     const start = moduleById(wanted)?.url ? wanted : config.modules.find((m) => m.url)?.id
     loginPicker = picker($('#login-domain'), { multiple: false, items: config.modules.map((m) => ({ ...m, disabled: !m.url })), value: start ? [start] : [] })
     $('#login-domain-note').textContent = 'Choose where you want to start. You can switch domains at any time.'
-    signupPicker = picker($('#signup-domain'), { multiple: true, items: config.modules, value: back ? [back] : [] })
+    // nothing ticked to start with, so nobody signs up for a domain they did not choose themselves
+    signupPicker = picker($('#signup-domain'), { multiple: true, items: config.modules, value: [] })
     $('#signup-domain-note').textContent = 'Select every domain you work in. You can move between them once you’re signed in.'
   }
 
