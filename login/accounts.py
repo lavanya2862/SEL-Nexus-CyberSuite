@@ -28,7 +28,7 @@ COOKIE = "portal_session"
 # Domain ids before the modules were renamed; accounts and cookies made earlier still carry them.
 RENAMED = {"defender_infra": "infrastructure_security", "infrastructure_vulnerabilities": "infrastructure_security",
            "application_vulnerabilities": "application_security"}
-PASSWORD_RULE = "At least 8 characters, with an upper-case letter, a lower-case letter, a number and a symbol"
+PASSWORD_RULE = "Use at least 8 characters, including upper- and lower-case letters, a number and a symbol."
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _SCRYPT = {"n": 2**14, "r": 8, "p": 1, "dklen": 32}
 MAX_FAILURES = 5                      # wrong passwords per email ...
@@ -184,7 +184,7 @@ class Accounts:
             raise AuthError("Enter a valid email address.")
         domains = self.allowed_email_domains
         if domains and email.rsplit("@", 1)[1] not in domains:
-            raise AuthError("Use your work email address (" + ", ".join("@" + d for d in domains) + ").", 403)
+            raise AuthError("Use your company email address (" + ", ".join("@" + d for d in domains) + ").", 403)
 
     def _locked(self, email: str) -> int:
         """Seconds left before this email may try again (0 = not locked)."""
@@ -199,10 +199,10 @@ class Accounts:
 
     def signup(self, body: dict) -> dict:
         if not self.signup_open:
-            raise AuthError("New accounts are switched off. Ask the CyberSuite owner for access.", 403)
+            raise AuthError("Self-service registration is turned off. Contact your CyberSuite administrator for access.", 403)
         email, name, password = normalise_email(body.get("email")), str(body.get("name") or "").strip(), str(body.get("password") or "")
         if not 1 <= len(name) <= 80:
-            raise AuthError("Enter your name.")
+            raise AuthError("Enter your full name.")
         self._check_email(email)
         problem = password_problem(password)
         if problem:
@@ -210,7 +210,7 @@ class Accounts:
         wanted = body.get("domains")
         domains = [d for d in self.domain_names if isinstance(wanted, list) and d in wanted]
         if not domains:
-            raise AuthError("Choose at least one domain you need access to.")
+            raise AuthError("Select the domain access you need.")
         domain = body.get("domain") if body.get("domain") in domains else domains[0]
         user = self.users.create(email, name, password, domains)
         return {"email": user["email"], "name": user["name"], "domains": domains, "domain": domain}
@@ -225,22 +225,22 @@ class Accounts:
 
     def check_domain(self, domain: object, domains: list[str]) -> str:
         if domain not in self.domain_names:
-            raise AuthError("Choose the domain you want to open.")
+            raise AuthError("Select a domain to continue.")
         if domain not in domains:
             have = " or ".join(self.domain_names[d] for d in domains) or "no domain"
-            raise AuthError(f"Your account does not include {self.domain_names[domain]}. Choose {have}, "
-                            "or ask the CyberSuite owner for access.", 403)
+            raise AuthError(f"Your account doesn't have access to {self.domain_names[domain]}. Select {have}, "
+                            "or contact your CyberSuite administrator to request access.", 403)
         return str(domain)
 
     def login(self, body: dict) -> dict:
         email, password = normalise_email(body.get("email")), str(body.get("password") or "")
         wait = self._locked(email)
         if wait:
-            raise AuthError(f"Too many wrong passwords. Try again in {max(1, wait // 60)} minute(s).", 429)
+            raise AuthError(f"Too many unsuccessful attempts. Try again in {max(1, wait // 60)} minute(s).", 429)
         user = self.users.verify(email, password) if email and password else None
         if not user:
             self._failed(email)
-            raise AuthError("Wrong email or password.", 401)
+            raise AuthError("The email or password is incorrect.", 401)
         domains = self.user_domains(user)
         domain = self.check_domain(body.get("domain"), domains)
         return {"email": user["email"], "name": user["name"], "domains": domains, "domain": domain}
