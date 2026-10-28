@@ -2,24 +2,25 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  AlertTriangle, ArrowRight, Check, CheckCircle2, Clock, Download, Hand, Minus, Play, Terminal, WifiOff, X, XCircle,
+  AlertTriangle, ArrowRight, BellRing, Check, CheckCircle2, ChevronDown, Clock, Download, Hand, Minus, Play, Radar, ShieldAlert, Terminal, WifiOff, X, XCircle,
 } from 'lucide-react'
 import { Panel } from '@/components/kit'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { NewFixes } from '@/components/NewFixes'
 import { dateTime } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import {
-  PLANNED_STEPS, UC_DOT, UC_KEYS, UC_NAME, fmtSeconds, typicalLabel, useElapsed, useRuns, type RunState, type StepStatus, type UcKey,
+  PLANNED_STEPS, UC_DOT, UC_KEYS, UC_NAME, fmtSeconds, typicalLabel, useElapsed, useRuns, type RunFinding, type RunState, type StepStatus, type UcKey,
 } from '@/lib/runs'
 
 type ViewStep = { label: string; description: string; status: StepStatus; detail: string; started_at: string | null; finished_at: string | null }
 
 const RESULTS: Record<UcKey, { to: string; label: string }> = {
-  uc3: { to: '/uc3', label: 'See the vulnerabilities' },
-  uc1: { to: '/uc1', label: 'See the threat news' },
-  uc4: { to: '/respond', label: 'See the alert queue' },
-  attack: { to: '/uc1/hunts', label: 'See the signs of attack' },
+  uc3: { to: '/uc3', label: 'View vulnerabilities' },
+  uc1: { to: '/uc1', label: 'View threat intelligence' },
+  uc4: { to: '/respond', label: 'View alert queue' },
+  attack: { to: '/uc1/hunts', label: 'View detections' },
 }
 
 export function Runs() {
@@ -47,7 +48,7 @@ export function Runs() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
-          <p className="mt-1 text-sm text-ink-3">Four agents, each doing one job end to end. Run one and watch every step finish; it keeps going even if you close this page.</p>
+          <p className="mt-1 text-sm text-ink-3">Run an agent on demand and track each stage in real time. Runs continue in the background if you leave this page.</p>
         </div>
         <div className="flex rounded-xl border border-hairline bg-panel p-1" role="tablist" aria-label="Agent">
           {UC_KEYS.map((k) => {
@@ -72,7 +73,7 @@ export function Runs() {
         <div className="flex items-start gap-3 rounded-xl border px-4 py-3 text-sm animate-in fade-in" style={{ borderColor: statusColor.warning }}>
           <WifiOff className="mt-0.5 size-4 shrink-0" style={{ color: statusColor.warning }} />
           <span>
-            <b>Lost contact with the portal.</b> A run keeps going in the background and is recorded; this page catches up as soon as the
+            <b>Connection to the portal service was lost.</b> A run keeps going in the background and is recorded; this page catches up as soon as the
             portal answers again. The timer is paused until then.
           </span>
         </div>
@@ -96,10 +97,12 @@ export function Runs() {
             </div>
             <button
               onClick={() => start(uc)}
-              disabled={running}
+              disabled={running || waiting}
+              title={waiting ? 'Paused: approve or defer every new remediation below to run again' : undefined}
               className="inline-flex items-center gap-2 rounded-xl btn-blue px-5 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Play className="size-4" /> {running ? 'Running…' : run ? 'Run again' : `Run ${UC_NAME[uc].toLowerCase()} now`}
+              {waiting ? <Hand className="size-4" /> : <Play className="size-4" />}
+              {running ? 'Running…' : waiting ? 'Paused: decide the fixes first' : run ? 'Run again' : `Run ${UC_NAME[uc].toLowerCase()} now`}
             </button>
           </div>
         </div>
@@ -141,14 +144,14 @@ function StatusHeadline({ run, uc, elapsed, running, current, total, offline, wa
   if (running && run) {
     icon = <span className="relative grid size-5 place-items-center"><span className="absolute size-5 animate-ping rounded-full bg-sky/40" /><span className="size-2.5 rounded-full bg-sky" /></span>
     title = current >= 0 ? `Step ${current + 1} of ${total}: ${run.steps[current].label}` : 'Starting…'
-    sub = `Started ${dateTime(run.started_at)} · ${fmtSeconds(elapsed)} so far${offline ? ' (paused: portal not answering)' : ''} · ${typical}`
+    sub = `Started ${dateTime(run.started_at)} · ${fmtSeconds(elapsed)} so far${offline ? ' (paused: portal service unavailable)' : ''} · ${typical}`
   } else if (running) {
     title = 'Starting…'
   } else if (run) {
     const map = {
       ok: { i: <CheckCircle2 className="size-5" style={{ color: statusColor.good }} />, t: `Finished in ${fmtSeconds(elapsed)}` },
       partial: { i: <AlertTriangle className="size-5" style={{ color: statusColor.warning }} />, t: `Finished with problems in ${fmtSeconds(elapsed)}` },
-      skipped: { i: <AlertTriangle className="size-5" style={{ color: statusColor.warning }} />, t: 'Skipped: another run was already going' },
+      skipped: { i: <AlertTriangle className="size-5" style={{ color: statusColor.warning }} />, t: 'Skipped: another run was already in progress' },
       failed: { i: <XCircle className="size-5" style={{ color: statusColor.critical }} />, t: 'The run stopped' },
       running: { i: icon, t: title },
     } as const
@@ -158,8 +161,8 @@ function StatusHeadline({ run, uc, elapsed, running, current, total, offline, wa
     if (waiting) {
       const open = run.fix?.open ?? 0
       icon = <Hand className="size-5 animate-pulse" style={{ color: statusColor.warning }} />
-      title = `Waiting for you: ${open} new fix${open === 1 ? '' : 'es'} to decide`
-      sub = `The agent finished in ${fmtSeconds(elapsed)}. Press Fix or Save for later on each card below to finish the run.`
+      title = `Action required: ${open} new remediation${open === 1 ? '' : 's'} awaiting approval`
+      sub = `The agent finished in ${fmtSeconds(elapsed)}. Approve or defer each remediation below to complete the run.`
     }
   }
   return (
@@ -203,7 +206,7 @@ function StepColumn({ step, index, first, last, prevDone, live }: { step: ViewSt
       <Node status={step.status} n={index + 1} />
       <div className={cn('mt-4 text-sm font-medium leading-snug transition-colors', step.status === 'pending' ? 'text-ink-3' : 'text-ink')}>{step.label}</div>
       <p key={step.detail || step.description} className={cn('mt-1 line-clamp-3 max-w-[22ch] text-xs leading-relaxed animate-in fade-in slide-in-from-bottom-1 duration-300', step.status === 'waiting' ? 'font-medium text-ink' : 'text-ink-3')}>
-        {step.status === 'skipped' ? 'Not needed this time' : step.detail || step.description}
+        {step.status === 'skipped' ? 'Not required for this run' : step.detail || step.description}
       </p>
       <div className="tabular mt-2 h-4 text-[11px] font-medium" style={{ color: step.status === 'running' ? 'var(--sky)' : 'var(--ink-3)' }}>
         {step.status === 'running' ? fmtSeconds(secs) : done && step.status !== 'skipped' && step.started_at ? fmtSeconds(secs) : ''}
@@ -295,11 +298,7 @@ function ResultPanel({ run, uc, seconds }: { run: RunState; uc: UcKey; seconds: 
               </Link>
             )}
             <Link to="/" className="inline-flex items-center gap-2 rounded-xl border border-hairline px-4 py-2.5 text-sm font-medium hover:bg-well">Open the Dashboard</Link>
-            {(run.report_files?.length ? run.report_files : run.report_file ? [run.report_file] : []).map((name) => (
-              <a key={name} href={`/api/files/${run.files_from ?? 'uc1'}/${encodeURIComponent(name)}`} className="inline-flex items-center gap-2 rounded-xl border border-hairline px-4 py-2.5 text-sm font-medium hover:bg-well">
-                <Download className="size-4" /> Report ({{ xlsx: 'Excel', docx: 'Word', pdf: 'PDF' }[name.split('.').pop() ?? ''] ?? 'file'})
-              </a>
-            ))}
+            <ReportButton run={run} />
           </div>
         </div>
 
@@ -321,8 +320,83 @@ function ResultPanel({ run, uc, seconds }: { run: RunState; uc: UcKey; seconds: 
             ))}
           </div>
         )}
+
+        {good && !!run.findings?.length && <Findings items={run.findings} />}
       </div>
     </Panel>
+  )
+}
+
+const FORMAT: Record<string, string> = { xlsx: 'Excel', docx: 'Word', pdf: 'PDF' }
+
+/** One "Download report" button; with several formats (Word, PDF, Excel) it opens a small menu to pick one */
+function ReportButton({ run }: { run: RunState }) {
+  const files = run.report_files?.length ? run.report_files : run.report_file ? [run.report_file] : []
+  if (!files.length) return null
+  const href = (name: string) => `/api/files/${run.files_from ?? 'uc1'}/${encodeURIComponent(name)}`
+  const label = (name: string) => FORMAT[name.split('.').pop() ?? ''] ?? 'File'
+  const cls = 'inline-flex items-center gap-2 rounded-xl border border-hairline px-4 py-2.5 text-sm font-medium hover:bg-well'
+  if (files.length === 1)
+    return <a href={href(files[0])} className={cls}><Download className="size-4" /> Download report</a>
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className={cls}><Download className="size-4" /> Download report <ChevronDown className="size-3.5 text-ink-3" /></button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        {files.map((name) => (
+          <DropdownMenuItem key={name} asChild>
+            <a href={href(name)}>{label(name)}</a>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+const FINDING_KIND = {
+  threat: { label: 'Threat affecting us', icon: ShieldAlert },
+  attack: { label: 'Detection', icon: Radar },
+  alert: { label: 'Alert sent', icon: BellRing },
+} as const
+
+const RATING_COLOR: Record<string, string> = {
+  Critical: statusColor.critical, High: statusColor.warning, Medium: 'var(--sky)', Low: 'var(--ink-3)',
+}
+
+/** The run's new threats, signs of attack and alerts by name: what it is, why it matters, where, and what to do */
+function Findings({ items }: { items: RunFinding[] }) {
+  return (
+    <div className="mt-6">
+      <h3 className="text-sm font-semibold tracking-tight">Found in this run</h3>
+      <ul className="mt-3 flex flex-col divide-y divide-hairline rounded-xl border border-hairline">
+        {items.map((f) => {
+          const K = FINDING_KIND[f.kind]
+          return (
+            <li key={`${f.kind}:${f.id}`}>
+              <Link to={f.to} className="group flex gap-3 px-4 py-3.5 hover:bg-well">
+                <K.icon className="mt-0.5 size-4 shrink-0 text-ink-3" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-3">
+                    <span>{K.label}</span>
+                    {f.rating && <span className="font-semibold" style={{ color: RATING_COLOR[f.rating] }}>{f.rating}</span>}
+                  </div>
+                  <div className="mt-0.5 text-sm font-medium group-hover:underline">{f.title}</div>
+                  {f.why && <p className="mt-1 text-xs leading-relaxed text-ink-2"><b className="font-medium">Why: </b>{f.why}</p>}
+                  {(f.where || f.action) && (
+                    <p className="mt-0.5 text-xs leading-relaxed text-ink-3">
+                      {f.where && <>On <b className="font-medium text-ink-2">{f.where}</b>. </>}
+                      {f.action && <>First step: {f.action}</>}
+                    </p>
+                  )}
+                </div>
+                <ArrowRight className="mt-0.5 size-4 shrink-0 text-ink-3 opacity-0 transition-opacity group-hover:opacity-100" />
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }
 
@@ -385,7 +459,7 @@ function LogPanel({ uc, run, live }: { uc: UcKey; run: RunState | null; live: bo
         </div>
       </div>
       <div ref={box} className="h-[420px] overflow-auto bg-[#0f1115] px-4 py-3 font-mono text-[12px] leading-[1.65] text-[#c9ced6]">
-        {!run && <div className="text-[#7d8590]">No run yet. Press Run to start one; its output appears here as it happens.</div>}
+        {!run && <div className="text-[#7d8590]">No runs yet. Start an agent to stream its output here.</div>}
         {shown.map((l, i) => <LogLine key={i} line={l} />)}
         {live && <div className="mt-1 flex items-center gap-2 text-[#7d8590]"><span className="size-1.5 animate-pulse rounded-full bg-[#58a6ff]" /> waiting for the next line…</div>}
       </div>

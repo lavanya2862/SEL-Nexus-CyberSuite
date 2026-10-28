@@ -88,6 +88,9 @@ CREATE TABLE IF NOT EXISTS ai_usage (
     day DATE, model VARCHAR, purpose VARCHAR, calls INTEGER, failures INTEGER, PRIMARY KEY (day, model, purpose));
 """
 
+# Step results name at most this many new threats / signs of attack / alerts (by id) for the portal's run page
+NEW_IDS_SHOWN = 20
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)

@@ -6,11 +6,11 @@ export type Verdict = 'likely_true_positive' | 'needs_investigation' | 'likely_f
 
 // Microsoft Defender's own classification words (same as UC4's labels.py) + a plain-English help line + colour.
 export const VERDICT: Record<Verdict, { label: string; short: string; color: string; help: string }> = {
-  likely_true_positive: { label: 'True positive', short: 'True positive', color: statusColor.critical, help: 'A real attack: the evidence points to a real attacker. Act now.' },
-  needs_investigation: { label: 'Needs review', short: 'Needs review', color: statusColor.warning, help: 'The AI could not decide, or Microsoft rated it too serious for the agent to close.' },
-  likely_false_positive: { label: 'False positive', short: 'False positive', color: 'var(--sky)', help: 'Nothing to worry about: the alarm was wrong, or the activity was harmless (for example our own antivirus test).' },
+  likely_true_positive: { label: 'True positive', short: 'True positive', color: statusColor.critical, help: 'Confirmed malicious activity: the evidence indicates a genuine attack. Respond immediately.' },
+  needs_investigation: { label: 'Needs review', short: 'Needs review', color: statusColor.warning, help: 'The agent could not classify it, or Microsoft rated it too severe for automated closure.' },
+  likely_false_positive: { label: 'False positive', short: 'False positive', color: 'var(--sky)', help: 'Benign: the alert was a false detection or the activity was authorised.' },
   // older verdicts only: harmless activity is now filed as a false positive
-  benign_positive: { label: 'False positive', short: 'False positive', color: 'var(--sky)', help: 'Nothing to worry about: the alarm was wrong, or the activity was harmless.' },
+  benign_positive: { label: 'False positive', short: 'False positive', color: 'var(--sky)', help: 'Benign: the alert was a false detection or the activity was authorised.' },
 }
 export const VERDICT_ORDER: Verdict[] = ['likely_true_positive', 'likely_false_positive', 'needs_investigation']
 export const verdictMeta = (v: string) => VERDICT[v as Verdict] ?? { label: v || '–', short: v || '–', color: 'var(--ink-3)', help: '' }
@@ -67,7 +67,7 @@ export interface QueueRow {
 export const RULES: Record<string, { label: string; basis: string; link: string; linkText: string }> = {
   microsoft_high_severity: { label: 'Microsoft rated it high severity', basis: 'Microsoft', link: 'https://learn.microsoft.com/en-us/defender-xdr/incident-queue', linkText: 'Microsoft: severity levels' },
   microsoft_malicious_evidence: { label: 'Defender marked evidence as malicious', basis: 'Microsoft', link: 'https://learn.microsoft.com/en-us/graph/api/resources/security-alertevidence?view=graph-rest-1.0', linkText: 'Microsoft: evidence verdicts' },
-  injection_marker: { label: 'Attacker text tried to instruct the AI', basis: 'AI protection', link: 'https://owasp.org/www-project-top-10-for-large-language-model-applications/', linkText: 'OWASP: prompt injection' },
+  injection_marker: { label: 'Attacker text tried to instruct the agent', basis: 'Agent protection', link: 'https://owasp.org/www-project-top-10-for-large-language-model-applications/', linkText: 'OWASP: prompt injection' },
 }
 export const ruleMeta = (id: string) => RULES[id] ?? { label: id.replace(/_/g, ' '), basis: 'Older team rule (no longer used)', link: '', linkText: '' }
 export const mitreLink = (t: string) => `https://attack.mitre.org/techniques/${t.toUpperCase().replace('.', '/')}/`

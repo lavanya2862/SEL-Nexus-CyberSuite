@@ -78,13 +78,13 @@ export function NotificationBell() {
         <div className="flex items-center justify-between border-b border-hairline px-4 py-3">
           <div>
             <div className="text-sm font-semibold text-ink">Notifications</div>
-            <div className="text-xs text-ink-3">{unread ? `${unread} new` : 'You’re up to date'} · updates by itself</div>
+            <div className="text-xs text-ink-3">{unread ? `${unread} new` : 'No new notifications'} · updates by itself</div>
           </div>
           {unread > 0 && <CheckCheck className="size-4 text-ink-3" aria-hidden />}
         </div>
         <div className="max-h-[min(480px,70svh)] overflow-y-auto py-1">
-          {isError && <p className="px-4 py-6 text-sm text-ink-3">Couldn’t load notifications right now.</p>}
-          {!isError && !items.length && <p className="px-4 py-6 text-sm text-ink-3">Nothing yet. Alerts and automatic actions show up here.</p>}
+          {isError && <p className="px-4 py-6 text-sm text-ink-3">Unable to load notifications.</p>}
+          {!isError && !items.length && <p className="px-4 py-6 text-sm text-ink-3">No notifications. Alerts and automated actions will appear here.</p>}
           {items.map((n) => {
             const Icon = KIND_ICON[n.kind] ?? Bell
             const isNew = n.at > seen

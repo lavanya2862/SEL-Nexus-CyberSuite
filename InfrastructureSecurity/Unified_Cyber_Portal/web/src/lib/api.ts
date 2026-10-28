@@ -14,6 +14,8 @@ export interface Health {
   coverage?: number | null
   rows?: number | null
   defender_count?: number | null
+  vulnerabilities?: number | null
+
   run_id?: string | null
   model?: string | null
 }

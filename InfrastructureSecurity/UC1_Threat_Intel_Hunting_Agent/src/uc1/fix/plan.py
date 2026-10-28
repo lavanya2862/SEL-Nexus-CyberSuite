@@ -20,7 +20,7 @@ from uc1.config import Settings, read_csv
 from uc1.fix.state import FixState, event
 from uc1.store import Store, utcnow
 
-STAGES = {1: "Urgent: known exploited", 2: "End-of-life", 3: "Other updates", 4: "No action needed"}
+STAGES = {1: "Urgent", 2: "End-of-life", 3: "Other updates", 4: "No action needed"}
 ACTIONS = {"upgrade", "remove", "replace", "none"}
 PACKAGE_ID = re.compile(r"^[A-Za-z0-9.+_-]{1,80}$")
 PATTERN = re.compile(r"^[A-Za-z0-9 .+_()*{}-]{1,60}$")
@@ -229,7 +229,7 @@ def compute(store: Store, settings: Settings, catalog: dict[str, dict] | None = 
             item.update(app=r["software_name"], action="none", winget_id="", choco_id="", match="", processes=[],
                         stage=4, note="Not in config/fix_catalog.csv yet: add a row to make it fixable")
         if item["action"] != "none" and item["kev"] and item["stage"] > 1:
-            item["stage"] = 1                                     # anything actively exploited is urgent
+            item["stage"] = 1                                     # anything on the CISA KEV list is urgent
         items.append(item)
     threats = threats_by_fix(store)
     for item in items:

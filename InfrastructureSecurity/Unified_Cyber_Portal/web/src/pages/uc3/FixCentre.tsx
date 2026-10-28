@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
-  AlertTriangle, Check, ChevronDown, Copy, ExternalLink, Loader2, Play, Search, ShieldCheck, ShoppingBasket,
+  AlertTriangle, Check, ChevronDown, ChevronRight, Copy, RotateCcw, ExternalLink, ListChecks, Loader2, Play, Search, ShieldCheck, ShoppingBasket,
   SlidersHorizontal, Sparkles, Undo2, UserRound, X, Zap,
 } from 'lucide-react'
 import { ConfirmDialog, StatusPill } from '@/components/FixLoop'
-import { Empty, HopLink, Panel, Tabs, Tag } from '@/components/kit'
+import { Choice, Empty, HopLink, Panel, Tabs, Tag } from '@/components/kit'
 import { FixHistory } from './FixHistory'
 import { AttackResponses } from './AttackResponses'
-import { AgentFilterBar, AgentTags, RowFound, belongs, useAgentFilter } from '@/components/AgentTags'
+import { AgentFilterBar, AgentTags, RowFound, RunBanner, belongs, useAgentFilter } from '@/components/AgentTags'
+import { VulnList } from '@/components/VulnList'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { FixDown, canApprove, isSetting, settingChange, useFix, useFixAction, type FixRow, type FixView } from '@/lib/fix'
@@ -16,15 +17,16 @@ import { useFilters } from '@/lib/filters'
 import { ago, num, shortDate } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
-import { useKevThreatHref } from '@/lib/uc1'
+import { UC_DOT, UC_NAME } from '@/lib/runs'
+import { useThreatMatchCounts } from '@/lib/uc1'
 import { fixKind, nearEos, pastEos, useUc3Data, useUc3View, type FixKind, type Uc3FixApp, type Uc3FixSetting } from '@/lib/uc3'
 import { GettingReady, useAutoStart } from '@/lib/services'
 import { Uc3Loading } from './common'
 
 const LEVEL = {
-  1: { label: 'Fix now', color: statusColor.critical },
-  2: { label: 'Fix this month', color: statusColor.warning },
-  3: { label: 'Plan in the next update cycle', color: 'var(--ink-3)' },
+  1: { label: 'Immediate', color: statusColor.critical },
+  2: { label: 'Within 30 days', color: statusColor.warning },
+  3: { label: 'Next patch cycle', color: 'var(--ink-3)' },
 } as const
 
 const softwareOf = (a: Uc3FixApp) => a.key.split(':').pop() ?? ''
@@ -36,14 +38,14 @@ const findApp = (apps: Uc3FixApp[], focus: string) => {
 }
 
 type View = 'cards' | 'settings' | 'attacks' | 'history'
-const VIEWS: [View, string][] = [['cards', 'Updates & upgrades'], ['settings', 'Security settings'], ['attacks', 'Attack responses'], ['history', 'Fixed history']]
+const VIEWS: [View, string][] = [['cards', 'Updates & upgrades'], ['settings', 'Security settings'], ['attacks', 'Attack responses'], ['history', 'Remediation history']]
 
 /** The fix-type chips on Updates & upgrades (?type= picks one, e.g. from the Vulnerabilities overview). */
 const KINDS: [FixKind, string, string][] = [
   ['update', 'App updates', 'A newer version of the app fixes the vulnerabilities'],
   ['os', 'Windows updates', 'The vulnerabilities are in Windows itself: install the Windows update (Windows Update, WSUS or Intune), usually with a restart'],
-  ['upgrade', 'Unsupported software', 'Past or near its end-of-support date: the vendor stops fixing it, so move to a supported version'],
-  ['none', 'No fix yet', 'The vendor has not released a fix: reduce the risk another way until it comes'],
+  ['upgrade', 'Unsupported software', 'At or near end of support: the vendor no longer issues fixes, so upgrade to a supported version'],
+  ['none', 'No fix yet', 'The vendor has not released a fix: apply compensating controls until one is available'],
 ]
 const KIND_PHRASE: Record<FixKind, [string, string]> = {
   update: ['app update', 'app updates'], os: ['Windows update', 'Windows updates'],
@@ -59,8 +61,8 @@ export function FixCentre() {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Fix</h1>
-          <p className="mt-1 text-sm text-ink-3">Fix the vulnerabilities and tighten the settings before attackers use them: updates, upgrades and security settings, or let the portal fix them for you</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Remediation</h1>
+          <p className="mt-1 text-sm text-ink-3">Remediate vulnerabilities and harden security settings through updates, upgrades and configuration changes, manually or with automated remediation</p>
         </div>
       </div>
       <Tabs<View> tabs={VIEWS} value={view} onChange={(t) => navigate(t === 'cards' ? '/fixes' : `/fixes/${t}`)} />
@@ -76,8 +78,9 @@ function FixCards() {
   const fix = useFix()
   const act = useFixAction()
   const { opco } = useFilters()
-  const [params] = useSearchParams()
-  const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
+  const matchCounts = useThreatMatchCounts().data
+  const inNews = matchCounts?.counts
   const [level, setLevel] = useState<0 | 1 | 2 | 3>(0)
   const typeParam = params.get('type')
   const [kind, setKind] = useState<'all' | FixKind>(KINDS.some(([k]) => k === typeParam) ? (typeParam as FixKind) : 'all')
@@ -96,6 +99,20 @@ function FixCards() {
     return m
   }, [v])
 
+  // Per app: computer + CVE pairs Defender reports fixed that no version on that computer still has (the card's "fixed"
+  // and the vulnerabilities pop-up count the same way). null for data built before the fixed list existed.
+  const fixedPairs = useMemo(() => {
+    if (!data?.fixed) return null
+    const F = data.f.cols, X = data.fixed.cols
+    const open = new Set(data.f.rows.map((r) => `${r[F.indexOf('sw')]}|${r[F.indexOf('d')]}|${r[F.indexOf('cve')]}`))
+    const m = new Map<string, Set<string>>()
+    for (const r of data.fixed.rows) {
+      const sw = String(r[X.indexOf('sw')]), pair = `${r[X.indexOf('d')]}|${r[X.indexOf('cve')]}`
+      if (!open.has(`${sw}|${pair}`)) m.set(sw, (m.get(sw) ?? new Set()).add(pair))
+    }
+    return new Map([...m].map(([sw, pairs]) => [sw, pairs.size]))
+  }, [data])
+
   // ?app=<name> or ?sw=<software> (from "Fix this" buttons elsewhere): scroll to that card and highlight it
   const focus = params.get('sw') ?? params.get('app')
   const fixSettled = fix.isFetched || fix.isError
@@ -112,18 +129,30 @@ function FixCards() {
 
   if (isLoading || error || !data) return <Uc3Loading error={error} />
   const X = data.fixes
-  if (!X) return <Empty text="The fix guide has not been built yet. Run the vulnerability update to create it." />
+  if (!X) return <Empty text="Remediation guidance is not available yet. Run the Vulnerability Agent to generate it." />
   const rowsOf = (a: Uc3FixApp) => rowsBySoftware.get(softwareOf(a)) ?? []
   const inOpcoAll = X.apps.filter((a) => opco === 'all' || a.opcos.includes(opco))
-  const agentCounts = { uc3: inOpcoAll.filter((a) => rowsOf(a).some((r) => belongs(r, 'uc3'))).length, uc1: inOpcoAll.filter((a) => rowsOf(a).some((r) => belongs(r, 'uc1'))).length }
-  const inOpco = agentFilter.agent ? inOpcoAll.filter((a) => rowsOf(a).some(agentFilter.matches)) : inOpcoAll
+  // in the news before the Vulnerability Agent found it (the portal drops later matches); once known, this decides Threat Intel
+  const newsOf = (a: Uc3FixApp) => (inNews ? inNews[softwareOf(a)] ?? 0 : undefined)
+  const isAgent = (a: Uc3FixApp, ag: 'uc3' | 'uc1') => (ag === 'uc1' && newsOf(a) === 0 ? false : rowsOf(a).some((r) => belongs(r, ag)))
+  const agentCounts = { uc3: inOpcoAll.filter((a) => isAgent(a, 'uc3')).length, uc1: inOpcoAll.filter((a) => isAgent(a, 'uc1')).length }
+  const inOpco = agentFilter.agent ? inOpcoAll.filter((a) => isAgent(a, agentFilter.agent!) && rowsOf(a).some(agentFilter.matches)) : inOpcoAll
   const ofKind = (k: FixKind) => inOpco.filter((a) => fixKind(a) === k).length
   const inKind = inOpco.filter((a) => kind === 'all' || fixKind(a) === kind)
   const apps = inKind.filter((a) => (level === 0 || a.urgency.level === level) && (!q || a.app.toLowerCase().includes(q.toLowerCase())))
   const count = (l: number) => inKind.filter((a) => a.urgency.level === l).length
   const pickKind = (k: 'all' | FixKind) => {
     setKind(k)
-    navigate({ search: k === 'all' ? '' : `?type=${k}` }, { replace: true })
+    const n = new URLSearchParams(params)               // keep the other filters (agent, run) in the address
+    if (k === 'all') n.delete('type')
+    else n.set('type', k)
+    setParams(n, { replace: true })
+  }
+  const clearFilters = () => {
+    setQ(''); setLevel(0); setKind('all')
+    const n = new URLSearchParams(params)
+    for (const key of ['type', 'agent', 'since']) n.delete(key)
+    setParams(n, { replace: true })
   }
   const noFixSw = new Set(X.apps.filter((a) => fixKind(a) === 'none').map(softwareOf))   // nothing to install yet
   const urgentRows = (v?.rows ?? []).filter((r) => r.stage === 1 && canApprove(r) && !noFixSw.has(r.software_name))
@@ -133,6 +162,13 @@ function FixCards() {
   const highlighted = focus ? findApp(X.apps, focus) : undefined
   const settings = (X.settings ?? []).filter((s) => opco === 'all' || s.opcos.includes(opco)).length
   const verified = (v?.rows ?? []).filter((r) => r.status === 'verified')
+  // ?vulns=<software>: that card's vulnerabilities pop-up (a link can open it; Back closes it)
+  const listSw = params.get('vulns')
+  const listApp = listSw ? apps.find((a) => softwareOf(a) === listSw) ?? X.apps.find((a) => softwareOf(a) === listSw) : undefined
+  const showList = (a: Uc3FixApp, replace = false) => { const n = new URLSearchParams(params); n.set('vulns', softwareOf(a)); setParams(n, { replace }) }
+  const closeList = () => { const n = new URLSearchParams(params); n.delete('vulns'); setParams(n, { replace: true }) }
+  const listAt = listApp ? apps.indexOf(listApp) : -1
+  const step = (a: Uc3FixApp | undefined) => (a ? { name: a.app, go: () => showList(a, true) } : undefined)
 
   return (
     <div className="flex flex-col gap-5">
@@ -155,57 +191,73 @@ function FixCards() {
           <p className="mt-1.5">
             {noPatch > 0
               ? <><b style={{ color: statusColor.warning }}>{num(noPatch)} have no fix from the vendor yet</b>: their cards say how to protect the computers until one comes.</>
-              : <>Every vulnerability has a fix from its vendor today.</>}
+              : <>Every vulnerability currently has a vendor fix.</>}
           </p>
           <p className="mt-1.5 text-xs text-ink-3">
-            Urgency, numbers and commands come from Defender data and fixed catalogues; the AI only explains them. Built {ago(X.built_at)}.
+            Urgency, numbers and commands come from Defender data and fixed catalogues; the agent only explains them. Built {ago(X.built_at)}.
           </p>
           {verified.length > 0 && (
             <Link to="/fixes/history" className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium hover:underline" style={{ color: statusColor.good }}
               title={verified.map((r) => `${r.app} on ${r.device_name}`).join('\n')}>
-              <ShieldCheck className="size-4" /> Already fixed: {verified.length} · verified by Defender · see the history
+              <ShieldCheck className="size-4" /> Remediated: {verified.length} · verified by Defender · view history
             </Link>
           )}
         </div>
       </Panel>
 
-      <AgentFilterBar filter={agentFilter} counts={agentCounts} total={inOpcoAll.length} what="app fixes" />
-
-      <div className="flex flex-wrap gap-1 rounded-xl border border-hairline bg-panel p-1 text-sm" role="group" aria-label="How it gets fixed">
-        {([['all', 'All fixes', 'Every update and upgrade', inOpco.length], ...KINDS.map(([k, l, h]) => [k, l, h, ofKind(k)] as const)] as const).map(([k, label, hint, n]) => (
-          <button key={k} onClick={() => pickKind(k)} aria-pressed={kind === k} title={hint}
-            className={cn('flex items-center gap-2 rounded-lg px-3.5 py-1.5', kind === k ? 'pill-on' : 'hover:bg-well', !n && kind !== k && 'text-ink-3')}>
-            {label} <span className="tabular opacity-60">{n}</span>
-          </button>
-        ))}
-      </div>
-      {kind !== 'all' && <p className="-mt-2 text-xs text-ink-3">{KINDS.find(([k]) => k === kind)?.[2]}.</p>}
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2 text-sm">
-          {([[0, 'All', inKind.length], [1, LEVEL[1].label, count(1)], [2, LEVEL[2].label, count(2)], [3, LEVEL[3].label, count(3)]] as const).map(([l, label, n]) => (
-            <button key={l} onClick={() => setLevel(l)} aria-pressed={level === l}
-              className={cn('flex items-center gap-2 rounded-full border px-3.5 py-1.5', level === l ? 'pill-on' : 'border-hairline bg-panel hover:bg-well')}>
-              {l !== 0 && <span className="size-2 rounded-full" style={{ background: LEVEL[l].color }} />}
-              {label} <span className="tabular opacity-60">{n}</span>
-            </button>
-          ))}
+      {/* one filter panel: search, then three labelled choices (each option shows how many apps it has) */}
+      <Panel className="flex flex-col gap-3 p-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(0,1fr))]">
+          <Field label="Find an app">
+            <label className="flex items-center gap-2 rounded-lg border border-hairline-strong bg-field px-3 py-2 text-sm transition-[border-color,box-shadow] focus-within:border-blue/60 focus-within:ring-3 focus-within:ring-blue/15">
+              <Search className="size-3.5 shrink-0 text-ink-3" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Firefox, Java, Windows…" aria-label="Find an app" className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-ink-3" />
+            </label>
+          </Field>
+          <Field label="Found by">
+            <Choice label="Found by" value={agentFilter.agent ?? 'all'} onChange={(a) => agentFilter.set(a === 'all' ? null : a as 'uc3' | 'uc1')} options={[
+              { value: 'all', label: 'All agents', count: inOpcoAll.length },
+              { value: 'uc3', label: UC_NAME.uc3, count: agentCounts.uc3, dot: 'var(--sky)' },
+              { value: 'uc1', label: UC_NAME.uc1, count: agentCounts.uc1, dot: 'var(--violet)' }]} />
+          </Field>
+          <Field label="Fix type">
+            <Choice label="Fix type" value={kind} onChange={(k) => pickKind(k as 'all' | FixKind)}
+              options={[{ value: 'all', label: 'All fix types', count: inOpco.length }, ...KINDS.map(([k, l]) => ({ value: k, label: l, count: ofKind(k) }))]} />
+          </Field>
+          <Field label="Urgency">
+            <Choice label="Urgency" value={String(level)} onChange={(l) => setLevel(Number(l) as 0 | 1 | 2 | 3)} options={[
+              { value: '0', label: 'All urgencies', count: inKind.length },
+              ...([1, 2, 3] as const).map((l) => ({ value: String(l), label: LEVEL[l].label, count: count(l), dot: LEVEL[l].color }))]} />
+          </Field>
         </div>
-        <label className="flex items-center gap-2 rounded-lg border border-hairline-strong bg-field px-3 py-1.5 text-sm transition-[border-color,box-shadow] focus-within:border-blue/60 focus-within:ring-3 focus-within:ring-blue/15">
-          <Search className="size-3.5 text-ink-3" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find an app" className="w-40 bg-transparent outline-none placeholder:text-ink-3" />
-        </label>
-      </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
+          <span>Showing <b className="text-ink-2">{num(apps.length)}</b> of {num(inOpcoAll.length)} apps</span>
+          {kind !== 'all' && <span>· {KINDS.find(([k]) => k === kind)?.[2]}</span>}
+          {(q || level || kind !== 'all' || agentFilter.agent) && (
+            <button onClick={clearFilters}
+              className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-ink-2 hover:bg-well hover:text-ink">
+              <RotateCcw className="size-3.5" /> Clear filters
+            </button>
+          )}
+        </div>
+      </Panel>
+      <RunBanner filter={agentFilter} what="app fixes" />
 
       {apps.length ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
           {apps.map((a) => (
             <FixCard key={a.key} a={a} rank={X.apps.indexOf(a) + 1} rows={rowsOf(a)} isNew={agentFilter.isNew}
-              engine={!!v} busy={act.isPending} highlight={highlighted === a} onApprove={approve} onWithdraw={withdraw} />
+              engine={!!v} busy={act.isPending} highlight={highlighted === a} onApprove={approve} onWithdraw={withdraw}
+              fixedCount={fixedPairs ? fixedPairs.get(softwareOf(a)) ?? 0 : undefined} inNews={newsOf(a)} onList={() => showList(a)}
+              agent={agentFilter.agent} newsSplit={agentFilter.agent === 'uc1' ? matchCounts?.split?.[softwareOf(a)] ?? [0, 0] : undefined} />
           ))}
         </div>
-      ) : <Empty text={agentFilter.agent ? 'No app fixes from this agent match these filters.' : kind === 'none' ? 'Nothing here: every vulnerability has a fix from its vendor.' : kind === 'os' ? 'No Windows updates needed: Defender found no vulnerabilities in Windows itself.' : 'No apps match this filter.'} />}
+      ) : <Empty text={agentFilter.agent ? 'No remediations from this agent match these filters.' : kind === 'none' ? 'No items: every vulnerability has a vendor fix.' : kind === 'os' ? 'No Windows updates needed: Defender found no vulnerabilities in Windows itself.' : 'No apps match this filter.'} />}
 
+      {listApp && (
+        <VulnList app={listApp} software={softwareOf(listApp)} data={data} fixRows={v?.rows ?? []} engine={!!v} onClose={closeList}
+          startAgent={agentFilter.agent} prev={listAt > 0 ? step(apps[listAt - 1]) : undefined} next={listAt >= 0 ? step(apps[listAt + 1]) : undefined} />
+      )}
       {v && <BasketBar v={v} />}
       {v && <UrgentChooser open={chooser} onClose={() => setChooser(false)} rows={urgentRows} onApprove={(ids) => { approve(ids); setChooser(false) }} />}
       {act.error && <div className="fixed bottom-24 right-6 z-30 rounded-xl border bg-panel px-4 py-3 text-sm shadow-lg" style={{ borderColor: statusColor.critical }}>{String((act.error as Error).message)}</div>}
@@ -225,8 +277,8 @@ function Banner({ v, down, urgentApps, onUrgent, auto }: {
         <span className="grid size-11 place-items-center rounded-xl bg-well"><Zap className="size-5 text-ink-3" /></span>
         <div className="min-w-0 flex-1">
           <div className="font-semibold">Automatic fixing</div>
-          <GettingReady what="automatic fixing" {...auto} off="Automatic fixing is switched off. You can still copy the commands below."
-            retryLabel="Switch it on (takes ~10 seconds)" className="mt-1" />
+          <GettingReady what="automatic fixing" {...auto} off="Automated remediation is disabled. Commands below can still be copied and run manually."
+            retryLabel="Enable automated remediation" className="mt-1" />
         </div>
       </Panel>
     )
@@ -238,26 +290,26 @@ function Banner({ v, down, urgentApps, onUrgent, auto }: {
       <div className="flex flex-wrap items-center gap-4 p-5">
         <span className="tile-signal grid size-11 place-items-center rounded-[11px]"><Zap className="size-5" /></span>
         <div className="min-w-0 flex-1">
-          <div className="text-[17px] font-semibold tracking-tight">The portal can fix these for you</div>
+          <div className="text-[17px] font-semibold tracking-tight">Eligible for automated remediation</div>
           <p className="text-sm text-ink-2">
-            Press <b className="whitespace-nowrap"><Zap className="mb-0.5 inline size-3.5 text-sky" aria-hidden /> Fix it for me</b> next to a computer to put the fix in your basket. Nothing runs until you press <b>Run fixes</b>, and Defender confirms every fix afterwards.
+            Press <b className="whitespace-nowrap"><Zap className="mb-0.5 inline size-3.5 text-sky" aria-hidden /> Remediate</b> next to a device to add it to the remediation queue. Nothing runs until you select <b>Execute remediation</b>, and Defender verifies every change afterwards.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => setHow(!how)} className="rounded-lg border border-hairline bg-panel px-3 py-2 text-sm font-medium hover:bg-well" aria-expanded={how}>How it works</button>
           <button onClick={onUrgent} disabled={!urgentApps} className="inline-flex items-center gap-2 rounded-lg btn-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-40">
-            <Zap className="size-4" /> Fix all {urgentApps} urgent apps
+            <Zap className="size-4" /> Remediate {urgentApps} urgent apps
           </button>
         </div>
       </div>
       {how && (
         <ol className="grid gap-px border-t border-signal/20 bg-signal/10 text-sm sm:grid-cols-5 animate-in fade-in duration-200">
           {[
-            ['Found', 'Defender finds an old app with known vulnerabilities'],
-            ['Explained', 'The card says what’s wrong, why now and the fix'],
-            ['Approved', 'You press ⚡ Fix it for me (you can take it out again)'],
-            ['Fixed', 'You press Run fixes: the app is updated or removed'],
-            ['Verified ✓', 'Defender rescans (2–6 h) and confirms it’s gone'],
+            ['Found', 'Defender identifies an application with known vulnerabilities'],
+            ['Explained', 'Each card shows the issue, its urgency and the remediation'],
+            ['Approved', 'You select ⚡ Remediate (it can be removed from the queue)'],
+            ['Fixed', 'You select Execute remediation: the application is updated or removed'],
+            ['Verified ✓', 'Defender rescans (2–6 h) and confirms resolution'],
           ].map(([t, d], i) => (
             <li key={t} className="bg-panel/80 p-4">
               <div className="text-xs font-semibold text-signal">Step {i + 1}</div>
@@ -333,11 +385,14 @@ function Tracker({ total, reached }: { total: number; reached: number[] }) {
   )
 }
 
-function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw, isNew }: {
+function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw, isNew, fixedCount, inNews, onList, agent, newsSplit }: {
   a: Uc3FixApp; rank: number; rows: FixRow[]; engine: boolean; busy: boolean; highlight: boolean; isNew: (r: FixRow) => boolean
   onApprove: (ids: string[]) => void; onWithdraw: (ids: string[]) => void
+  /** Defender's own fixed count (see fixedPairs); inNews: how many of its vulnerabilities are in the news */
+  fixedCount?: number; inNews?: number; onList: () => void
+  /** set while "Found by: Threat Intel Agent" is chosen: its vulnerabilities on this app, [still open, fixed] */
+  newsSplit?: [number, number]; agent?: 'uc3' | 'uc1' | null
 }) {
-  const kevHref = useKevThreatHref()
   const lv = LEVEL[a.urgency.level]
   const ai = (a.source || '').startsWith('ai')
   const txt = a.ai ?? {}
@@ -345,8 +400,13 @@ function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw
   const ended = pastEos(a)
   const ending = nearEos(a)
   const noPatch = a.no_patch ?? []
-  // a.findings counts only what Defender still lists, so add back the vulnerabilities already fixed on other computers
-  const fixedVulns = rows.filter((r) => cleared(r) && !isSetting(r)).reduce((s, r) => s + r.findings, 0)
+  // a.findings counts only what Defender still lists, so add back the vulnerabilities already fixed (Defender's fixed
+  // list when there is one, else what the fix engine cleared)
+  const fixedVulns = fixedCount ?? rows.filter((r) => cleared(r) && !isSetting(r)).reduce((s, r) => s + r.findings, 0)
+  // the numbers follow the "Found by" filter: Threat Intel shows only what it found in the news first
+  const [open, fixed] = newsSplit ?? [a.findings, fixedVulns]
+  const total = open + fixed
+  const kind = KINDS.find(([k]) => k === kindOf)
   const eosList = (vs: typeof ended) => vs.map((v) => `${v.version}${v.eos?.date ? ` (${shortDate(v.eos.date)})` : ''}`).join(', ')
   return (
     <section id={`fix-${softwareOf(a)}`} className={cn('flex scroll-mt-28 flex-col overflow-hidden rounded-2xl border border-hairline bg-panel transition-shadow', highlight && 'ring-2 ring-signal ring-offset-2 ring-offset-canvas')}>
@@ -356,17 +416,40 @@ function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw
           <span className="tabular grid size-8 shrink-0 place-items-center rounded-lg bg-well text-xs font-semibold text-ink-2">#{rank}</span>
           <div className="min-w-0 flex-1">
             <h3 className="font-semibold leading-tight">{a.app}</h3>
-            <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-ink-3">
-              <span>{a.findings + fixedVulns ? `${num(a.findings + fixedVulns)} vulnerabilities${fixedVulns ? ` · ${num(fixedVulns)} fixed` : ''}` : 'no known vulnerabilities yet'}</span>
-              {a.fix_by && <span title="The latest date allowed by our patching rules (SLA). Fix now still means now.">fix by {shortDate(a.fix_by)} (SLA deadline)</span>}
-            </div>
-            <div className="mt-1.5"><Tag tone={kindOf === 'none' ? 'warn' : undefined}>{KINDS.find(([k]) => k === kindOf)?.[1]}</Tag></div>
-            <div className="mt-1.5"><AgentTags rows={rows} /></div>
+            {/* what kind of fix and the deadline, in one plain line */}
+            <p className="mt-1 text-xs text-ink-3">
+              <span title={kind?.[2]} style={{ color: kindOf === 'none' ? statusColor.warning : undefined }}>{kind?.[1]}</span>
+              {a.fix_by && <span title="Latest date permitted by the patching SLA. Immediate items should be remediated now."> · fix by {shortDate(a.fix_by)}</span>}
+            </p>
           </div>
-          <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium" style={{ color: lv.color }}>
+          <span className="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
+            style={{ color: lv.color, background: `color-mix(in oklab, ${lv.color} 12%, transparent)` }}>
             {a.urgency.level === 1 && <AlertTriangle className="size-3.5" />}{a.urgency.label.split(':')[0]}
           </span>
         </div>
+
+        {total > 0 ? (
+          <>
+            <div className="flex flex-col gap-1.5">
+              {agent && (
+                <span className="flex items-center gap-1.5 text-[11px] text-ink-3">
+                  <span className={cn('size-1.5 rounded-full', UC_DOT[agent])} />
+                  {agent === 'uc1' ? `${UC_NAME.uc1}: reported in threat intelligence before Defender's scan` : `${UC_NAME.uc3}: found by Defender's scan`}
+                </span>
+              )}
+              <div className="grid grid-cols-3 gap-2">
+                <Stat n={total} label="Found" />
+                <Stat n={open} label="Need fixing" color={open ? statusColor.critical : undefined} />
+                <Stat n={fixed} label="Fixed" color={fixed ? statusColor.good : undefined} />
+              </div>
+            </div>
+            <AgentTags rows={rows} inNews={inNews} />
+            <button onClick={onList}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue/15 px-3 py-2.5 text-sm font-semibold text-sky transition-colors hover:bg-blue/25">
+              <ListChecks className="size-4" /> {newsSplit ? `View these ${num(total)}` : `View all ${num(total)}`} vulnerabilities <ChevronRight className="size-4" />
+            </button>
+          </>
+        ) : <p className="text-sm text-ink-3">No known vulnerabilities yet.</p>}
 
         {txt.what_is_wrong && <p className="text-sm leading-relaxed text-ink-2">{txt.what_is_wrong}</p>}
 
@@ -378,7 +461,7 @@ function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw
               <li title={noPatch.join(', ')}>
                 <b style={{ color: statusColor.warning }}>No fix from the vendor yet:</b>{' '}
                 {noPatch.length >= a.cves ? 'for any of its vulnerabilities' : `for ${num(noPatch.length)} of its ${num(a.cves)} vulnerabilities (updating fixes the others)`}.
-                Reduce the risk another way until the fix comes.
+                Apply compensating controls until a fix is released.
               </li>
             )}
           </ul>
@@ -389,7 +472,7 @@ function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw
         {/* the computers this app is on, each with its own fix button */}
         <div className="rounded-xl border border-hairline">
           <div className="flex items-center justify-between gap-3 border-b border-hairline px-3.5 py-2 text-xs">
-            <span className="font-medium text-ink-2">On your computers</span>
+            <span className="font-medium text-ink-2">Affected devices</span>
             <span className="truncate text-ink-3">{a.fix.action}</span>
           </div>
           {rows.length > 0 && kindOf !== 'none' && (
@@ -405,7 +488,7 @@ function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw
                 <li key={d.name} className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm">
                   <span className="font-medium">{d.name}</span>
                   <span className="text-xs text-ink-3">
-                    {kindOf === 'none' ? 'Nothing to install yet' : engine ? 'Not in the automatic fix plan yet' : 'Automatic fixing is off'}
+                    {kindOf === 'none' ? 'No update available yet' : engine ? 'Not yet in the automated remediation plan' : 'Automated remediation is disabled'}
                   </span>
                 </li>
               ))}
@@ -422,36 +505,24 @@ function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw
         {txt.why_now && (
           <Details title="Why now">
             <p className="text-sm leading-relaxed text-ink-2">{txt.why_now}</p>
-            {txt.worst_case && <p className="mt-2 text-sm text-ink-2"><b className="text-ink">Worst case if ignored: </b>{txt.worst_case}</p>}
+            {txt.worst_case && <p className="mt-2 text-sm text-ink-2"><b className="text-ink">Potential impact: </b>{txt.worst_case}</p>}
           </Details>
         )}
         {txt.steps?.length ? (
-          <Details title={<>Step by step (doing it by hand) {ai && <AiBadge />}</>}>
+          <Details title={<>Manual remediation steps {ai && <AiBadge />}</>}>
             <ol className="ml-4 list-decimal space-y-1 text-sm text-ink-2">{txt.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
             {a.fix.note && <p className="mt-2 text-xs text-ink-3">{a.fix.note}</p>}
           </Details>
         ) : null}
         {(txt.verify || txt.side_effects) && (
-          <Details title="How to check it worked · what users will notice">
+          <Details title="Verification and user impact">
             {txt.verify && <p className="text-sm text-ink-2"><b className="text-ink">Check: </b>{txt.verify}</p>}
-            {txt.side_effects && <p className="mt-2 text-sm text-ink-2"><b className="text-ink">Users will notice: </b>{txt.side_effects}</p>}
-          </Details>
-        )}
-        {a.kev_cves.length > 0 && (
-          <Details title={`On the CISA “used by attackers” list (${a.kev_cves.length})`}>
-            <ul className="space-y-1.5 text-sm text-ink-2">
-              {a.kev_cves.map((k) => (
-                <li key={k.cve} className="flex items-start justify-between gap-2">
-                  <span><span className="tabular font-medium text-ink">{k.cve}</span>{k.name ? ` · ${k.name}` : ''}</span>
-                  {kevHref(k.cve) && <HopLink to={kevHref(k.cve)!} title="What the outside world says about this vulnerability, and whether anyone used it on us">Threats</HopLink>}
-                </li>
-              ))}
-            </ul>
+            {txt.side_effects && <p className="mt-2 text-sm text-ink-2"><b className="text-ink">User impact: </b>{txt.side_effects}</p>}
           </Details>
         )}
 
         <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-hairline pt-3 text-xs text-ink-3">
-          {ai ? <><AiBadge text="AI-explained · check before acting" /></> : <Tag>Data-based text (no AI)</Tag>}
+          {ai ? <><AiBadge text="Agent-generated · review before acting" /></> : <Tag>Based on Defender data</Tag>}
           <HopLink to={`/uc3/all?q=${encodeURIComponent(softwareOf(a))}`} title="This app in our full vulnerability list">Vulnerabilities</HopLink>
           {a.fix.url && (
             <a href={a.fix.url} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 font-medium text-ink hover:underline">
@@ -503,14 +574,14 @@ function ComputerRow({ r, busy, onApprove, onWithdraw, fresh }: { r: FixRow; bus
         <button
           onClick={() => onApprove([r.fix_id])}
           disabled={busy}
-          title={`Puts it in your basket: the assistant ${what} when you press Run fixes`}
+          title={`Adds it to the remediation queue: the agent ${what} when you select Execute remediation`}
           className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
         >
-          <Zap className="size-3.5" /> {r.status === 'failed' ? 'Try again' : 'Fix it for me'}
+          <Zap className="size-3.5" /> {r.status === 'failed' ? 'Retry' : 'Remediate'}
         </button>
       ) : r.status === 'approved' ? (
         <button onClick={() => onWithdraw([r.fix_id])} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-hairline px-3 py-1.5 text-xs font-medium hover:bg-well disabled:opacity-50">
-          <Undo2 className="size-3.5" /> Take out of basket
+          <Undo2 className="size-3.5" /> Remove from queue
         </button>
       ) : r.status === 'verified' ? (
         <ShieldCheck className="size-5" style={{ color: statusColor.good }} />
@@ -571,14 +642,14 @@ function SettingsCards() {
         </div>
         <div className="text-sm text-ink-2">
           <p>
-            Windows and Defender settings that are weaker than Microsoft recommends. They are <b>not vulnerabilities</b> (the apps themselves are fine, so they are not in the vulnerability count)
-            and <b>not alerts</b> (nothing has happened): it is a door left unlocked.
+            Windows and Defender settings that are weaker than Microsoft recommends. These are <b>configuration findings</b>, tracked separately from software vulnerabilities,
+            and <b>not alerts</b>: no malicious activity has occurred, but each one weakens the security baseline.
           </p>
           <p className="mt-1.5">
-            The portal can change <b>{num(autoCount)}</b> of them for you with <b>⚡ Fix it for me</b>. The other <b>{num(inOpco.length - autoCount)}</b> need an IT person,
-            usually through Group Policy or Intune, because changing them on one computer could lock people out.
+            <b>{num(autoCount)}</b> can be changed with <b>⚡ Remediate</b>. The other <b>{num(inOpco.length - autoCount)}</b> require manual change by IT,
+            usually through Group Policy or Intune, because changing them on a single device could lock users out.
           </p>
-          <p className="mt-1.5 text-xs text-ink-3">Defender re-checks settings by itself, usually within a day; the card then shows Verified.</p>
+          <p className="mt-1.5 text-xs text-ink-3">Defender re-assesses settings automatically, usually within a day; the card then shows Verified.</p>
         </div>
       </Panel>
 
@@ -586,7 +657,7 @@ function SettingsCards() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2 text-sm">
-          {([['all', 'All', inOpco.length], ['auto', 'The portal can fix', autoCount], ['manual', 'Needs a person', inOpco.length - autoCount]] as const).map(([f, label, n]) => (
+          {([['all', 'All', inOpco.length], ['auto', 'Automatable', autoCount], ['manual', 'Manual action required', inOpco.length - autoCount]] as const).map(([f, label, n]) => (
             <button key={f} onClick={() => setFilter(f)} aria-pressed={filter === f}
               className={cn('flex items-center gap-2 rounded-full border px-3.5 py-1.5', filter === f ? 'pill-on' : 'border-hairline bg-panel hover:bg-well')}>
               {f === 'auto' && <Zap className="size-3.5" />}{f === 'manual' && <UserRound className="size-3.5" />}
@@ -597,7 +668,7 @@ function SettingsCards() {
         <div className="flex flex-wrap items-center gap-2">
           {ready.length > 0 && (
             <button onClick={() => approve(ready.map((r) => r.fix_id))} disabled={act.isPending}
-              title="Puts every setting shown here that the portal can change into your basket. Nothing runs until you press Run fixes."
+              title="Adds every automatable setting shown here to the remediation queue. Nothing runs until you select Execute remediation."
               className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50">
               <Zap className="size-4" /> Fix all {ready.length} for me
             </button>
@@ -656,8 +727,8 @@ function SettingCard({ s, rows, engine, busy, onApprove, onWithdraw, isNew }: {
 
         <div className="rounded-xl border border-hairline">
           <div className="flex items-center justify-between gap-3 border-b border-hairline px-3.5 py-2 text-xs">
-            <span className="font-medium text-ink-2">On your computers</span>
-            <span className="truncate text-ink-3">{autoRow ? settingChange(autoRow) : 'Change by hand (needs a person)'}</span>
+            <span className="font-medium text-ink-2">Affected devices</span>
+            <span className="truncate text-ink-3">{autoRow ? settingChange(autoRow) : 'Manual change required'}</span>
           </div>
           {rows.length ? (
             <ul className="divide-y divide-hairline">
@@ -668,7 +739,7 @@ function SettingCard({ s, rows, engine, busy, onApprove, onWithdraw, isNew }: {
               {s.devices.map((d) => (
                 <li key={d.name} className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm">
                   <span className="font-medium">{d.name}</span>
-                  <span className="text-right text-xs text-ink-3">{engine ? 'Not in the automatic fix plan yet (after the next threat check)' : 'Automatic fixing is off'}</span>
+                  <span className="text-right text-xs text-ink-3">{engine ? 'Not yet in the automated remediation plan (added after the next Threat Intel run)' : 'Automated remediation is disabled'}</span>
                 </li>
               ))}
             </ul>
@@ -679,19 +750,19 @@ function SettingCard({ s, rows, engine, busy, onApprove, onWithdraw, isNew }: {
           <p className="flex gap-2 rounded-lg bg-well px-3 py-2 text-xs leading-relaxed text-ink-2"><UserRound className="mt-0.5 size-3.5 shrink-0" />{s.fix.note}</p>
         )}
         {!autoRow && s.fix.command && (
-          <div className="text-xs text-ink-3">For one computer, an IT person can run: <CommandLine command={s.fix.command} /></div>
+          <div className="text-xs text-ink-3">To apply on a single device, IT can run: <CommandLine command={s.fix.command} /></div>
         )}
 
         {txt.why_now && (
           <Details title="Why now">
             <p className="text-sm leading-relaxed text-ink-2">{txt.why_now}</p>
-            {txt.worst_case && <p className="mt-2 text-sm text-ink-2"><b className="text-ink">Worst case if ignored: </b>{txt.worst_case}</p>}
+            {txt.worst_case && <p className="mt-2 text-sm text-ink-2"><b className="text-ink">Potential impact: </b>{txt.worst_case}</p>}
           </Details>
         )}
         {(txt.verify || txt.side_effects) && (
-          <Details title="How to check it worked · what users will notice">
+          <Details title="Verification and user impact">
             {txt.verify && <p className="text-sm text-ink-2"><b className="text-ink">Check: </b>{txt.verify}</p>}
-            {txt.side_effects && <p className="mt-2 text-sm text-ink-2"><b className="text-ink">Users will notice: </b>{txt.side_effects}</p>}
+            {txt.side_effects && <p className="mt-2 text-sm text-ink-2"><b className="text-ink">User impact: </b>{txt.side_effects}</p>}
             {autoRow?.note && <p className="mt-2 text-xs text-ink-3">{autoRow.note}</p>}
           </Details>
         )}
@@ -702,7 +773,7 @@ function SettingCard({ s, rows, engine, busy, onApprove, onWithdraw, isNew }: {
         )}
 
         <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-hairline pt-3 text-xs text-ink-3">
-          {ai ? <AiBadge text="AI-explained · check before acting" /> : <Tag>Microsoft's text (no AI)</Tag>}
+          {ai ? <AiBadge text="Agent-generated · review before acting" /> : <Tag>Microsoft guidance</Tag>}
           {link && (
             <a href={link} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 font-medium text-ink hover:underline">
               Microsoft guidance <ExternalLink className="size-3" />
@@ -742,7 +813,7 @@ export function BasketBar({ v }: { v: FixView }) {
                 <Loader2 className="size-5 animate-spin text-sky" />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-semibold">
-                    {v.worker.task === 'probe' ? 'Checking the computers…' : `Fixing…${runSet.length ? ` ${finished} of ${runSet.length} done` : ''}`}
+                    {v.worker.task === 'probe' ? 'Checking device connectivity…' : `Remediating…${runSet.length ? ` ${finished} of ${runSet.length} complete` : ''}`}
                   </div>
                   <div key={v.worker.step} className="truncate text-xs text-ink-3 animate-in fade-in duration-300">{v.worker.step || 'Starting'}</div>
                   {runSet.length > 0 && (
@@ -751,27 +822,27 @@ export function BasketBar({ v }: { v: FixView }) {
                     </div>
                   )}
                 </div>
-                <button onClick={watch} className="rounded-lg border border-hairline px-3 py-2 text-sm font-medium hover:bg-well">Watch full screen</button>
+                <button onClick={watch} className="rounded-lg border border-hairline px-3 py-2 text-sm font-medium hover:bg-well">Open live view</button>
               </>
             ) : approved.length ? (
               <>
                 <span className="grid size-10 place-items-center rounded-xl bg-signal/15"><ShoppingBasket className="size-5 text-signal" /></span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold">{approved.length} fix{approved.length === 1 ? '' : 'es'} in your basket</div>
+                  <div className="text-sm font-semibold">{approved.length} remediation{approved.length === 1 ? '' : 's'} queued</div>
                   <div className="truncate text-xs text-ink-3">
-                    {byDevice.map(([d, rs]) => `${d}: ${rs.length}`).join(' · ')} · clears {num(approved.reduce((n, r) => n + r.findings, 0))} findings, {approved.reduce((n, r) => n + r.kev, 0)} exploited vulnerabilities{approvedSettings ? `, ${approvedSettings} security setting${approvedSettings === 1 ? '' : 's'}` : ''}
+                    {byDevice.map(([d, rs]) => `${d}: ${rs.length}`).join(' · ')} · clears {num(approved.reduce((n, r) => n + r.findings, 0))} findings{approvedSettings ? `, ${approvedSettings} security setting${approvedSettings === 1 ? '' : 's'}` : ''}
                   </div>
                 </div>
                 <button onClick={() => setReview(true)} className="rounded-lg border border-hairline px-3 py-2 text-sm font-medium hover:bg-well">Review</button>
                 <button onClick={() => setConfirm(true)} disabled={act.isPending} className="inline-flex items-center gap-2 rounded-lg btn-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-                  <Play className="size-4" /> Run fixes
+                  <Play className="size-4" /> Execute remediation
                 </button>
               </>
             ) : (
               <>
                 <ShieldCheck className="size-5" style={{ color: statusColor.good }} />
-                <div className="min-w-0 flex-1 text-sm"><b>{v.worker.message}.</b> <span className="text-ink-3">Defender confirms within a few hours (next threat check).</span></div>
-                <button onClick={watch} className="rounded-lg border border-hairline px-3 py-2 text-sm font-medium hover:bg-well">See the results</button>
+                <div className="min-w-0 flex-1 text-sm"><b>{v.worker.message}.</b> <span className="text-ink-3">Defender verifies within a few hours.</span></div>
+                <button onClick={watch} className="rounded-lg border border-hairline px-3 py-2 text-sm font-medium hover:bg-well">View results</button>
                 <button onClick={() => setHideDone(v.worker.message)} className="grid size-8 place-items-center rounded-lg hover:bg-well" aria-label="Hide"><X className="size-4" /></button>
               </>
             )}
@@ -782,8 +853,8 @@ export function BasketBar({ v }: { v: FixView }) {
       <Sheet open={review} onOpenChange={setReview}>
         <SheetContent side="right" className="w-full gap-0 overflow-y-auto border-hairline bg-canvas p-0 sm:max-w-[460px]">
           <SheetHeader className="border-b border-hairline bg-panel px-6 py-5">
-            <SheetTitle className="flex items-center gap-2 text-lg"><ShoppingBasket className="size-5" /> Your fix basket</SheetTitle>
-            <SheetDescription>These run when you press Run fixes. Take out anything you don’t want changed yet.</SheetDescription>
+            <SheetTitle className="flex items-center gap-2 text-lg"><ShoppingBasket className="size-5" /> Remediation queue</SheetTitle>
+            <SheetDescription>These run when you select Execute remediation. Remove anything that should not change yet.</SheetDescription>
           </SheetHeader>
           <div className="flex flex-col gap-4 p-4">
             {byDevice.map(([d, rs]) => (
@@ -793,13 +864,13 @@ export function BasketBar({ v }: { v: FixView }) {
                   {rs.map((r) => (
                     <li key={r.fix_id} className="flex items-center justify-between gap-3 py-2 text-sm">
                       <span>{r.action === 'setting' ? 'Change setting:' : r.action === 'respond' ? 'Scan and clean after:' : r.action === 'remove' ? 'Remove' : r.action === 'replace' ? 'Replace' : 'Update'} {r.app} <span className="text-ink-3">{r.version}</span></span>
-                      <button onClick={() => act.mutate({ action: 'unapprove', ids: [r.fix_id] })} className="text-xs font-medium text-ink-2 hover:text-ink">Take out</button>
+                      <button onClick={() => act.mutate({ action: 'unapprove', ids: [r.fix_id] })} className="text-xs font-medium text-ink-2 hover:text-ink">Remove</button>
                     </li>
                   ))}
                 </ul>
               </Panel>
             ))}
-            {!approved.length && <Empty text="The basket is empty." />}
+            {!approved.length && <Empty text="The remediation queue is empty." />}
           </div>
         </SheetContent>
       </Sheet>
@@ -807,9 +878,9 @@ export function BasketBar({ v }: { v: FixView }) {
       <ConfirmDialog
         open={confirm}
         onClose={() => setConfirm(false)}
-        title={`Run ${approved.length} fix${approved.length === 1 ? '' : 'es'} now?`}
-        body={`${byDevice.map(([d, rs]) => `${d}: ${rs.length}`).join(', ')}. the assistant switches a computer on if it is off, closes the apps and updates or removes them${approvedSettings ? ', and changes the chosen security settings' : ''}${approvedResponses ? ', and scans the computers with signs of attack and removes what Defender finds' : ''}. This changes the computers and the numbers on every page. Leave a switched-on VM running for about 6 hours so Defender can confirm.`}
-        confirmLabel="Run the fixes"
+        title={`Execute ${approved.length} remediation${approved.length === 1 ? '' : 's'} now?`}
+        body={`${byDevice.map(([d, rs]) => `${d}: ${rs.length}`).join(', ')}. The agent powers on each device if needed, closes the applications and updates or removes them${approvedSettings ? ', and changes the chosen security settings' : ''}${approvedResponses ? ', and scans devices with detections and removes what Defender finds' : ''}. This changes the devices and the figures on every page. Keep powered-on VMs running for about 6 hours so Defender can verify the changes.`}
+        confirmLabel="Execute remediation"
         onConfirm={() => { act.mutate({ action: 'run' }); setConfirm(false); watch() }}
       />
     </>
@@ -826,9 +897,9 @@ function UrgentChooser({ open, onClose, rows, onApprove }: { open: boolean; onCl
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md border-hairline bg-panel">
-        <DialogTitle className="flex items-center gap-2"><Zap className="size-5 text-signal" /> Fix all urgent apps</DialogTitle>
+        <DialogTitle className="flex items-center gap-2"><Zap className="size-5 text-signal" /> Remediate all urgent apps</DialogTitle>
         <DialogDescription className="text-sm leading-relaxed text-ink-2">
-          Urgent = vulnerabilities attackers are known to use (CISA KEV list). Choose the computers: their urgent fixes go into your basket. Nothing runs yet.
+          Urgent: the applications prioritised by the remediation plan. Select devices to add their urgent remediations to the queue. Nothing runs until approved.
         </DialogDescription>
         <ul className="flex flex-col gap-2">
           {devices.map((d) => {
@@ -847,12 +918,12 @@ function UrgentChooser({ open, onClose, rows, onApprove }: { open: boolean; onCl
               </li>
             )
           })}
-          {!devices.length && <li className="text-sm text-ink-3">Every urgent fix is already in the basket or done.</li>}
+          {!devices.length && <li className="text-sm text-ink-3">Every urgent remediation is already queued or complete.</li>}
         </ul>
         <div className="mt-1 flex justify-end gap-2">
           <button onClick={onClose} className="rounded-lg border border-hairline px-4 py-2 text-sm hover:bg-well">Cancel</button>
           <button onClick={() => onApprove(ids)} disabled={!ids.length} className="rounded-lg btn-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-40">
-            Put {ids.length} in the basket
+            Add {ids.length} to queue
           </button>
         </div>
       </DialogContent>
@@ -877,6 +948,26 @@ function CommandLine({ command }: { command: string }) {
   )
 }
 
+/** One number on a fix card: found, still to fix, fixed */
+function Stat({ n, label, color }: { n: number; label: string; color?: string }) {
+  return (
+    <div className="rounded-xl bg-well px-3 py-2.5">
+      <div className="tabular text-xl font-semibold leading-none tracking-tight" style={{ color }}>{num(n)}</div>
+      <div className="mt-1.5 text-[11px] text-ink-3">{label}</div>
+    </div>
+  )
+}
+
+/** A filter with its label above it */
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <span className="text-xs font-medium text-ink-3">{label}</span>
+      {children}
+    </div>
+  )
+}
+
 function Details({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
   return (
@@ -890,7 +981,7 @@ function Details({ title, children }: { title: React.ReactNode; children: React.
   )
 }
 
-function AiBadge({ text = 'AI' }: { text?: string }) {
+function AiBadge({ text = 'Agent' }: { text?: string }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-md bg-violet/15 px-1.5 py-0.5 text-[11px] font-medium text-violet">
       <Sparkles className="size-3" /> {text}

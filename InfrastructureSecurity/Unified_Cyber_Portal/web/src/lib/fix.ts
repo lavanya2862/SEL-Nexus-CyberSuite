@@ -87,15 +87,15 @@ export function useFixAction() {
 
 export const STATUS: Record<FixStatus, { label: string; tone: 'muted' | 'sky' | 'run' | 'teal' | 'good' | 'bad' | 'warn' }> = {
   proposed: { label: 'Proposed', tone: 'muted' },
-  saved: { label: 'Saved for later', tone: 'muted' },
+  saved: { label: 'Deferred', tone: 'muted' },
   approved: { label: 'Approved', tone: 'sky' },
   queued: { label: 'Queued', tone: 'sky' },
   running: { label: 'Running…', tone: 'run' },
-  done: { label: 'Fixed · waiting for Defender', tone: 'teal' },
+  done: { label: 'Remediated · pending verification', tone: 'teal' },
   verified: { label: 'Verified ✓', tone: 'good' },
   failed: { label: 'Failed', tone: 'bad' },
   still_there: { label: 'Still listed by Defender', tone: 'warn' },
-  gone: { label: 'Cleared before fix', tone: 'muted' },
+  gone: { label: 'Resolved before remediation', tone: 'muted' },
   info: { label: 'No action', tone: 'muted' },
 }
 

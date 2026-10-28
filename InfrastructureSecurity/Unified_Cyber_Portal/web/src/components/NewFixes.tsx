@@ -10,16 +10,16 @@ import { GettingReady, useAutoStart } from '@/lib/services'
 import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
-/** The fix engine's stages (UC1 fix plan): 1 known exploited, 2 end of life, 3 other updates. Settings are stage 3. */
+/** The fix engine's stages (UC1 fix plan): 1 urgent, 2 end of life, 3 other updates. Settings are stage 3. */
 const STAGE = {
-  1: { label: 'Urgent · known exploited', color: statusColor.critical },
+  1: { label: 'Urgent', color: statusColor.critical },
   2: { label: 'End of life', color: statusColor.warning },
   3: { label: 'Update', color: 'var(--sky)' },
 } as const
 
 const isResponse = (r: FixRow) => r.action === 'respond'
 const stageOf = (r: FixRow) =>
-  isResponse(r) ? { label: r.category || 'Sign of attack', color: statusColor.critical }
+  isResponse(r) ? { label: r.category || 'Detection', color: statusColor.critical }
     : isSetting(r) ? { label: 'Security setting', color: 'var(--violet)' } : STAGE[(r.stage as 1 | 2 | 3)] ?? STAGE[3]
 
 function whatItDoes(r: FixRow) {
@@ -68,15 +68,15 @@ export function NewFixes({ fix, uc, since }: { fix: RunFix; uc: UcKey; since: st
             </span>
             <div className="min-w-0">
               <h2 className="text-lg font-semibold tracking-tight">
-                {allDecided ? `All ${rows.length} new fix${rows.length === 1 ? '' : 'es'} handled: the Fix stage is done`
+                {allDecided ? `All ${rows.length} new remediation${rows.length === 1 ? '' : 's'} reviewed: the Remediation stage is complete`
                   : fix.new ? `${fix.new} new fix${fix.new === 1 ? '' : 'es'} proposed in this run${fresh.length < rows.length ? ` · ${fresh.length} left to decide` : ''}`
-                  : 'No new fixes in this run'}
+                  : 'No new remediations in this run'}
               </h2>
               <p className="mt-1 max-w-[70ch] text-sm text-ink-3">
-                {attack && fix.new > 0 && <>For every new sign of attack: a Defender update, quick scan and clean-up of that computer. To isolate a computer, use Defender itself (the agent has no permission for it). </>}
+                {attack && fix.new > 0 && <>For every new detection: a Defender update, quick scan and clean-up of the affected device. Device isolation is outside this agent's scope; perform it in Microsoft Defender. </>}
                 {fix.new
-                  ? <>Review each one. <b className="text-ink-2">Fix</b> puts it in your basket; nothing changes on a computer until you press <b className="text-ink-2">Run fixes</b> and confirm. <b className="text-ink-2">Save for later</b> keeps it on the Fix page.</>
-                  : attack ? 'No new signs of attack, so nothing to respond to.' : 'Defender found nothing new to fix since the last run.'}
+                  ? <>Review each item. <b className="text-ink-2">Approve</b> adds it to the remediation queue; no device is changed until you select <b className="text-ink-2">Execute remediation</b> and confirm. <b className="text-ink-2">Defer</b> keeps it in Remediation for later.</>
+                  : attack ? 'No new detections; no response required.' : 'Defender reported no new findings since the last run.'}
               </p>
             </div>
           </div>
@@ -105,7 +105,7 @@ export function NewFixes({ fix, uc, since }: { fix: RunFix; uc: UcKey; since: st
         {fix.new > 0 && (
           <div className="mt-5 flex flex-wrap gap-2 text-xs">
             <Count n={fix.new} label="new this run" strong />
-            {urgent > 0 && <Count n={urgent} label="urgent: attackers use them" color={statusColor.critical} />}
+            {urgent > 0 && <Count n={urgent} label="urgent" color={statusColor.critical} />}
             {attacks > 0 && <Count n={attacks} label={`sign${attacks === 1 ? '' : 's'} of attack to respond to`} color={statusColor.critical} />}
             {settings > 0 && <Count n={settings} label={`security setting${settings === 1 ? '' : 's'}`} />}
             {decided > 0 && <Count n={decided} label="already decided" />}
@@ -131,7 +131,7 @@ export function NewFixes({ fix, uc, since }: { fix: RunFix; uc: UcKey; since: st
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-hairline pt-4 text-sm">
           <span className="text-ink-3">
-            {fix.waiting > 0 ? <><b className="tabular text-ink-2">{num(fix.waiting)}</b> older fix{fix.waiting === 1 ? ' is' : 'es are'} still waiting from earlier runs</> : 'No older fixes waiting'}
+            {fix.waiting > 0 ? <><b className="tabular text-ink-2">{num(fix.waiting)}</b> older fix{fix.waiting === 1 ? ' is' : 'es are'} still waiting from earlier runs</> : 'No earlier remediations pending'}
             {fix.saved > 0 && <> · <b className="tabular text-ink-2">{num(fix.saved)}</b> saved for later</>}
           </span>
           <span className="flex flex-wrap gap-x-4 gap-y-1">
@@ -159,10 +159,10 @@ function fixLinks(uc: UcKey, since: string | null, fix: RunFix): [string, string
     const p = new URLSearchParams({ ...(agent ? { agent } : {}), ...(since ? { since } : {}) }).toString()
     return `/fixes${tab}${p ? `?${p}` : ''}`
   }
-  if (uc === 'attack') return [[q('/attacks'), since ? "This run's responses on the Fix page" : 'All attack responses on the Fix page']]
-  if (uc === 'uc1') return [[q('', 'uc1'), since ? "This run's fixes on the Fix page" : `All ${UC_NAME.uc1} fixes on the Fix page`]]
+  if (uc === 'attack') return [[q('/attacks'), since ? "This run's responses in Remediation" : 'All attack responses in Remediation']]
+  if (uc === 'uc1') return [[q('', 'uc1'), since ? "This run's remediations in Remediation" : `All ${UC_NAME.uc1} remediations in Remediation`]]
   // the Vulnerability Agent proposes app updates and security settings: one link per tab that has some
-  const label = since ? 'on the Fix page' : `from the ${UC_NAME.uc3}`
+  const label = since ? 'in Remediation' : `from the ${UC_NAME.uc3}`
   const apps = (fix.new_apps ?? 1) > 0 || !since, settings = (fix.new_settings ?? 1) > 0 || !since
   return [
     ...(apps ? [[q('', 'uc3'), `${since ? "This run's app updates" : 'App updates'} ${label}`] as [string, string]] : []),
@@ -198,17 +198,16 @@ export function FixCardSmall({ r, busy, onFix, onSave, onUndo }: {
         {!isSetting(r) && r.findings > 0 && (
           <div className="text-xs text-ink-3">
             {num(r.findings)} vulnerabilit{r.findings === 1 ? 'y' : 'ies'}
-            {r.kev > 0 && <span style={{ color: statusColor.critical }}> · {r.kev} used by attackers</span>}
           </div>
         )}
         <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2">
           {r.status === 'proposed' ? (
             <>
               <button onClick={onSave} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-hairline px-3 py-1.5 text-xs font-medium hover:bg-well disabled:opacity-50">
-                <Bookmark className="size-3.5" /> Save for later
+                <Bookmark className="size-3.5" /> Defer
               </button>
               <button onClick={onFix} disabled={busy} className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold disabled:opacity-50">
-                <Zap className="size-3.5" /> Fix
+                <Zap className="size-3.5" /> Approve
               </button>
             </>
           ) : (
@@ -217,10 +216,10 @@ export function FixCardSmall({ r, busy, onFix, onSave, onUndo }: {
               {r.status === 'saved' ? (
                 <span className="flex gap-1.5">
                   <button onClick={() => onUndo('unsave')} disabled={busy} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-ink-2 hover:bg-well disabled:opacity-50"><Undo2 className="size-3.5" /> Undo</button>
-                  <button onClick={onFix} disabled={busy} className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"><Zap className="size-3.5" /> Fix</button>
+                  <button onClick={onFix} disabled={busy} className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"><Zap className="size-3.5" /> Approve</button>
                 </span>
               ) : r.status === 'approved' ? (
-                <button onClick={() => onUndo('unapprove')} disabled={busy} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-ink-2 hover:bg-well disabled:opacity-50"><Undo2 className="size-3.5" /> Take out</button>
+                <button onClick={() => onUndo('unapprove')} disabled={busy} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-ink-2 hover:bg-well disabled:opacity-50"><Undo2 className="size-3.5" /> Remove</button>
               ) : r.status === 'failed' ? (
                 <button onClick={onFix} disabled={busy} className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"><Zap className="size-3.5" /> Try again</button>
               ) : r.status === 'verified' ? (

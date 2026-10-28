@@ -19,14 +19,16 @@ import html
 import json
 import logging
 import re
+import shutil
 from pathlib import Path
 
 import pyarrow as pa
 
-from uc3.api_client import ApiError, DefenderClient
+from uc3.api_client import ApiError, DefenderClient, EmptyDownload, LinkExpired
 
 log = logging.getLogger("uc3.posture")
 
+EXPORT_ATTEMPTS = 3
 CONFIG_EXPORT = "/api/machines/SecureConfigurationsAssessmentExport"
 SOFTWARE_EXPORT = "/api/machines/SoftwareInventoryExport"
 HUNTING = "/api/advancedqueries/run"
@@ -61,13 +63,30 @@ def _hunting(client: DefenderClient, query: str) -> list[dict]:
 
 
 def _export(client: DefenderClient, path: str, folder: Path) -> dict:
-    folder.mkdir(parents=True, exist_ok=True)
-    export = client.get_json(path, {"sasValidHours": 1})
-    files = []
-    for i, url in enumerate(export.get("exportFiles", [])):
-        size, rows = client.download(url, folder / f"part-{i:05d}.json.gz")
-        files.append({"name": f"part-{i:05d}.json.gz", "bytes": size, "rows": rows})
-    return {"generated_time": export.get("generatedTime"), "rows": sum(f["rows"] for f in files), "files": len(files)}
+    """Request an export and download its files. Defender sometimes hands back an empty file or links that have
+    already expired: then a fresh export is requested, like the vulnerability export does."""
+    for attempt in range(1, EXPORT_ATTEMPTS + 1):
+        shutil.rmtree(folder, ignore_errors=True)
+        folder.mkdir(parents=True)
+        files = []
+        try:
+            export = client.get_json(path, {"sasValidHours": 1})
+            for i, url in enumerate(export.get("exportFiles", [])):
+                size, rows = client.download(url, folder / f"part-{i:05d}.json.gz")
+                files.append({"name": f"part-{i:05d}.json.gz", "bytes": size, "rows": rows})
+        except (LinkExpired, EmptyDownload) as exc:
+            if attempt == EXPORT_ATTEMPTS:
+                shutil.rmtree(folder, ignore_errors=True)
+                raise
+            log.info("%s; requesting a fresh export",
+                     "Download links expired" if isinstance(exc, LinkExpired) else "A downloaded file was empty")
+            continue
+        except Exception:
+            shutil.rmtree(folder, ignore_errors=True)
+            raise
+        return {"generated_time": export.get("generatedTime"), "rows": sum(f["rows"] for f in files),
+                "files": len(files), "attempts": attempt}
+    raise AssertionError("unreachable")
 
 
 def extract_posture(client: DefenderClient, work_dir: Path) -> dict:
@@ -89,7 +108,10 @@ def extract_posture(client: DefenderClient, work_dir: Path) -> dict:
             result["config"] = {"method": "advanced hunting", "rows": len(rows), "files": 1,
                                 "truncated": len(rows) >= KQL_ROW_LIMIT}
     except Exception as exc:   # posture is extra information: log it and carry on
-        log.warning("Could not download security settings: %s", exc)
+        # No config folder for this day, so publish keeps showing the last day that has settings data
+        shutil.rmtree(out_dir / "config", ignore_errors=True)
+        log.warning("Could not download security settings (the last good download is kept): %s",
+                    str(exc).splitlines()[0])
         result["errors"].append(f"settings: {str(exc).splitlines()[0]}")
 
     try:
@@ -116,7 +138,8 @@ def extract_posture(client: DefenderClient, work_dir: Path) -> dict:
             eos, method = _hunting(client, EOS_QUERY), "advanced hunting"
         result["eos"] = {"method": method, "rows": _write_gz(out_dir / "eos.json.gz", eos)}
     except Exception as exc:
-        log.warning("Could not download end-of-support software: %s", exc)
+        shutil.rmtree(out_dir / "software_export", ignore_errors=True)
+        log.warning("Could not download end-of-support software: %s", str(exc).splitlines()[0])
         result["errors"].append(f"end-of-support: {str(exc).splitlines()[0]}")
     return result
 
@@ -235,7 +258,8 @@ def _eos_table(day: str, day_dir: Path) -> pa.Table:
 
 def publish_posture(settings, con) -> dict:
     """Write the posture reporting tables from the newest downloaded day that has posture data."""
-    days = sorted(p.parent.parent for p in settings.raw_dir.glob("????-??-??/posture/config"))
+    # Only days whose settings download worked: an empty folder would show zero weak settings
+    days = sorted(p.parent.parent for p in settings.raw_dir.glob("????-??-??/posture/config") if any(p.glob("*.json.gz")))
     rep = settings.reporting_dir
     if not days:
         log.info("No security-settings data downloaded yet (runs before 2026-10-05); posture tables skipped")

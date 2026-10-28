@@ -16,7 +16,7 @@ import { StoryBadge, Timeline, storyOf, useDefenderDates, type Story } from './t
 
 type Tab = 'overview' | 'affects' | 'explorer' | 'health'
 const TABS: [Tab, string][] = [
-  ['overview', 'Overview'], ['affects', 'Affects us'], ['explorer', 'Explorer'], ['health', 'Health & metrics'],
+  ['overview', 'Overview'], ['affects', 'Applicable threats'], ['explorer', 'Explorer'], ['health', 'Health & metrics'],
 ]
 const OLD_TABS: Record<string, Tab> = { risks: 'affects', exposure: 'affects', landscape: 'overview' }   // old addresses still land somewhere
 // tabs about what we collected get the period filter; "Affects us" and health are about right now
@@ -33,7 +33,7 @@ export function ThreatNews() {
   const keep = period === 'all' ? '' : `?period=${period}`   // the period follows you from tab to tab
   return (
     <div className="flex flex-col gap-5">
-      <Uc1Header title="Threats" description="Attacks published by 10 public sources, checked against our computers" data={data} />
+      <Uc1Header title="Threats" description="Threat intelligence from 10 public feeds, correlated with managed devices" data={data} />
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <Tabs<Tab> tabs={TABS} value={tab} onChange={(t) => navigate((t === 'overview' ? '/uc1' : `/uc1/${t}`) + keep)} />
         {PERIOD_TABS.includes(tab) && (
@@ -74,15 +74,15 @@ function Overview({ d }: { d: Uc1Data }) {
             <span className="text-[34px] font-medium leading-none tracking-tight">{d.posture.rating}</span>
           </div>
           <p className="mt-3 max-w-md text-sm leading-relaxed text-ink-2">
-            <b>{d.posture.urgent}</b> critical or high threats affect our computers right now, including <b>{d.posture.kev}</b> vulnerabilities attackers are known to use (CISA KEV list).
-            In total <b>{num(d.posture.affecting)}</b> threats affect our computers (vulnerabilities we have, or signs of attack the hunts found).
+            <b>{d.posture.urgent}</b> critical or high threats currently apply to managed devices.
+            In total <b>{num(d.posture.affecting)}</b> threats apply to managed devices (present vulnerabilities, or detections from hunts).
           </p>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {([
             [num(w.threats_collected), 'threats collected', `${when}: attack news, advisories and vulnerability lists`, 'var(--tint-blue)'],
-            [num(Object.values(w.ioc_types).reduce((a, b) => a + b, 0)), 'clues collected', `IPs, domains, links, file hashes · ${when} · ${num(d.ioc_hits)} ever seen on our computers`, 'var(--tint-violet)'],
-            [num(d.posture.affecting), 'threats affect us', 'right now: match software on our computers', 'var(--tint-red)'],
+            [num(Object.values(w.ioc_types).reduce((a, b) => a + b, 0)), 'indicators collected', `IPs, domains, URLs, file hashes · ${when} · ${num(d.ioc_hits)} observed on managed devices`, 'var(--tint-violet)'],
+            [num(d.posture.affecting), 'applicable threats', 'currently match software on managed devices', 'var(--tint-red)'],
           ] as const).map(([v, l, h, tint]) => (
             <div key={l} className="tint-box rounded-xl px-3.5 py-3" style={{ '--tint': tint } as React.CSSProperties}>
               <div className="tint-num tabular text-lg font-semibold leading-none">{v}</div>
@@ -93,7 +93,7 @@ function Overview({ d }: { d: Uc1Data }) {
         </div>
       </Panel>
 
-      <Card title="From noise to action" description={`How everything collected (${when}) becomes a short list of updates`}>
+      <Card title="Intelligence pipeline" description={`How all intelligence collected (${when}) is reduced to a prioritised list of updates`}>
         <ol className="flex flex-col gap-3">
           {w.funnel.map((f, i) => (
             <li key={f.stage} className="grid grid-cols-[minmax(0,180px)_1fr] items-center gap-4">
@@ -110,8 +110,8 @@ function Overview({ d }: { d: Uc1Data }) {
         </ol>
       </Card>
       <Landscape d={d} />
-      <Card title="Our computers" description="What the agent knows about each computer">
-        <DTable head={[['Computer'], ['OS'], ['Vulnerabilities', 'right'], ['Threats that affect it', 'right'], ['Hunt hits', 'right'], ['Last seen by Defender']]}>
+      <Card title="Managed devices" description="Agent-collected context for each device">
+        <DTable head={[['Device'], ['OS'], ['Vulnerabilities', 'right'], ['Applicable threats', 'right'], ['Hunt matches', 'right'], ['Last seen by Defender']]}>
           {d.devices.map((x) => (
             <tr key={x.device_name}>
               <td className="font-medium">{x.device_name}</td>
@@ -132,11 +132,11 @@ function Overview({ d }: { d: Uc1Data }) {
 
 type Reach = 'all' | 'defender' | 'early' | 'sign' | 'closed'
 const REACH: [Reach, string, string][] = [
-  ['all', 'All', 'Everything that affects our computers now'],
-  ['defender', 'Confirmed by Defender', 'The news names a vulnerability Defender also lists on our computer'],
-  ['early', 'Not in Defender yet', 'The news names a vulnerability in an app version we have; Defender hasn’t listed it yet'],
-  ['sign', 'Signs of attack', 'Hunt hits and clues seen on our computers'],
-  ['closed', 'Defender never listed it', 'The installed version is affected, but Defender didn’t list it within 30 days (often old, unsupported apps)'],
+  ['all', 'All', 'Everything currently applicable to managed devices'],
+  ['defender', 'Confirmed by Defender', 'Threat intelligence names a vulnerability Defender also reports on a managed device'],
+  ['early', 'Pending Defender confirmation', 'Threat intelligence names a vulnerability in an installed version; Defender has not reported it yet'],
+  ['sign', 'Detections', 'Hunt matches and indicators observed on managed devices'],
+  ['closed', 'Not reported by Defender', 'The installed version is affected, but Defender did not report it within 30 days (often legacy, unsupported applications)'],
 ]
 /** How a threat reaches us; older UC1 output has no `match`, so fall back to what it had. */
 const reachOf = (e: ExplorerRow): Exclude<Reach, 'all'> | null =>
@@ -160,7 +160,7 @@ function AffectsUs({ d }: { d: Uc1Data }) {
   const rows = sev === 'All' ? all : all.filter((e) => e.rating === sev)
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="How it reaches us">
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Exposure path">
         {REACH.map(([r, label, hint]) => {
           const n = inReach(r).length
           return (
@@ -182,10 +182,10 @@ function AffectsUs({ d }: { d: Uc1Data }) {
           )
         })}
       </div>
-      <p className="text-sm text-ink-3">{REACH.find(([r]) => r === show)![2]}. Most dangerous first; open one to see the vulnerability, where it is, its timeline and how to fix it. Ratings come from fixed rules, never the AI.</p>
+      <p className="text-sm text-ink-3">{REACH.find(([r]) => r === show)![2]}. Highest risk first; open one to view the vulnerability, affected devices, timeline and remediation. Ratings are rule-based.</p>
       {rows.length
         ? rows.map((e, i) => <AffectCard key={e.id} e={e} story={storyOf(e, dd)} openAtStart={i === 0} />)
-        : <Empty text={show === 'early' ? 'Nothing waiting for Defender right now: every vulnerability the news names for our app versions is already in Defender.' : 'Nothing here right now.'} />}
+        : <Empty text={show === 'early' ? 'Nothing pending Defender confirmation: every vulnerability named in threat intelligence for installed versions is already reported by Defender.' : 'No items at present.'} />}
     </div>
   )
 }
@@ -199,11 +199,11 @@ function AffectCard({ e, story, openAtStart }: { e: ExplorerRow; story: Story | 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <SevTag sev={e.rating} />
-            <span className="text-ink-3">{isSign(e.kind) ? 'Sign of attack on our computers' : e.source}</span>
+            <span className="text-ink-3">{isSign(e.kind) ? 'Detection on a managed device' : e.source}</span>
             <ScoreBar score={e.score} width={64} />
             <StoryBadge s={story} />
           </div>
-          <div className="mt-1.5 font-semibold leading-snug">{cleanTitle(e.title).replace(/^(TEST:\s*)?Hunt hit:\s*/, '$1').replace(/AI-drafted:\s*/, '')}</div>
+          <div className="mt-1.5 font-semibold leading-snug">{cleanTitle(e.title).replace(/^(TEST:\s*)?Hunt hit:\s*/, '').replace(/AI-drafted:\s*/, '')}</div>
           <div className="mt-1 text-xs text-ink-3">
             On {devices || '–'}{e.action && <> · <span className="text-ink-2">Do: {e.action}</span></>}
           </div>
@@ -216,8 +216,8 @@ function AffectCard({ e, story, openAtStart }: { e: ExplorerRow; story: Story | 
 }
 
 const MATCH_NOTE: Record<string, string> = {
-  early: 'Not in Defender yet: NVD says this installed version is affected',
-  closed: 'Defender never listed it: NVD says this installed version is affected',
+  early: 'Pending Defender confirmation: NVD lists this installed version as affected',
+  closed: 'Not reported by Defender: NVD lists this installed version as affected',
   product: 'possible match by product name',
   watchlist: 'watch-list match, not checked in Defender',
 }
@@ -240,7 +240,7 @@ function AffectDetail({ e, story }: { e: ExplorerRow; story: Story | null }) {
       </section>
 
       <section>
-        <h3 className="text-sm font-semibold">{t.exposure.length ? 'The vulnerability on our computers' : 'What we found on our computers'}</h3>
+        <h3 className="text-sm font-semibold">{t.exposure.length ? 'Vulnerability on managed devices' : 'Findings on managed devices'}</h3>
         <ul className="mt-1.5 flex flex-col gap-2">
           {t.exposure.map((x, i) => (
             <li key={i} className="rounded-lg bg-well px-3 py-2 text-sm">
@@ -263,8 +263,6 @@ function AffectDetail({ e, story }: { e: ExplorerRow; story: Story | null }) {
               <div key={c.id}>
                 <span className="tabular font-medium text-ink-2">{c.id}</span>
                 {c.cvss != null && <> · CVSS {c.cvss}</>}
-                {c.kev_added && <> · used by attackers since {c.kev_added}</>}
-                {c.kev_ransomware === 'Known' && <span style={{ color: statusColor.critical }}> · used by ransomware</span>}
               </div>
             ))}
           </div>
@@ -277,13 +275,13 @@ function AffectDetail({ e, story }: { e: ExplorerRow; story: Story | null }) {
             <h3 className="flex items-center gap-2 text-sm font-semibold">How to fix {t.ai_status === 'done' && <AiChip origin="ai" />}</h3>
             {t.actions.length
               ? <ol className="mt-1.5 list-decimal space-y-1 pl-5 text-sm text-ink-2 marker:text-ink-3">{t.actions.map((a) => <li key={a}>{a}</li>)}</ol>
-              : <p className="mt-1.5 text-sm text-ink-3">No steps written yet; they come with the next Threat Intel run.</p>}
-            {t.ai_status === 'done' && <p className="mt-2 text-[11px] text-ink-3">The update comes from Defender; the other steps are written by the AI assistant and checked by the agent.</p>}
+              : <p className="mt-1.5 text-sm text-ink-3">No steps available yet; they will be generated in the next Threat Intel run.</p>}
+            {t.ai_status === 'done' && <p className="mt-2 text-[11px] text-ink-3">The update comes from Defender; the remaining steps are agent-generated and validated against the data.</p>}
           </>
         )}
         <div className="mt-3 flex flex-wrap gap-2">
           {fixApp && (
-            <Link to={`/fixes?sw=${encodeURIComponent(fixApp)}`} title="Open on the Fix page (you can let the portal fix it)" className="inline-flex items-center gap-1 rounded-md bg-blue/15 px-2.5 py-1.5 text-xs font-semibold text-sky transition-colors hover:bg-blue/25">
+            <Link to={`/fixes?sw=${encodeURIComponent(fixApp)}`} title="Open in Remediation" className="inline-flex items-center gap-1 rounded-md bg-blue/15 px-2.5 py-1.5 text-xs font-semibold text-sky transition-colors hover:bg-blue/25">
               <Zap className="size-3" /> Fix it
             </Link>
           )}
@@ -394,8 +392,8 @@ function Landscape({ d }: { d: Uc1Data }) {
           />
         ) : <Empty text="No techniques recorded yet." />}
       </Card>
-      <Card className="xl:col-span-5" title="Sources" description={`What each source sent ${when}: threats, clues (a clue two sources sent counts for each) and threats that affect us`}>
-        <DTable head={[['Source'], ['Threats', 'right'], ['Clues', 'right'], ['Affect us', 'right']]} minWidth={340}>
+      <Card className="xl:col-span-5" title="Sources" description={`What each source provided ${when}: threats, indicators (counted per source) and applicable threats`}>
+        <DTable head={[['Source'], ['Threats', 'right'], ['Indicators', 'right'], ['Applicable', 'right']]} minWidth={340}>
           {Object.entries(sources).sort((a, b) => b[1].threats - a[1].threats || b[1].clues - a[1].clues).map(([s, n]) => (
             <tr key={s}>
               <td>{s}</td>
@@ -430,14 +428,14 @@ function Explorer({ d }: { d: Uc1Data }) {
   return (
     <Panel className="p-6">
       <div className="flex flex-wrap items-center gap-2">
-        {([['threats', 'Threats', threats.length, 'Attack news, advisories and vulnerability lists'],
-          ['clues', 'Clues', clueCount, 'IPs, domains, web links and file hashes the hunts search for']] as const).map(([v, label, n, hint]) => (
+        {([['threats', 'Threats', threats.length, 'Threat reports, advisories and vulnerability lists'],
+          ['clues', 'Indicators', clueCount, 'IPs, domains, URLs and file hashes searched by hunts']] as const).map(([v, label, n, hint]) => (
           <button key={v} onClick={() => show(v)} aria-pressed={view === v} title={hint}
             className={cn('flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-sm font-medium', view === v ? 'pill-on' : 'border-hairline bg-panel hover:bg-well')}>
             {label} <span className="tabular text-xs opacity-60">{num(n)}</span>
           </button>
         ))}
-        <span className="text-xs text-ink-3">{view === 'threats' ? `Attack news, advisories and vulnerability lists (${when})` : `IPs, domains, web links and file hashes from the IOC feeds (${when})`}</span>
+        <span className="text-xs text-ink-3">{view === 'threats' ? `Threat reports, advisories and vulnerability lists (${when})` : `IPs, domains, URLs and file hashes from the IOC feeds (${when})`}</span>
       </div>
       <div className="mt-4 border-t border-hairline pt-4">
         {view === 'threats' ? <ThreatList rows={threats} /> : <ClueList from={from} />}
@@ -476,7 +474,7 @@ function ThreatList({ rows: all }: { rows: ExplorerRow[] }) {
       </div>
       <div className="mt-4">
         {rows.length ? (
-          <DTable head={[['Rating'], ['Score'], ['Threat'], ['On our computers'], ['Published'], ['First action']]} minWidth={980}>
+          <DTable head={[['Rating'], ['Score'], ['Threat'], ['Affected devices'], ['Published'], ['First action']]} minWidth={980}>
             {rows.slice(0, shown).map((e) => (
               <tr key={e.id} className="align-top hover:bg-well/60">
                 <td><SevTag sev={e.rating} /></td>
@@ -523,7 +521,7 @@ function ClueList({ from }: { from: string | null }) {   // from: start of the p
   const all = useMemo(() => (data ?? []).filter((c) => !c.test && (!from || !c.collected || c.collected >= from)), [data, from])
   const sources = useMemo(() => [...new Set(all.map((c) => c.source))].sort(), [all])
   if (isLoading) return <Skeleton className="h-64 rounded-xl" />
-  if (error || !data) return <Empty text={`The clue list is not available: ${String((error as Error)?.message ?? 'run the Threat Intel Agent once to build it')}`} />
+  if (error || !data) return <Empty text={`The indicator list is not available: ${String((error as Error)?.message ?? 'run the Threat Intel Agent to build it')}`} />
   const types = CLUE_KINDS.find(([k]) => k === kind)![2]
   const seen = all.filter((c) => c.seen_on.length).length
   const ql = q.trim().toLowerCase()
@@ -548,17 +546,17 @@ function ClueList({ from }: { from: string | null }) {   // from: start of the p
         </select>
         <button onClick={() => { setSeenOnly(!seenOnly); reset() }} aria-pressed={seenOnly}
           className={cn('flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs', seenOnly ? 'pill-on' : 'border-hairline hover:bg-well')}>
-          {seenOnly && <CheckCircle2 className="size-3" />} Only seen on our computers <span className="tabular opacity-60">{num(seen)}</span>
+          {seenOnly && <CheckCircle2 className="size-3" />} Observed on managed devices only <span className="tabular opacity-60">{num(seen)}</span>
         </button>
         <label className="ml-auto flex items-center gap-2 rounded-lg border border-hairline bg-well px-3 py-1.5 text-sm">
           <Search className="size-3.5 text-ink-3" />
           <input value={q} onChange={(e) => { setQ(e.target.value); reset() }} placeholder="Value or malware" className="w-44 bg-transparent outline-none placeholder:text-ink-3" />
         </label>
       </div>
-      <p className="mt-3 text-xs text-ink-3">Written safely (hxxp, [.]) so they can&rsquo;t be clicked. The hunts search Defender for each one; a match shows the computer.</p>
+      <p className="mt-3 text-xs text-ink-3">Indicators are defanged (hxxp, [.]) to prevent accidental access. Hunts search Defender for each one; a match shows the affected device.</p>
       <div className="mt-3">
         {rows.length ? (
-          <DTable head={[['Type'], ['Clue'], ['Malware'], ['Source'], ['First seen'], ['On our computers'], ['Came with']]} minWidth={1040} maxHeight={640}>
+          <DTable head={[['Type'], ['Indicator'], ['Malware'], ['Source'], ['First seen'], ['On managed devices'], ['Associated threat']]} minWidth={1040} maxHeight={640}>
             {rows.slice(0, shown).map((c) => (
               <tr key={`${c.type}|${c.value}`} className="align-top hover:bg-well/60">
                 <td className="whitespace-nowrap text-ink-2">{CLUE_TYPE[c.type] ?? c.type}</td>
@@ -573,7 +571,7 @@ function ClueList({ from }: { from: string | null }) {   // from: start of the p
               </tr>
             ))}
           </DTable>
-        ) : <Empty text="No clues match." />}
+        ) : <Empty text="No indicators match." />}
       </div>
       <div className="mt-3 flex items-center justify-between text-xs text-ink-3">
         <span>{num(Math.min(shown, rows.length))} of {num(rows.length)} shown</span>
@@ -593,11 +591,10 @@ function Health({ d }: { d: Uc1Data }) {
     ['Time to publish the report', mins(m.median_minutes_to_report), 'median, first seen → report'],
     ['New threats assessed', `${num(Number(m.pct_assessed) || 0)}%`, 'analysed ÷ collected'],
     ['Threat hunts completed', `${num(Number(m.hunts_completed) || 0)} (≈${num(Number(m.hunts_per_month_projected) || 0)} a month)`, `${m.hunts_per_run} per run`],
-    ['Proactive threats identified', num(Number(m.proactive_threats_identified) || 0), 'threats matched to our computers'],
-    ['Vulnerabilities on our computers that attackers are known to use', num(Number(m.exposed_actively_exploited) || 0), 'CISA KEV'],
+    ['Proactive threats identified', num(Number(m.proactive_threats_identified) || 0), 'threats matched to managed devices'],
     ['Reports published', num(Number(m.reports_published) || 0), 'last 30 days'],
     ['Manual effort equivalent', `${num(Number(m['manual_hours_equivalent (assumption)']) || 0)} h`, 'assumption (config/metrics_assumptions.csv)'],
-    ['AI calls · corrected by checks', `${num(Number(m.ai_calls) || 0)} · ${m.ai_items_corrected_by_guard ?? '–'}`, 'automatic fact checks'],
+    ['Agent calls · corrected by checks', `${num(Number(m.ai_calls) || 0)} · ${m.ai_items_corrected_by_guard ?? '–'}`, 'automatic fact checks'],
   ]
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
@@ -621,7 +618,7 @@ function Health({ d }: { d: Uc1Data }) {
           })}
         </ul>
       </Card>
-      <Card className="xl:col-span-7" title="Key metrics" description="Measured from the agent's own timestamps; manual effort is a stated assumption">
+      <Card className="xl:col-span-7" title="Key metrics" description="Measured from agent timestamps; manual effort is an estimate">
         <DTable head={[['Metric'], ['Value', 'right'], ['How it is measured']]} minWidth={520}>
           {rows.map(([a, b, c]) => (
             <tr key={a}>

@@ -13,9 +13,13 @@ when its own UC4_AUTO_RESOLVE setting is on; the portal shows what it did and li
 Sign-in (auth.py): every /api/* call except /api/health and /api/auth/* needs a valid portal_session cookie, or gets
 401. The cookie comes from /api/auth/login or /signup (local accounts) or /api/auth/cognito (Amazon Cognito ID
 token); their POSTs need the X-Portal: auth header. PORTAL_AUTH=off switches sign-in off (tests).
+
+Audit (audit.py): every run started or refused, Remediation action, triage agree/disagree and Reopen is written to the
+hash-chained audit log with the signed-in person's name; GET /api/audit lists it (with sign-ins) for the Audit log page.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 
@@ -23,10 +27,10 @@ from fastapi import FastAPI, Header, Request
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from portal import devicenames, fixproxy, helpbot, helpready, notifications, services, uc4proxy
+from portal import audit, devicenames, fixproxy, helpbot, helpready, notifications, services, uc4proxy
 from portal.auth import COOKIE, Auth, AuthError
 from portal.config import SUITE_ENV, Settings, _load_env_file, load_settings
-from portal.runs import RunManager
+from portal.runs import AGENT_NAMES, RunManager
 from portal.sources import UC1, UC3, UC4
 from portal.summary import build_summary
 
@@ -42,6 +46,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     secrets_env = {**_load_env_file(SUITE_ENV), **os.environ}
     auth = Auth(settings, secrets_env.get("PORTAL_SESSION_SECRET") or None)
     app.state.auth = auth
+    audit_log = audit.AuditLog(settings.audit_dir)
+    app.state.audit = audit_log
+
+    def _record(request: Request, action: str, **fields) -> None:
+        audit_log.record(getattr(request.state, "user", None), action,
+                         ip=request.client.host if request.client else None, **fields)
+
+    def _fix_target(ids: list) -> str:
+        """'Mozilla Firefox on opcc-wks-01, …' for the fix ids of a Remediation action (UC1's plan / state files)."""
+        items: dict[str, dict] = {}
+        fix_dir = settings.uc1_dir / "data" / "fix"
+        for name, pick in (("plan.json", lambda d: {i.get("fix_id"): i for i in d.get("items") or []}),
+                           ("state.json", lambda d: {k: v.get("item") or {} for k, v in (d.get("fixes") or {}).items()})):
+            try:
+                items = {**pick(json.loads((fix_dir / name).read_text(encoding="utf-8"))), **items}
+            except (OSError, ValueError, AttributeError):
+                pass
+        names = [f"{items[i].get('app') or items[i].get('software_name') or i} on {items[i].get('device_name') or '?'}"
+                 if items.get(i) else str(i) for i in ids if isinstance(i, str)]
+        return ", ".join(names[:5]) + (f" and {len(names) - 5} more" if len(names) > 5 else "")
 
     @app.middleware("http")
     async def require_sign_in(request: Request, call_next):
@@ -137,6 +161,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return JSONResponse({"error": "The clue list is not built yet: run the Threat Intel Agent"}, status_code=404)
         return data
 
+    @app.get("/api/uc1/matches")
+    def uc1_match_counts():
+        uc3 = UC3(settings.uc3_dir)
+        data = UC1(settings.uc1_dir).threat_match_counts(uc3.first_found(), uc3.list_rows())
+        if data is None:
+            return JSONResponse({"error": "The Threat Intel Agent has not exported its matches yet: run it"}, status_code=404)
+        return data
+
+    @app.get("/api/uc1/matches/{software}")
+    def uc1_matches(software: str):
+        """The vulnerabilities of one app (Defender's software name, e.g. firefox) that a threat in the news names
+        before the Vulnerability Agent found them (later ones only repeat Defender's list)."""
+        data = UC1(settings.uc1_dir).threat_matches(software, UC3(settings.uc3_dir).first_found())
+        if data is None:
+            return JSONResponse({"error": "The Threat Intel Agent has not exported its matches yet: run it"}, status_code=404)
+        return data
+
     @app.get("/api/uc1/threats/{threat_id:path}")
     def uc1_threat(threat_id: str):
         data = UC1(settings.uc1_dir).threat(threat_id)
@@ -171,10 +212,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             body = await request.json()
         except ValueError:
             body = {}
+        body = body if isinstance(body, dict) else {}
+        logged = action in fixproxy.ACTIONS
+        target = _fix_target(body["ids"] if isinstance(body.get("ids"), list) else []) if logged else ""
+        method = f"Method: {body['method']}. " if body.get("method") in fixproxy.METHODS else ""
         try:
-            status, out = fixproxy.post_fix(settings.uc1_site, action, body if isinstance(body, dict) else {})
+            status, out = fixproxy.post_fix(settings.uc1_site, action, body)
         except fixproxy.Uc1Unavailable as exc:
+            if logged:
+                _record(request, f"fix.{action}", agent="Remediation", target=target, outcome="failed", detail=method + str(exc))
             return JSONResponse({"error": str(exc), "uc1_down": True}, status_code=503)
+        if logged:
+            _record(request, f"fix.{action}", agent="Remediation", target=target, outcome="success" if status < 400 else "failed",
+                    detail=method + (str(out.get("error") or "") if status >= 400 else ""))
         return JSONResponse(out, status_code=status)
 
     # ---- Triage (UC4): read its exports; agree/disagree goes to UC4's own website API (see uc4proxy.py)
@@ -209,10 +259,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             body = await request.json()
         except ValueError:
             body = {}
+        body = body if isinstance(body, dict) else {}
+        action = "triage.agree" if body.get("agree") is True else "triage.disagree"
+        target = f"Incident #{str(body.get('incident_id') or '?')[:80]}"
+        why = "; ".join(x for x in (f"Analyst verdict: {body['analyst_verdict']}" if body.get("analyst_verdict") else "",
+                                    str(body.get("reason") or "")[:500]) if x)
         try:
-            status, out = uc4proxy.post_feedback(settings.uc4_site, body if isinstance(body, dict) else {})
+            status, out = uc4proxy.post_feedback(settings.uc4_site, body)
         except uc4proxy.Uc4Unavailable as exc:
+            _record(request, action, agent=AGENT_NAMES["uc4"], target=target, outcome="failed", detail=str(exc))
             return JSONResponse({"error": str(exc), "uc4_down": True}, status_code=503)
+        _record(request, action, agent=AGENT_NAMES["uc4"], target=target, outcome="success" if status < 400 else "failed",
+                detail=why if status < 400 else str(out.get("error") or ""))
         return JSONResponse(out, status_code=status)
 
     @app.post("/api/uc4/ask")
@@ -238,10 +296,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             body = await request.json()
         except ValueError:
             body = {}
+        body = body if isinstance(body, dict) else {}
+        target = f"Incident #{str(body.get('incident_id') or '?')[:80]}"
         try:
-            status, out = uc4proxy.post_reopen(settings.uc4_site, body if isinstance(body, dict) else {})
+            status, out = uc4proxy.post_reopen(settings.uc4_site, body)
         except uc4proxy.Uc4Unavailable as exc:
+            _record(request, "triage.reopen", agent=AGENT_NAMES["uc4"], target=target, outcome="failed", detail=str(exc))
             return JSONResponse({"error": str(exc), "uc4_down": True}, status_code=503)
+        _record(request, "triage.reopen", agent=AGENT_NAMES["uc4"], target=target, outcome="success" if status < 400 else "failed",
+                detail=str(body.get("reason") or "Reopened from the portal")[:300] if status < 400 else str(out.get("error") or ""))
         return JSONResponse(out, status_code=status)
 
     @app.post("/api/uc4/start-site")
@@ -270,7 +333,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                   "uc4": settings.uc4_dir / "data" / "reports"}[uc]
         return FileResponse(folder / name, filename=name)
 
-    runs = RunManager({"uc1": settings.uc1_dir, "uc3": settings.uc3_dir, "uc4": settings.uc4_dir, "attack": settings.uc1_dir})
+    runs = RunManager({"uc1": settings.uc1_dir, "uc3": settings.uc3_dir, "uc4": settings.uc4_dir, "attack": settings.uc1_dir},
+                      audit_dir=settings.audit_dir)
     app.state.runs = runs
 
     @app.get("/api/runs")
@@ -288,15 +352,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return runs.log(uc, max(0, after), run)
 
     @app.post("/api/runs/{uc}")
-    def start_run(uc: str, x_portal: str | None = Header(default=None)):
+    def start_run(uc: str, request: Request, x_portal: str | None = Header(default=None)):
         """Start a real pipeline run. Needs the X-Portal: run header (a plain link or form cannot trigger it)."""
         if x_portal != "run":
             return JSONResponse({"error": "missing header"}, status_code=403)
         if uc not in UCS:
             return JSONResponse({"error": "unknown use case"}, status_code=404)
-        started, state, message = runs.start(uc)
+        started, state, message = runs.start(uc, audit.who(getattr(request.state, "user", None)))
+        run_id = state.run_id if state else None
+        if started:
+            _record(request, "run.start", agent=AGENT_NAMES[uc], target=run_id or "", ref=run_id)
+        else:
+            _record(request, "run.refused", agent=AGENT_NAMES[uc], outcome="refused", detail=message)
         body = {"started": started, "message": message, "run": state.to_dict() if state else None}
         return JSONResponse(body, status_code=202 if started else 409)
+
+    # ---- Audit log: who did what and when (audit.py), newest first, with the sign-ins
+    @app.get("/api/audit")
+    def audit_list() -> dict:
+        rows = audit_log.entries()
+        integrity = audit_log.verify(rows)
+        entries = [{**r, "label": audit.ACTIONS.get(r.get("action", ""), r.get("action", "")), "source": "audit"}
+                   for r in rows if "_broken" not in r][-5000:]
+        entries += audit.sign_ins(settings.auth_dir)
+        entries.sort(key=lambda r: str(r.get("at") or ""), reverse=True)
+        return {"entries": entries, "integrity": integrity}
 
     # ---- Help chatbot (the "?" bubble on every screen): answers from the portal's own data, never acts
     @app.get("/api/notifications")

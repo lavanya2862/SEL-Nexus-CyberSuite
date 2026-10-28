@@ -1,4 +1,4 @@
-"""Vulnerability Report workbook for one scan (opens in Excel or LibreOffice Calc).
+"""Vulnerability Report workbook for one scan (opens in Excel).
 
 data/reporting/Vulnerability_Report_<snapshot>.xlsx. Same numbers as the Word/PDF report (report.gather):
 Summary (number tiles + charts), Vulnerabilities (every one, with its fix beside it), Fix plan (AI), New this scan,
@@ -166,15 +166,13 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
         ws.column_dimensions[get_column_letter(col)].width = 14
     row = _tiles(ws, 4, summary_tiles(t))
     row = _tiles(ws, row, [(f"{t['overdue']:,}", "Overdue", "past their fix-by date", ds.BAD),
-                           (f"{t['kev_cves']:,}", "Used by attackers", "CVEs on the CISA KEV list", ds.BAD),
                            (f"{t['p1']:,}", "Priority P1", "fix first", ds.SERIOUS),
                            (f"{t['app_versions']:,}", "App versions to update", "each clears several findings", ds.BLUE),
-                           (f"{len(apps) + len(settings_cards):,}", "Fix guides", "one per app or setting", ds.BLUE),
-                           (f"{t['repeats']:,}", "Repeats removed", "rows Defender sent twice", ds.INK_3)])
+                           (f"{len(apps) + len(settings_cards):,}", "Fix guides", "one per app or setting", ds.BLUE)])
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=12)
     c = ws.cell(row=row, column=1, value=(
-        f"This scan found {t['unique']:,} vulnerabilities on {t['machines']} computers ({t['defender_rows']:,} rows from "
-        f"Microsoft Defender, of which {t['repeats']:,} were repeats). {t['critical']:,} are Critical and {t['high']:,} High; "
+        f"This scan found {t['unique']:,} vulnerabilities on {t['machines']} computers. "
+        f"{t['critical']:,} are Critical and {t['high']:,} High; "
         f"{t['overdue']:,} are past their fix-by date. Since the last scan, {t['new']:,} appeared and {t['fixed']:,} were fixed. "
         f"Every vulnerability is listed on the 'Vulnerabilities' sheet with its fix."))
     c.alignment, c.font = Alignment(wrap_text=True, vertical="top"), Font(size=10, color=ds.INK)
@@ -222,8 +220,8 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
 
     # ---- Vulnerabilities: every one, with its fix
     ws = wb.create_sheet("Vulnerabilities")
-    headers = ["Computer", "OpCo", "App", "Version", "CVE", "Severity", "CVSS", "Priority", "Exploit", "Used by attackers",
-               "Attack name (CISA)", "First seen", "Open (days)", "Fix within (days)", "Fix by", "Overdue",
+    headers = ["Computer", "OpCo", "App", "Version", "CVE", "Severity", "CVSS", "Priority", "Exploit",
+               "First seen", "Open (days)", "Fix within (days)", "Fix by", "Overdue",
                "Recommended update", "Update available", "Urgency", "Fix", "Command", "What is wrong", "Steps",
                "How to check", "Fix guide"]
     _band(ws, f"All vulnerabilities in this scan ({len(d['vulns']):,})", subtitle + "  ·  each row carries its fix; "
@@ -232,23 +230,23 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
     for v in d["vulns"]:
         g = v["guide"] or {}
         rows.append([v["device_name"], v["opco"], f"{v['software_vendor']} {v['software_name']}", v["software_version"],
-                     v["cve_id"], v["severity"], v["cvss_score"], v["priority"], v["exploit_words"], _yes(v["in_cisa_kev"]),
-                     v["kev_name"] or "", v["first_seen"], v["age_days"], v["sla_days"], v["fix_by"], _yes(v["sla_breached"]),
+                     v["cve_id"], v["severity"], v["cvss_score"], v["priority"], v["exploit_words"],
+                     v["first_seen"], v["age_days"], v["sla_days"], v["fix_by"], _yes(v["sla_breached"]),
                      v["recommended_update"] or "", _yes(v["security_update_available"]),
                      (g.get("urgency") or {}).get("label", ""), (g.get("fix") or {}).get("action", ""),
                      (g.get("fix") or {}).get("command") or "", (g.get("ai") or {}).get("what_is_wrong", ""),
                      _steps((g.get("ai") or {}).get("steps")).replace("\n", "   "), (g.get("ai") or {}).get("verify", ""),
                      g.get("app", "") and "Open guide"])
     _table(ws, 4, "Vulnerabilities", headers, rows,
-           [14, 10, 22, 16, 17, 10, 7, 8, 15, 10, 30, 12, 9, 9, 12, 9, 20, 10, 24, 34, 34, 50, 60, 40, 12],
-           {5: sev_colours, 9: {"Yes": ds.BAD}, 15: {"Yes": ds.BAD}})
+           [14, 10, 22, 16, 17, 10, 7, 8, 15, 12, 9, 9, 12, 9, 20, 10, 24, 34, 34, 50, 60, 40, 12],
+           {5: sev_colours, 13: {"Yes": ds.BAD}})
     for r, v in enumerate(d["vulns"], 5):
         ws.row_dimensions[r].height = 16                 # one line per vulnerability; the full guide is one click away
-        for col in (12, 15):
+        for col in (10, 13):
             ws.cell(row=r, column=col).number_format = "dd mmm yyyy"
         g = v["guide"]
         if g and g["key"] in guide_row:
-            c = ws.cell(row=r, column=25)
+            c = ws.cell(row=r, column=23)
             c.hyperlink = Hyperlink(ref=c.coordinate, location=f"'{FIX_SHEET}'!A{guide_row[g['key']]}")
             c.font = Font(color=ds.BLUE, underline="single")
     ws.freeze_panes = "F5"
@@ -256,7 +254,7 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
     # ---- Fix plan (AI)
     ws = wb.create_sheet(FIX_SHEET)
     headers = ["#", "Kind", "Urgency", "App / setting", "Versions / category", "Fix type", "Fix by", "Computers", "CVEs",
-               "Critical", "High", "Used by attackers", "Fix", "Command", "What is wrong", "Worst case", "Why now", "Steps",
+               "Critical", "High", "Fix", "Command", "What is wrong", "Worst case", "Why now", "Steps",
                "How to check", "Side effects", "Written by"]
     _band(ws, f"Fix plan: {len(apps)} apps and {len(settings_cards)} security settings",
           "Facts, versions, deadlines and commands come from the data; the AI explains them. Check before acting.", len(headers))
@@ -266,19 +264,19 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
 
     rows = [[i, "App", a["urgency"]["label"], a["app"], ", ".join(v["version"] for v in a["versions"]), a.get("fix_type"),
              date.fromisoformat(a["fix_by"]) if a.get("fix_by") else None, ", ".join(x["name"] for x in a["devices"]), a["cves"], a["critical"], a["high"],
-             len(a["kev_cves"]) or "", (a.get("fix") or {}).get("action"), (a.get("fix") or {}).get("command") or "",
+             (a.get("fix") or {}).get("action"), (a.get("fix") or {}).get("command") or "",
              a["ai"].get("what_is_wrong"), a["ai"].get("worst_case"), a["ai"].get("why_now"), _steps(a["ai"].get("steps")),
              a["ai"].get("verify"), a["ai"].get("side_effects"), by(a)] for i, a in enumerate(apps, 1)]
     rows += [[len(apps) + i, "Setting", (s.get("urgency") or {}).get("label", ""), s["app"],
               f"{s.get('category', '')} / {s.get('subcategory', '')} · impact {s.get('impact', 0):g}/10", s.get("fix_type"), None,
-              ", ".join(x["name"] for x in s.get("devices", [])), None, None, None, None, (s.get("fix") or {}).get("action"),
+              ", ".join(x["name"] for x in s.get("devices", [])), None, None, None, (s.get("fix") or {}).get("action"),
               (s.get("fix") or {}).get("command") or "", s["ai"].get("what_is_wrong"), s["ai"].get("worst_case"),
               s["ai"].get("why_now"), _steps(s["ai"].get("steps")), s["ai"].get("verify"), s["ai"].get("side_effects"), by(s)]
              for i, s in enumerate(settings_cards, 1)]
     urgency_fill = {g["urgency"]["label"]: URGENCY_COLOURS.get(g["urgency"]["level"], ds.BLUE)
                     for g in [*apps, *settings_cards] if g.get("urgency")}
     _table(ws, 4, "FixPlan", headers, rows,
-           [5, 8, 22, 30, 26, 22, 11, 22, 7, 8, 7, 9, 32, 36, 50, 40, 40, 70, 40, 34, 16], {2: urgency_fill}, wrap=True)
+           [5, 8, 22, 30, 26, 22, 11, 22, 7, 8, 7, 32, 36, 50, 40, 40, 70, 40, 34, 16], {2: urgency_fill}, wrap=True)
     for r in range(5, 5 + len(apps)):
         ws.cell(row=r, column=7).number_format = "dd mmm yyyy"
     ws.freeze_panes = "E5"
@@ -313,13 +311,13 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
 
     # ---- Top CVEs
     ws = wb.create_sheet("Top CVEs")
-    headers = ["CVE", "Severity", "CVSS", "Priority", "Used by attackers", "Exploit", "Computers", "Findings", "Apps", "OpCos"]
-    _band(ws, "Top 100 CVEs", "Ordered by priority, then used by attackers, then how many computers have it", len(headers))
+    headers = ["CVE", "Severity", "CVSS", "Priority", "Exploit", "Computers", "Findings", "Apps", "OpCos"]
+    _band(ws, "Top 100 CVEs", "Ordered by priority, then how many computers have it", len(headers))
     _table(ws, 4, "TopCVEs", headers,
-           [[c["cve_id"], c["severity"], c["cvss"], c["priority"], _yes(c["kev"]),
+           [[c["cve_id"], c["severity"], c["cvss"], c["priority"],
              EXPLOIT_WORDS.get(c["exploitability"], c["exploitability"] or ""), c["devices"], c["findings"], c["apps"], c["opcos"]]
             for c in d["top_cves"]],
-           [17, 10, 7, 9, 10, 16, 10, 9, 40, 18], {1: sev_colours, 4: {"Yes": ds.BAD}})
+           [17, 10, 7, 9, 16, 10, 9, 40, 18], {1: sev_colours})
 
     # ---- Apps to update
     ws = wb.create_sheet("Apps to update")
@@ -385,11 +383,11 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
                  [[c["name"].replace("_", " "), c["status"], c["value"], c["expected"], c.get("message", "")]
                   for c in d["quality"].get("checks", [])], [24, 10, 28, 34, 70], {1: STATUS}, wrap=True, freeze=False)
     ws.cell(row=nxt, column=1, value="Scan history").font = Font(bold=True, size=11, color=ds.NAVY)
-    _table(ws, nxt + 1, "History", ["Scan", "Rows in Defender", "Rows downloaded", "Coverage", "Computers", "Run time (s)",
-                                    "Quality"],
-           [[h["run_date"], h["defender_count"], h["vulnerability_rows"],
+    _table(ws, nxt + 1, "History", ["Scan", "Rows in Defender", "Rows downloaded", "Repeats", "Vulnerabilities kept",
+                                    "Coverage", "Computers", "Run time (s)", "Quality"],
+           [[h["run_date"], h["defender_count"], h["vulnerability_rows"], h.get("repeats"), h.get("vulnerabilities"),
              f"{h['coverage']:.1%}" if h["coverage"] is not None else "", h["machines"], h["duration_seconds"], h["quality"]]
-            for h in d["history"]], [24, 10, 28, 34, 12, 12, 10], {6: STATUS}, freeze=False)
+            for h in d["history"]], [24, 10, 28, 34, 12, 12, 12, 12, 10], {8: STATUS}, freeze=False)
 
     # ---- How ratings work
     ws = wb.create_sheet("How ratings work")
@@ -403,7 +401,6 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
         ("Priority P3 / P4", "P3 = Medium or Unrated; P4 = Low."),
         ("Fix by", "The day Defender first saw it + the deadline for its severity: Critical 15 days, High 30, Medium 90, "
                    "Low 180. After that it is overdue."),
-        ("Used by attackers", "The CVE is on the CISA Known Exploited Vulnerabilities list; its guide says \"Fix now\"."),
         ("New / Fixed", "From Defender's own change list for this scan."),
         ("Repeats", "Rows Defender sent twice in its export; counted once."),
         ("Fix guides", "One per app and per weak setting. Versions, CVEs, computers and commands come from the data; the AI "

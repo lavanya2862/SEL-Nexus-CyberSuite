@@ -22,9 +22,11 @@ export function DataQuality({ data }: { data: Uc3Data }) {
   const exportAge = r?.export_generated_time ? ((new Date(r.started_at).getTime() - new Date(r.export_generated_time).getTime()) / 3600000).toFixed(1) + ' h' : '–'
   const facts: [string, string][] = r
     ? [
-        [num(r.vulnerability_rows), 'rows exported'],
+        [num(r.vulnerability_rows), 'rows downloaded'],
         [r.defender_count == null ? '–' : num(r.defender_count), 'rows in Defender (its own count)'],
         [r.coverage == null ? '–' : `${(r.coverage * 100).toFixed(1)}%`, 'coverage'],
+        [r.repeats == null ? '–' : num(r.repeats), 'repeats: Defender listed them twice, one copy kept'],
+        [r.vulnerabilities == null ? '–' : num(r.vulnerabilities), 'vulnerabilities kept (the number on every page)'],
         [num(r.machines), 'devices'],
         [`${r.duration_seconds} s`, 'run time'],
         [num(r.retries), 'retries needed'],
@@ -56,7 +58,7 @@ export function DataQuality({ data }: { data: Uc3Data }) {
       </Panel>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <Card className="xl:col-span-6" title="The checks" description="What each automatic test found on the latest run">
+        <Card className="xl:col-span-6" title="The checks" description="Results of each automated check on the latest run">
           <ul className="flex flex-col divide-y divide-hairline">
             {data.dq.map((c) => {
               const s = ICON[c.status as keyof typeof ICON] ?? ICON.INFO
@@ -76,7 +78,7 @@ export function DataQuality({ data }: { data: Uc3Data }) {
           </ul>
         </Card>
         <div className="flex flex-col gap-5 xl:col-span-6">
-          <Card title="Coverage on every run" description="Rows we captured compared with Defender's own count">
+          <Card title="Coverage on every run" description="Records ingested vs. Defender source count">
             <Chart
               height={200}
               build={(tk) => ({
@@ -86,20 +88,22 @@ export function DataQuality({ data }: { data: Uc3Data }) {
                 xAxis: { type: 'category', data: data.runs.map((h) => shortDate(h.run_date)), ...axisStyle(tk), splitLine: { show: false } },
                 yAxis: { type: 'value', ...axisStyle(tk), axisLine: { show: false } },
                 series: [
-                  { name: 'Rows captured', type: 'bar', barMaxWidth: 28, data: data.runs.map((h) => h.vulnerability_rows), itemStyle: { color: tk.series[1], borderRadius: [4, 4, 0, 0] } },
+                  { name: 'Records ingested', type: 'bar', barMaxWidth: 28, data: data.runs.map((h) => h.vulnerability_rows), itemStyle: { color: tk.series[1], borderRadius: [4, 4, 0, 0] } },
                   { name: 'Defender count', type: 'line', symbol: 'circle', symbolSize: 8, data: data.runs.map((h) => h.defender_count), lineStyle: { width: 2, color: tk.ink2, type: 'dashed' }, itemStyle: { color: tk.ink2 } },
                 ],
               })}
             />
           </Card>
-          <Card title="Run history" description="Every run and how much of Defender it captured">
-            <DTable head={[['Date'], ['Rows', 'right'], ['Defender count', 'right'], ['Coverage', 'right'], ['Devices', 'right'], ['Run time', 'right'], ['Quality']]} minWidth={560}>
+          <Card title="Run history" description="Each run: records downloaded, Defender coverage, and unique vulnerabilities after de-duplication">
+            <DTable head={[['Date'], ['Rows', 'right'], ['Defender count', 'right'], ['Coverage', 'right'], ['Repeats', 'right'], ['Vulnerabilities', 'right'], ['Devices', 'right'], ['Run time', 'right'], ['Quality']]} minWidth={720}>
               {[...data.runs].reverse().map((h) => (
                 <tr key={h.run_date}>
                   <td className="tabular whitespace-nowrap">{h.run_date}</td>
                   <td className="tabular text-right">{num(h.vulnerability_rows)}</td>
                   <td className="tabular text-right">{h.defender_count == null ? '–' : num(h.defender_count)}</td>
                   <td className="tabular text-right">{h.coverage == null ? '–' : `${(h.coverage * 100).toFixed(1)}%`}</td>
+                  <td className="tabular text-right">{h.repeats == null ? '–' : num(h.repeats)}</td>
+                  <td className="tabular text-right">{h.vulnerabilities == null ? '–' : num(h.vulnerabilities)}</td>
                   <td className="tabular text-right">{num(h.machines)}</td>
                   <td className="tabular text-right">{h.duration_seconds} s</td>
                   <td>{h.quality ? <Tag tone={h.quality === 'FAIL' ? 'bad' : h.quality === 'WARN' ? 'warn' : undefined}>{h.quality}</Tag> : '–'}</td>

@@ -4,6 +4,7 @@ The agent makes no web pages of its own: the Unified Cyber Portal reads these fi
   dashboard_data.json   headline numbers, charts, the threat explorer, hunts, devices, metrics
   site_data.json        one threat's full detail, per threat id
   clues.json            every clue (IP, domain, web link, file hash) collected
+  threat_matches.json   every vulnerability on our computers that a threat in the news names (the Fix page's list)
 """
 
 from __future__ import annotations
@@ -37,11 +38,7 @@ def factor_chips(factors: list[str]) -> list[str]:
     chips = []
     for f in factors:
         low = f.lower()
-        if "actively-exploited" in low:
-            chips.append("CISA KEV")
-        elif "ransomware" in low:
-            chips.append("Ransomware")
-        elif low.startswith("epss"):
+        if low.startswith("epss"):
             m = re.search(r"EPSS (\d+)%", f)
             chips.append(f"EPSS {m.group(1)}%" if m else "EPSS")
         elif low.startswith("cvss"):
@@ -265,13 +262,15 @@ def gather(store: Store, settings: Settings | None = None) -> dict:
 
 
 def build(store: Store, settings: Settings) -> Path:
-    """Write the portal's data for the Threat Intel Agent: dashboard_data.json, site_data.json and clues.json."""
+    """Write the portal's data for the Threat Intel Agent: dashboard_data.json, site_data.json, clues.json and
+    threat_matches.json."""
     out_dir = settings.dashboard_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "dashboard_data.json"
     path.write_text(json.dumps(gather(store, settings), default=str, ensure_ascii=False), encoding="utf-8")
     export_site_data(store, settings)
     export_clues(store, settings)
+    export_threat_matches(store, settings)
     return path
 
 
@@ -379,4 +378,30 @@ def export_clues(store: Store, settings: Settings) -> Path:
     clues.sort(key=lambda c: not c["seen_on"])      # stable: found on our computers first, each part newest first
     path = settings.dashboard_dir / "clues.json"
     path.write_text(json.dumps(clues, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def export_threat_matches(store: Store, settings: Settings) -> Path:
+    """Every vulnerability on our computers that a threat in the news names, as data/dashboard/threat_matches.json.
+
+    The same exact-CVE match as the fix plan (the threat names a CVE that Defender lists for that app version on that
+    computer), but all of them: the fix plan keeps 3 threats per computer. "found" is when we first collected the
+    news, "published" when the source published it.
+      {"built_at", "threats": {id: [title, found, published, score]},
+       "cols": [...], "rows": [[device_name, software, version, cve, threat_id], ...]}
+    """
+    rows = store.query("""
+        SELECT DISTINCT v.device_name, v.name AS software, v.version, v.cve_id, e.threat_id,
+               t.title, t.first_seen_at, t.published_at, COALESCE(s.score, 0) AS score
+        FROM device_vulns v
+        JOIN exposure e ON e.device_id = v.device_id AND e.match_type = 'cve' AND e.detail LIKE v.cve_id || ' via %'
+        JOIN threats t ON t.threat_id = e.threat_id LEFT JOIN scores s ON s.threat_id = e.threat_id
+        WHERE NOT COALESCE(t.is_test, FALSE)
+        ORDER BY v.device_name, v.name, v.cve_id, score DESC""")
+    threats = {r["threat_id"]: [(r["title"] or r["threat_id"])[:200], str(r["first_seen_at"] or "")[:10] or None,
+                                str(r["published_at"] or "")[:10] or None, r["score"]] for r in rows}
+    out = {"built_at": utcnow(), "threats": threats, "cols": ["device", "software", "version", "cve", "threat"],
+           "rows": [[r["device_name"], r["software"], r["version"], r["cve_id"], r["threat_id"]] for r in rows]}
+    path = settings.dashboard_dir / "threat_matches.json"
+    path.write_text(json.dumps(out, default=str, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     return path

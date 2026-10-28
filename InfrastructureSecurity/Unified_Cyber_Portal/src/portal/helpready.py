@@ -71,9 +71,6 @@ def _home(ctx) -> list[dict]:
         qa("How many vulnerabilities do we have right now?",
            f"{n(t.get('total'))} vulnerabilities ({n(t.get('cves'))} different CVEs) on {plural(t.get('devices'), 'computer')}. "
            f"{n(t.get('p1'))} of them are Priority 1, the most urgent.", [("Vulnerabilities", "/uc3")]),
-        qa("How many vulnerabilities are attackers actively using?",
-           f"{n(t.get('kev'))} known exploited vulnerabilities: they are on CISA's KEV list of vulnerabilities attackers have really used against organisations (not necessarily against us). "
-           f"{n(t.get('ransomware'))} of them are used by ransomware gangs.", [("Fix", "/fixes")]),
     ]
 
 
@@ -96,16 +93,14 @@ def _threat(ctx) -> list[dict]:
     th = UC1(ctx.settings.uc1_dir).threat(unquote(m.group(1))) if m else None
     if not isinstance(th, dict):
         msg = "I can't find this threat in today's data."
-        return [qa("Which of our computers have this?", msg), qa("Are attackers using it right now?", msg)]
+        return [qa("Which of our computers have this?", msg), qa("How serious is it?", msg)]
     exp = th.get("exposure") or []
     devices = sorted({e.get("device_name") for e in exp if e.get("device_name")})
     first = (f"{plural(len(devices), 'computer')}: {listing(devices)}. "
              + (f"Defender sees {exp[0].get('detail')}." if exp and exp[0].get("detail") else "")
              if devices else "None of our computers have the software this threat targets, so no action is needed for now.")
-    exploited = th.get("kind") == "kev" or "actively-exploited" in str(th.get("factors"))
-    second = (f"Yes. It is on CISA's list of vulnerabilities attackers have really used against organisations (KEV). Rated {th.get('rating')} ({th.get('score')}/100)."
-              if exploited else f"There is no sign that attackers are using it yet. Rated {th.get('rating')} ({th.get('score')}/100).")
-    return [qa("Which of our computers have this?", first.strip()), qa("Are attackers using it right now?", second)]
+    second = f"Rated {th.get('rating')} ({th.get('score')}/100)."
+    return [qa("Which of our computers have this?", first.strip()), qa("How serious is it?", second)]
 
 
 def _hunts(ctx) -> list[dict]:
@@ -158,13 +153,12 @@ def _fixes(ctx) -> list[dict]:
         return [qa("How many apps need updating?", msg), qa("Which app should I update first?", msg)]
     now = [a for a in apps if (a.get("urgency") or {}).get("level") == 1]
     top = (now or apps)[0]
-    kev = len(top.get("kev_cves") or [])
     devices = listing([d.get("name") for d in top.get("devices") or []])
     return [
         qa("How many apps need updating?",
-           f"{plural(len(apps), 'app')}. {n(len(now))} are marked \"Fix now\" because attackers are using their vulnerabilities."),
+           f"{plural(len(apps), 'app')}. {n(len(now))} are marked \"Fix now\"."),
         qa("Which app should I update first?",
-           f"{top['app']}: {plural(kev, 'known exploited vulnerability', 'known exploited vulnerabilities')} ({n(top.get('cves'))} CVEs in total)"
+           f"{top['app']}: {n(top.get('cves'))} CVEs"
            + (f", fix by {day(top['fix_by'])}" if top.get("fix_by") else "") + f". It is on {devices}.",
            [(top["app"], f"/fixes?app={quote(top['app'])}")]),
     ]

@@ -1,8 +1,7 @@
 """Before/after table for the client's six UC3 metrics (Phase 7).
 
 Every value is labelled MEASURED (from our real Defender runs), ASSUMPTION (from config/assumptions.csv,
-to be replaced by the client's baseline) or CALCULATED (from the two). Written to
-data/reporting/UC3_Before_After_<snapshot>.md and printed by `python -m uc3 metrics`.
+to be replaced by the client's baseline) or CALCULATED (from the two). Printed by `python -m uc3 metrics`.
 """
 
 from __future__ import annotations
@@ -71,15 +70,4 @@ def build_metrics(settings: Settings) -> dict:
          "reporting is automatic; the dashboard's 'Fix these first' list goes straight to remediation (QUALITATIVE)",
          "time shifts to fixing"),
     ]
-    snapshot = m["run_date"]
-    lines = [f"# UC3 — before / after ({snapshot})", "",
-             "Labels: **MEASURED** = our real Defender runs · **ASSUMPTION** = `config/assumptions.csv`, replace with the "
-             "client's baseline · **CALCULATED** = derived from the two · **QUALITATIVE** = not measurable in a lab.", "",
-             "| Client metric | Before (old way) | After (this pipeline) | Change |", "|---|---|---|---|"]
-    lines += [f"| {m_} | {b} | {n} | {c} |" for m_, b, n, c in table]
-    lines += ["", f"Source run: {snapshot}, {m['counts']['machines']} devices, {rows:,} rows, Defender's own count "
-              f"{source if source is not None else 'n/a'}, run time {m['duration_seconds']} s, retries {m['retries']}."]
-    out = settings.reporting_dir / f"UC3_Before_After_{snapshot}.md"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return {"table": table, "path": out}
+    return {"table": table}

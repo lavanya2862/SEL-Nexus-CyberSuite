@@ -34,6 +34,7 @@ def main() -> int:
     ap.add_argument("--uc", required=True)
     ap.add_argument("--root", required=True)
     ap.add_argument("--run-dir", required=True)
+    ap.add_argument("--audit-dir")
     args = ap.parse_args()
     root, run_dir = Path(args.root), Path(args.run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -59,6 +60,13 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001 - always leave a result behind
             log.write(f"Run FAILED: the portal could not start the pipeline: {exc}\n")
     _write_json(run_dir / "result.json", {"exit_code": code, "finished_at": _now()})
+    if args.audit_dir:
+        from portal.audit import AuditLog
+        by = meta.get("by") if isinstance(meta.get("by"), dict) else None
+        AuditLog(Path(args.audit_dir)).record(by, "run.finish", agent=meta.get("agent", args.uc), target=run_dir.name,
+                                              outcome="success" if code == 0 else "failed",
+                                              detail="Finished normally" if code == 0 else f"Ended with exit code {code}",
+                                              ref=run_dir.name)
     return code
 
 

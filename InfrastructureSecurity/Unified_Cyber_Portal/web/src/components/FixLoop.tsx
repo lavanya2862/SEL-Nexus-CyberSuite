@@ -56,11 +56,11 @@ function Loop({ v }: { v: FixView }) {
       {/* what this is + the impact so far */}
       <Panel className="grid gap-6 p-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">Fix the lab computers automatically</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Automated remediation</h2>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-2">
             You approve; the assistant updates or removes the old app on the computer (winget, through {METHOD_LABEL[v.default_method]}),
             checks the installed version before and after, and the next threat check asks Defender to confirm the vulnerability is gone.
-            Commands come only from the assistant’s fix catalogue, never from the AI. Nothing runs without your approval.
+            Commands come only from the approved remediation catalogue. Nothing runs without your approval.
           </p>
           <ol className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
             {['1 · Plan', '2 · You approve', '3 · It fixes', '4 · Defender confirms'].map((s) => (
@@ -75,7 +75,6 @@ function Loop({ v }: { v: FixView }) {
             [v.totals.verified, 'verified by Defender'],
             [v.totals.failed, 'failed'],
             [v.impact.findings_cleared, 'findings cleared'],
-            [v.impact.kev_open, 'exploited vulnerabilities still open'],
           ] as const).map(([n, l]) => (
             <div key={l} className="rounded-xl bg-well px-3.5 py-3">
               <div className="tabular text-lg font-semibold leading-none" style={{ color: l === 'failed' && n ? statusColor.critical : undefined }}>{num(n ?? 0)}</div>
@@ -132,11 +131,11 @@ function Loop({ v }: { v: FixView }) {
       {byDevice.length ? byDevice.map(([device, rows]) => (
         <DevicePlan key={device} device={device} rows={rows} stages={v.stages} sel={sel} toggle={toggle}
           setMany={(ids, on) => setSel((s) => { const n = new Set(s); ids.forEach((i) => (on ? n.add(i) : n.delete(i))); return n })} />
-      )) : <Empty text="No fix plan yet: it is built on every threat check." />}
+      )) : <Empty text="No remediation plan yet: it is built on every Threat Intel run." />}
 
       <Panel className="p-6">
         <h3 className="font-semibold tracking-tight">Activity</h3>
-        <p className="mt-1 text-sm text-ink-3">Every approval, fix and Defender confirmation, newest first</p>
+        <p className="mt-1 text-sm text-ink-3">Every approval, remediation and Defender verification, most recent first</p>
         <ul className="mt-4 flex max-h-80 flex-col divide-y divide-hairline overflow-auto">
           {v.events.slice(0, 60).map((e, i) => (
             <li key={i} className="flex gap-3 py-2 text-sm">
@@ -151,11 +150,11 @@ function Loop({ v }: { v: FixView }) {
       <ConfirmDialog
         open={confirm !== null}
         onClose={() => setConfirm(null)}
-        title={confirm === 'run' ? `Run ${approved.length} approved fixes?` : `Approve all ${fixable.filter(canApprove).length} fixes?`}
+        title={confirm === 'run' ? `Execute ${approved.length} approved remediations?` : `Approve all ${fixable.filter(canApprove).length} remediations?`}
         body={confirm === 'run'
-          ? `On ${[...new Set(approved.map((r) => r.device_name))].join(' and ')}, the assistant will switch the computer on if it is off, close the apps and update or remove them. This changes the computers and the vulnerability numbers on every page. Leave a switched-on VM running for about 6 hours so Defender can confirm.`
-          : 'Every app on every computer in the plan gets approved, including removals of end-of-life apps. Nothing runs until someone presses Run.'}
-        confirmLabel={confirm === 'run' ? 'Run the fixes' : 'Approve everything'}
+          ? `On ${[...new Set(approved.map((r) => r.device_name))].join(' and ')}, the agent will power on each device if needed, close the applications and update or remove them. This changes the devices and the vulnerability figures on every page. Keep powered-on VMs running for about 6 hours so Defender can verify the changes.`
+          : 'Every application on every device in the plan is approved, including removal of end-of-life applications. Nothing runs until execution is started.'}
+        confirmLabel={confirm === 'run' ? 'Execute remediation' : 'Approve everything'}
         onConfirm={() => {
           if (confirm === 'run') run('run')
           else run('approve', fixable.filter(canApprove).map((r) => r.fix_id))
@@ -183,9 +182,9 @@ export function ProbeCard({ device, p }: { device: string; p?: FixView['probes']
           <span className="text-xs text-ink-3">{p?.checked_at ? `checked ${ago(utc(p.checked_at))}` : 'not checked yet'}</span>
         </div>
         <p className="mt-0.5 text-xs leading-relaxed text-ink-3">
-          {!p ? 'Press “Check computers” to confirm the assistant can reach it (changes nothing, never switches a VM on).'
+          {!p ? 'Select “Check devices” to confirm the agent can reach it (read-only; never powers on a VM).'
             : ok ? `Reachable · winget ${p.winget || 'not found'}${p.reboot_pending ? ' · restart pending' : ''} · ${p.apps?.length ?? 0} catalogue apps found`
-              : off ? 'Azure access works · the VM is switched off. A fix run switches it on.'
+              : off ? 'Azure access confirmed · the VM is powered off. A remediation run powers it on.'
                 : p.error}
         </p>
       </div>
@@ -207,7 +206,7 @@ export function Progress({ v }: { v: FixView }) {
           {live ? <Loader2 className="size-5 animate-spin text-sky" /> : <CheckCircle2 className="size-5" style={{ color: statusColor.good }} />}
           <div>
             <h3 className="font-semibold tracking-tight">
-              {live ? (v.worker.task === 'probe' ? 'Checking the computers…' : 'Fixing…') : 'Last fix task'}
+              {live ? (v.worker.task === 'probe' ? 'Checking device connectivity…' : 'Fixing…') : 'Last remediation task'}
             </h3>
             <p key={v.worker.step || v.worker.message} className="text-sm text-ink-3 animate-in fade-in slide-in-from-left-1 duration-300">
               {live ? v.worker.step || 'Starting' : v.worker.message}
@@ -296,7 +295,7 @@ function DevicePlan({ device, rows, stages, sel, toggle, setMany }: {
         </div>
         <label className="flex items-center gap-2 text-sm text-ink-2">
           <input type="checkbox" className="size-4 accent-[var(--blue)]" checked={allOn} disabled={!selectable.length} onChange={(e) => setMany(selectable, e.target.checked)} />
-          Select all on this computer
+          Select all on this device
         </label>
       </div>
       <div className="mt-4 overflow-x-auto rounded-xl border border-hairline">
@@ -308,7 +307,6 @@ function DevicePlan({ device, rows, stages, sel, toggle, setMany }: {
               <th className="px-3 py-2.5 font-medium">App</th>
               <th className="px-3 py-2.5 font-medium">Action</th>
               <th className="px-3 py-2.5 text-right font-medium">Findings</th>
-              <th className="px-3 py-2.5 text-right font-medium">Exploited</th>
               <th className="px-3 py-2.5 font-medium">Status</th>
               <th className="px-3 py-2.5 font-medium">Result</th>
             </tr>
@@ -331,7 +329,6 @@ function DevicePlan({ device, rows, stages, sel, toggle, setMany }: {
                   </td>
                   <td className="whitespace-nowrap text-ink-2">{ACTION_LABEL[r.action]}</td>
                   <td className="tabular text-right">{num(r.findings)}</td>
-                  <td className="tabular text-right" style={{ color: r.kev ? statusColor.critical : undefined }}>{r.kev || ''}</td>
                   <td><StatusPill r={r} />{r.approved_by && r.status === 'approved' && <div className="mt-0.5 text-[11px] text-ink-3">by {r.approved_by} · {r.method === 'liveresponse' ? 'Live Response' : 'Run Command'}</div>}</td>
                   <td className="max-w-[300px] text-xs text-ink-2 [overflow-wrap:anywhere]">{r.message ?? ''}</td>
                 </tr>

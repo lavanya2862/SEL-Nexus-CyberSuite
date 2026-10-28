@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { AlertTriangle, ArrowLeft, ExternalLink, Zap } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Zap } from 'lucide-react'
 import { Card, DTable, Empty, HopLink, Panel, SevTag, Tag } from '@/components/kit'
 import { num, shortDate } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
@@ -9,7 +9,7 @@ import { EXPL, addDays, daysBetween, findingHref, findingKey, pretty, useGroupAf
 import { Uc3Loading } from './common'
 
 const PRIORITY: Record<string, string> = {
-  P1: 'Fix first: Critical, or High with a known exploit', P2: 'Fix soon', P3: 'Fix in the normal update cycle', P4: 'Low',
+  P1: 'Priority 1: Critical, or High with a known exploit', P2: 'Priority 2: remediate soon', P3: 'Standard patch cycle', P4: 'Low',
 }
 
 /** Weak spots › one vulnerability: one CVE in one app version on one computer, with everything we know about it. */
@@ -28,9 +28,8 @@ export function VulnDetail() {
       <ArrowLeft className="size-4" /> All vulnerabilities
     </Link>
   )
-  if (!f) return <div className="flex flex-col gap-5">{back}<Empty text="This vulnerability is not in the latest data. It may have been fixed since." /></div>
+  if (!f) return <div className="flex flex-col gap-5">{back}<Empty text="This vulnerability is not in the latest data. It may have been remediated." /></div>
 
-  const kev = data.kev.find((k) => k.cve === f.cve)
   const slaDays = data.meta.sla[f.sev]
   const due = slaDays != null && f.fs ? addDays(f.fs, slaDays) : null
   const snap = String(data.meta.snapshot)
@@ -46,14 +45,12 @@ export function VulnDetail() {
       {back}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-xs font-medium text-ink-3"><span className="size-2 rounded-full bg-sky" /> Weak spots · vulnerability</div>
+          <div className="flex items-center gap-2 text-xs font-medium text-ink-3"><span className="size-2 rounded-full bg-sky" /> Vulnerability details</div>
           <h1 className="tabular mt-1 text-2xl font-semibold tracking-tight">{f.cve}</h1>
           <p className="mt-1 text-sm text-ink-3">In <b className="font-medium text-ink-2">{app}</b> on <b className="font-medium text-ink-2">{f.dev?.name}</b>{groupAfter(f)}</p>
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <SevTag sev={f.sev} />
             <Tag>{f.pr}</Tag>
-            {f.kev ? <Tag tone="warn">used by attackers</Tag> : null}
-            {kev?.rw && <Tag tone="bad">used in ransomware</Tag>}
             {f.br ? <Tag tone="bad">overdue</Tag> : null}
           </div>
         </div>
@@ -69,34 +66,31 @@ export function VulnDetail() {
       </div>
 
       <Panel className="flex items-start gap-3 p-5 text-sm leading-relaxed text-ink-2">
-        {f.kev ? <AlertTriangle className="mt-0.5 size-4 shrink-0" style={{ color: statusColor.critical }} /> : null}
         <p>
-          {kev ? <><b className="text-ink">{kev.name}.</b> Attackers are known to use this vulnerability (CISA list, since {shortDate(kev.added)}). </> : null}
           This weakness is in <b className="text-ink">{app}</b>. The fix: <b className="text-ink">{action}</b>.{' '}
           {sameApp.length > 1 && <>That also fixes the other {num(sameApp.length - 1)} vulnerabilities in this app on this computer.</>}
         </p>
       </Panel>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <Card title="The problem">
+        <Card title="Overview">
           <Facts rows={[
             ['Severity', <SevTag sev={f.sev} />],
             ['Severity score (CVSS)', f.cvss != null ? `${f.cvss.toFixed(1)} of 10` : 'Not rated yet'],
             ['Known attack code', EXPL[f.ex] ?? f.ex],
-            ['Used by attackers (CISA list)', f.kev ? `Yes${kev?.added ? `, listed ${shortDate(kev.added)}` : ''}` : 'No'],
             ['Priority', `${f.pr} · ${PRIORITY[f.pr] ?? ''}`],
           ]} />
         </Card>
-        <Card title="Where it is and the deadline">
+        <Card title="Location and remediation deadline">
           <Facts rows={[
             ['Computer', <>{f.dev?.name}<span className="text-ink-3">{groupAfter(f)}</span></>],
             ['Operating system', [f.dev?.os, f.dev?.osv].filter(Boolean).join(' ') || '–'],
             ['App and version', app],
             ['First seen', f.fs ? `${shortDate(f.fs)} (${num(f.age)} days ago)` : '–'],
-            ['Fix-by deadline', due
+            ['Remediation deadline', due
               ? <span style={{ color: f.br ? statusColor.critical : undefined }}>{shortDate(due)} · {f.br ? `overdue by ${num(-daysBetween(snap, due))} days` : `${num(daysBetween(snap, due))} days left`} ({slaDays}-day rule)</span>
               : 'No deadline until it is rated'],
-            ['How to fix', action],
+            ['Remediation', action],
           ]} />
         </Card>
       </div>
@@ -112,7 +106,7 @@ export function VulnDetail() {
 
       {kevHref(f.cve) && (
         <div className="flex items-center gap-2 text-sm text-ink-3">
-          What the outside world says about it, and whether anyone used it on us: <HopLink to={kevHref(f.cve)!}>Threats</HopLink>
+          External threat intelligence and related activity in your environment: <HopLink to={kevHref(f.cve)!}>Threats</HopLink>
         </div>
       )}
     </div>

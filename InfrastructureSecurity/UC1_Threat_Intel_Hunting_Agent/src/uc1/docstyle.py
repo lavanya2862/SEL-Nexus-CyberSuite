@@ -1,16 +1,19 @@
 """The suite's report look for Word and PDF: cover band, number tiles, charts, styled tables and AI fix-guide boxes.
 
 The same file sits in every agent (uc1, uc3, uc4) so the agents stay independent and their reports look alike.
-Charts are drawn with matplotlib (PNG); the PDF is the Word file converted by LibreOffice (skipped if it's missing).
+Charts are drawn with matplotlib (PNG); the PDF is the Word file saved as PDF by Microsoft Word on this computer
+(skipped, with the Word file still ready, when no converter is installed).
 """
 
 from __future__ import annotations
 
 import io
 import logging
+import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -105,7 +108,7 @@ def _no_table_borders(table) -> None:
 
 
 def _fixed_widths(table, widths_cm: list[float]) -> None:
-    """Column widths LibreOffice respects too: fixed layout + the grid columns, not only each cell."""
+    """Column widths every PDF converter respects: fixed layout + the grid columns, not only each cell."""
     table.autofit = False
     tbl_pr = table._tbl.tblPr
     layout = OxmlElement("w:tblLayout")
@@ -486,18 +489,70 @@ class Report:
         return {"docx": str(docx_path), "pdf": str(pdf) if pdf else None}
 
 
-def to_pdf(docx_path: Path) -> Path | None:
-    soffice = next((p for p in SOFFICE if p.is_file()), None) or (shutil.which("soffice") and Path(shutil.which("soffice")))
-    if not soffice:
-        log.warning("LibreOffice not found: PDF skipped (the Word file is ready)")
-        return None
+# Word opens the report read-only and exports it (17 = wdExportFormatPDF); paths come in through the environment
+WORD_TO_PDF = r"""
+$ErrorActionPreference = 'Stop'
+$word = New-Object -ComObject Word.Application
+try {
+    $word.Visible = $false
+    $word.DisplayAlerts = 0
+    $doc = $word.Documents.Open($env:REPORT_DOCX, $false, $true, $false)
+    try { $doc.ExportAsFixedFormat($env:REPORT_PDF, 17) } finally { $doc.Close(0) }
+} finally {
+    $word.Quit()
+    [void][Runtime.InteropServices.Marshal]::ReleaseComObject($word)
+}
+"""
+
+
+def _word_installed() -> bool:
+    if sys.platform != "win32":
+        return False
+    import winreg
+    try:
+        winreg.CloseKey(winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r"Word.Application\CLSID"))
+        return True
+    except OSError:
+        return False
+
+
+def _soffice() -> Path | None:
+    return next((p for p in SOFFICE if p.is_file()), None) or (shutil.which("soffice") and Path(shutil.which("soffice")))
+
+
+def pdf_converter() -> str | None:
+    """What will turn the Word reports into PDF on this computer, or None (then only the Word file is made)."""
+    return "Microsoft Word" if _word_installed() else "LibreOffice" if _soffice() else None
+
+
+def _word_pdf(docx_path: Path, pdf: Path) -> None:
+    env = {**os.environ, "REPORT_DOCX": str(docx_path.resolve()), "REPORT_PDF": str(pdf.resolve())}
+    subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", WORD_TO_PDF],
+                   env=env, check=True, capture_output=True, timeout=300,
+                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+
+
+def _soffice_pdf(docx_path: Path, soffice: Path) -> None:
     with tempfile.TemporaryDirectory() as profile:
-        cmd = [str(soffice), f"-env:UserInstallation={Path(profile).as_uri()}", "--headless", "--convert-to", "pdf",
-               "--outdir", str(docx_path.parent), str(docx_path)]
-        try:
-            subprocess.run(cmd, check=True, capture_output=True, timeout=300)
-        except (subprocess.SubprocessError, OSError) as exc:
-            log.warning("PDF conversion failed: %s", exc)
-            return None
+        subprocess.run([str(soffice), f"-env:UserInstallation={Path(profile).as_uri()}", "--headless", "--convert-to",
+                        "pdf", "--outdir", str(docx_path.parent), str(docx_path)], check=True, capture_output=True, timeout=300)
+
+
+def to_pdf(docx_path: Path) -> Path | None:
+    """Save the report as PDF next to it: Microsoft Word when installed, else LibreOffice; None if neither worked."""
     pdf = docx_path.with_suffix(".pdf")
-    return pdf if pdf.is_file() else None
+    pdf.unlink(missing_ok=True)                 # an old PDF must never pass for this run's
+    converters = ([("Microsoft Word", lambda: _word_pdf(docx_path, pdf))] if _word_installed() else []) + \
+                 ([("LibreOffice", lambda s=_soffice(): _soffice_pdf(docx_path, s))] if _soffice() else [])
+    if not converters:
+        log.warning("PDF skipped: Microsoft Word is not installed on this computer (the Word file is ready)")
+        return None
+    for name, convert in converters:
+        try:
+            convert()
+        except (subprocess.SubprocessError, OSError) as exc:
+            detail = (getattr(exc, "stderr", b"") or b"").decode(errors="replace").strip().splitlines()
+            log.warning("PDF conversion with %s failed: %s", name, detail[-1] if detail else exc)
+        if pdf.is_file():
+            return pdf
+    return None

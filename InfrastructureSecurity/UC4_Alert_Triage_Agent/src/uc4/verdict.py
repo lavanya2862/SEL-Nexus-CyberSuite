@@ -93,7 +93,7 @@ def build_prompt(packet: dict, playbook: dict, query_results: list[dict], ti_res
     uc1 = context.get("uc1") or {}
     if uc1.get("available"):
         lines.append(f"weak software on these devices (from UC1's vulnerability data): {uc1.get('open', 0)} unfixed, "
-                     f"{uc1.get('exploited_open', 0)} on CISA's known-exploited list: " + json.dumps(uc1.get("apps", [])))
+                     f"{uc1.get('exploited_open', 0)} on the CISA KEV list: " + json.dumps(uc1.get("apps", [])))
 
     lines.append("\nHISTORY:")
     lines.append(history.get("note", "none"))

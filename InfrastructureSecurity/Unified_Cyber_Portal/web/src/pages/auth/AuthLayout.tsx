@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 const AREAS = [
   { icon: Radar, label: 'Threats & hunting', hint: 'New threats checked against our devices' },
   { icon: ScanSearch, label: 'Vulnerability management', hint: 'Software flaws, weak settings and unsupported software across every OpCo' },
-  { icon: Wrench, label: 'Fix', hint: 'What to patch, upgrade or lock down first, and progress' },
+  { icon: Wrench, label: 'Remediation', hint: 'What to patch, upgrade or harden first, and progress' },
   { icon: Siren, label: 'Alert response', hint: 'Defender alerts triaged by the agent' },
 ]
 

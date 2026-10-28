@@ -44,6 +44,7 @@ class Settings:
     cognito_user_pool_id: str = ""
     cognito_client_id: str = ""
     auth_dir: Path = PORTAL_DIR / "data" / "auth"   # local accounts, session key, sign-in log
+    audit_dir: Path = PORTAL_DIR / "data" / "audit"  # who ran / approved / reopened what (audit.py)
     # the shared SEL Nexus CyberSuite sign-in page (../../login). When set, people sign in and out there instead of
     # on this portal, and auth_dir should point at that page's data/auth so both check the same session cookie.
     login_url: str = ""

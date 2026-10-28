@@ -3,7 +3,7 @@
   data/raw/<date>/                     kept 90 days (the original downloads)
   data/lake/vulnerabilities|devices    daily snapshots kept 90 days, after that only Sundays (weekly history)
   data/lake/changes                    kept 365 days (small)
-  data/reporting/*_<date>.xlsx|.md     kept 30 days
+  data/reporting/*_<date>.xlsx         kept 30 days
   logs/uc3_<date>.log                  kept 90 days
 """
 
@@ -53,7 +53,7 @@ def apply_retention(settings: Settings, today: date | None = None) -> dict:
               lambda age, day: age <= SNAPSHOT_DAILY_DAYS or day.weekday() == 6)
     sweep((settings.lake_dir / "changes").glob("snapshot_date=*"), "change_partitions",
           lambda age, day: age <= CHANGES_KEEP_DAYS)
-    sweep(list(settings.reporting_dir.glob("*_????-??-??.xlsx")) + list(settings.reporting_dir.glob("*_????-??-??.md")),
+    sweep(settings.reporting_dir.glob("*_????-??-??.xlsx"),
           "report_files", lambda age, day: age <= REPORT_FILE_KEEP_DAYS)
     sweep(settings.log_dir.glob("uc3_????-??-??.log"), "logs", lambda age, day: age <= LOG_KEEP_DAYS)
     return removed

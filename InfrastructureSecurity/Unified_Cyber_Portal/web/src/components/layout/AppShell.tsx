@@ -2,7 +2,7 @@ import { useEffect, useState, type ComponentType, type CSSProperties, type React
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Bot, ChevronRight, Crosshair, FileText, Grip, LayoutGrid, Moon, PanelLeftClose, PanelLeftOpen, Play, Radar,
-  LogOut, Menu, ScanSearch, Siren, Sun, Wrench,
+  LogOut, Menu, ScanSearch, ScrollText, Siren, Sun, Wrench,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
@@ -24,15 +24,15 @@ const GROUPS: { heading: string; tone: string; on: string; items: Item[] }[] = [
   { heading: 'Dashboard', tone: 'var(--area-find)', on: 'var(--area-find-on)', items: [
     { to: '/uc3', label: 'Vulnerabilities', icon: ScanSearch }, { to: '/uc1', label: 'Threats', icon: Crosshair },
     { to: '/uc1/hunts', label: 'Attack detection', icon: Radar }, { to: '/respond', label: 'Alert triage', icon: Siren }] },
-  { heading: 'Archives', tone: 'var(--area-trust)', on: 'var(--area-trust-on)', items: [{ to: '/reports', label: 'Reports', icon: FileText }] },]
+  { heading: 'Archives', tone: 'var(--area-trust)', on: 'var(--area-trust-on)', items: [{ to: '/reports', label: 'Reports', icon: FileText }, { to: '/audit', label: 'Audit log', icon: ScrollText }] },]
 const NAV = GROUPS.flatMap((g) => g.items)
 
 // Breadcrumb names for the tabs inside a page (the page itself comes from the menu)
 const TAB_NAMES: Record<string, string> = {
-  affects: 'Affects us', explorer: 'Explorer', health: 'Health & metrics',
+  affects: 'Applicable threats', explorer: 'Explorer', health: 'Health & metrics',
   threat: 'Threat detail', opco: 'By VM', age: 'Age & SLA', trends: 'Trends', devices: 'Devices',
   quality: 'Data quality',
-  uc1: 'Threat Intel Agent', uc3: 'Vulnerability Agent', uc4: 'Alert Triage Agent', progress: 'Fix progress',
+  uc1: 'Threat Intel Agent', uc3: 'Vulnerability Agent', uc4: 'Alert Triage Agent', progress: 'Remediation progress',
 }
 
 const NAV_KEY = 'portal-nav-collapsed'

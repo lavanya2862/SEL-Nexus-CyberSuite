@@ -26,7 +26,7 @@ export function Uc1Header({ title, description, data, actions }: { title: string
           <AlertTriangle className="mt-0.5 size-4 shrink-0" style={{ color: statusColor.warning }} />
           <span>
             This data is {Math.round(hours / 24)} days old.{' '}
-            <button onClick={() => openDrawer('uc1')} className="font-medium underline underline-offset-4">Run the threat check now</button>
+            <button onClick={() => openDrawer('uc1')} className="font-medium underline underline-offset-4">Run Threat Intel Agent now</button>
           </span>
         </div>
       )}
@@ -64,13 +64,9 @@ export function ScoreBar({ score, width = 96 }: { score: number; width?: number 
   )
 }
 
-export function TestBadge() {
-  return <span className="rounded-md border border-dashed border-violet/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet">Lab test</span>
-}
-
 export function AiChip({ origin }: { origin: string }) {
   return origin === 'ai'
-    ? <span className="rounded-md bg-violet/15 px-1.5 py-0.5 text-[10px] font-medium text-violet">AI</span>
+    ? <span className="rounded-md bg-violet/15 px-1.5 py-0.5 text-[10px] font-medium text-violet">Agent</span>
     : <span className="rounded-md bg-well px-1.5 py-0.5 text-[10px] text-ink-3">{origin || 'source'}</span>
 }
 
@@ -86,7 +82,7 @@ export function Resolve({ r, title = 'How to resolve' }: { r: Pick<Resolution, '
         {r.steps.map((s, i) => <li key={i}>{s}</li>)}
       </ol>
       <div className="mt-2 text-xs text-ink-2"><b>Done when:</b> {r.done_when}</div>
-      {r.source === 'ai' && <div className="mt-1 text-[11px] text-ink-3">Written by AI and checked against the data. Review before acting.</div>}
+      {r.source === 'ai' && <div className="mt-1 text-[11px] text-ink-3">Agent-generated and validated against the data. Review before acting.</div>}
     </div>
   )
 }

@@ -18,7 +18,7 @@ from datetime import timedelta
 from uc1.api_client import ApiError, DefenderClient
 from uc1.feeds.common import content_hash
 from uc1.hunting import templates as tpl
-from uc1.store import Store, to_utc, utcnow
+from uc1.store import NEW_IDS_SHOWN, Store, to_utc, utcnow
 
 log = logging.getLogger("uc1.correlate")
 
@@ -192,6 +192,7 @@ def run(store: Store, client: DefenderClient | None, run_id: str) -> dict:
     new = [f for f in findings if f["kind"] != "exposure" and f["finding_id"] not in known]
     stats = {"exposure_findings": sum(f["kind"] == "exposure" for f in findings),
              "new_hits": len(new),                                  # found for the first time in this run
+             "new_hit_ids": [f["finding_id"] for f in new][:NEW_IDS_SHOWN],   # the portal's run page names them
              "hit_findings": store.scalar("SELECT COUNT(*) FROM findings WHERE kind <> 'exposure'") or 0,   # all kept
              "test_hits": sum(f["is_test"] for f in new),
              "alerts_note": alert_note}

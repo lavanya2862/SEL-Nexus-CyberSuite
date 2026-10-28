@@ -36,11 +36,16 @@ HINTS = {
 class ApiError(RuntimeError):
     def __init__(self, status: int | None, message: str):
         hint = HINTS.get(status or 0)
-        super().__init__(f"HTTP {status}: {message}" + (f"\nHint: {hint}" if hint else ""))
+        # status is None for problems that are not an HTTP error (an empty or corrupt file, giving up after retries)
+        super().__init__((f"HTTP {status}: " if status else "") + message + (f"\nHint: {hint}" if hint else ""))
         self.status = status
 
 
 class LinkExpired(ApiError):
+    pass
+
+
+class EmptyDownload(ApiError):
     pass
 
 
@@ -127,6 +132,10 @@ class DefenderClient:
         with self.request("GET", url, auth=False, stream=True) as response, tmp.open("wb") as fh:
             for chunk in response.iter_content(chunk_size=1 << 20):
                 fh.write(chunk)
+        # A 0-byte file is never valid GZIP (even an empty one has a header), but gzip reads it as 0 rows without error.
+        if tmp.stat().st_size == 0:
+            tmp.unlink(missing_ok=True)
+            raise EmptyDownload(None, "Downloaded file is empty (0 bytes)")
         try:
             rows = count_gzip_lines(tmp)
         except (OSError, EOFError, zlib.error) as exc:

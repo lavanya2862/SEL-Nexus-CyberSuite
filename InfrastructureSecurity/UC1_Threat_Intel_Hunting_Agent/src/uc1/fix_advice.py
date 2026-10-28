@@ -63,8 +63,7 @@ def evidence(t: dict) -> str:
              f"Summary: {t['summary'] or 'n/a'}"]
     if t["cves"]:
         lines.append("CVEs: " + "; ".join(f"{c['cve_id']} (CVSS {c['cvss'] or '?'}"
-                                           + (", known exploited" if c["kev_added"] else "")
-                                           + (", used by ransomware" if c["kev_ransomware"] == "Known" else "") + ")"
+                                           + ")"
                                            for c in t["cves"]))
     lines.append("Where Microsoft Defender found it on our computers:")
     lines += [f"- {e['device_name']}: {e['detail']}" + (f" -> Defender recommends: {e['recommended_update']}"

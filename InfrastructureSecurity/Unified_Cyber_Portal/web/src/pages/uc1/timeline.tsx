@@ -89,7 +89,7 @@ export function StoryBadge({ s }: { s: Story | null }) {
   if (s.match === 'early')
     return <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold" style={{ color: statusColor.warning, background: 'color-mix(in oklab, currentColor 14%, transparent)' }}><Hourglass className="size-3" /> Not in Defender yet · {s.waiting} day{s.waiting === 1 ? '' : 's'}</span>
   if (s.match === 'closed')
-    return <span className="inline-flex items-center gap-1 rounded-md bg-well px-2 py-0.5 text-[11px] font-medium text-ink-2"><Clock className="size-3" /> Defender never listed it</span>
+    return <span className="inline-flex items-center gap-1 rounded-md bg-well px-2 py-0.5 text-[11px] font-medium text-ink-2"><Clock className="size-3" /> Not reported by Defender</span>
   if (s.ahead)
     return <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold" style={{ color: statusColor.good, background: 'color-mix(in oklab, currentColor 14%, transparent)' }}>{s.ahead} day{s.ahead === 1 ? '' : 's'} ahead of Defender</span>
   return null
@@ -99,12 +99,12 @@ export function StoryBadge({ s }: { s: Story | null }) {
 export function Timeline({ s }: { s: Story }) {
   const steps: { label: string; when: string | null; note?: string; tone?: 'good' | 'warn' | 'muted' }[] = [
     { label: 'Announced', when: s.announced, note: 'by the vendor / NVD' },
-    { label: 'We knew', when: s.known, note: 'Threat Intel Agent' },
+    { label: 'Identified', when: s.known, note: 'Threat Intel Agent' },
     s.match === 'defender'
       ? { label: 'Defender listed it', when: s.listed, note: s.ahead ? `${s.ahead} day${s.ahead === 1 ? '' : 's'} after us` : 'on our computer', tone: s.ahead ? 'good' : undefined }
       : s.match === 'early'
         ? { label: 'Defender', when: null, note: `not listed yet · waiting ${s.waiting} day${s.waiting === 1 ? '' : 's'}`, tone: 'warn' }
-        : { label: 'Defender', when: null, note: 'never listed it (14+ days)', tone: 'muted' },
+        : { label: 'Defender', when: null, note: 'not reported (14+ days)', tone: 'muted' },
     s.fixed ? { label: 'Fixed', when: s.fixed, note: 'gone from Defender', tone: 'good' } : { label: 'Fixed', when: null, note: 'not yet', tone: 'muted' },
   ]
   return (

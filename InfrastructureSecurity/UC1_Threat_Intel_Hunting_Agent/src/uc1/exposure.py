@@ -19,7 +19,7 @@ from rapidfuzz import fuzz
 
 from uc1.config import read_csv
 from uc1.feeds.common import norm_name
-from uc1.store import Store, utcnow
+from uc1.store import NEW_IDS_SHOWN, Store, utcnow
 
 EARLY_DAYS = 30   # how long a hole the news names may wait for Defender before we call it "not confirmed"
 
@@ -152,6 +152,7 @@ def compute(store: Store) -> dict:
     exposed = {r["threat_id"] for r in rows if r["match_type"] == "cve"}
     return {"exposure_rows": len(rows), "threats_exposed": len(exposed),
             "new_threats_exposed": len(exposed - before),       # not on our computers' list in the last run
+            "new_threat_ids": sorted(exposed - before)[:NEW_IDS_SHOWN],   # the portal's run page names them
             "not_in_defender_yet": len({(r["device_id"], r["detail"]) for r in rows if r["match_type"] == "early"}),
             "devices": len({r["device_id"] for r in rows if r["match_type"] != "watchlist"})}
 

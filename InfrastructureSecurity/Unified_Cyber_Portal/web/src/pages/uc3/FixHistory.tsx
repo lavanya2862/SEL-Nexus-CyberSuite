@@ -32,7 +32,7 @@ export function FixHistory() {
   const portalKeys = useMemo(() => new Set(runs.filter((r) => r.status === 'verified').map((r) => keyOf(r.device_name, r.software_name, r.version))), [runs])
 
   if (isLoading || error || !data) return <Uc3Loading error={error} />
-  if (!data.fixed) return <Empty text="The fixed history appears after the next vulnerability update." />
+  if (!data.fixed) return <Empty text="Remediation history will appear after the next Vulnerability Agent run." />
 
   const byPortal = fixed.filter((f) => portalKeys.has(keyOf(f.dev?.name ?? '', f.sw, f.ver))).length
   const first = fixed.map((f) => f.fixed).sort()[0]
@@ -49,7 +49,7 @@ export function FixHistory() {
         <div className="text-sm text-ink-2">
           <p>
             <b>{num(byPortal)}</b> of them were fixed by Cyber Command ({num(runs.filter((r) => r.status === 'verified' && !isSetting(r)).length)} app updates), and Defender confirmed each one.
-            The other <b>{num(fixed.length - byPortal)}</b> left Defender’s list without a portal fix, for example because an app updated itself or someone updated it by hand.
+            The other <b>{num(fixed.length - byPortal)}</b> were resolved outside the portal, for example through automatic application updates or manual patching.
           </p>
           <p className="mt-1.5 text-xs text-ink-3">
             {avgDays != null && <>On average a vulnerability was open {avgDays.toFixed(1)} days before it was fixed. </>}
@@ -58,10 +58,10 @@ export function FixHistory() {
         </div>
       </Panel>
 
-      <Card title="Fixes run by Cyber Command" description="Each update the portal ran: who approved it, what the computer reported back, and Defender’s confirmation">
+      <Card title="Remediations executed by the portal" description="Each remediation executed by the portal: approver, device response and Defender verification">
         {fix.isLoading ? <div className="h-24 animate-pulse rounded-xl bg-well" />
           : runs.length ? <div className="flex flex-col gap-3">{runs.map((r) => <RunCard key={r.fix_id} r={r} cleared={byApp[keyOf(r.device_name, r.software_name, r.version)]?.length ?? 0} events={fix.data?.events ?? []} />)}</div>
-          : <Empty text={fix.error ? 'Automatic fixing is off, so the portal’s own fix runs cannot be shown right now.' : 'The portal has not run any fixes yet.'} />}
+          : <Empty text={fix.error ? 'Automated remediation is disabled, so portal-executed remediations cannot be shown.' : 'No remediations have been executed by the portal yet.'} />}
       </Card>
 
       <DefenderLog fixed={fixed} portalKeys={portalKeys} />
@@ -81,8 +81,8 @@ function RunCard({ r, cleared, events }: { r: FixRow; cleared: number; events: {
   const mine = events.filter((e) => e.fix_id === r.fix_id).sort((a, b) => a.at.localeCompare(b.at))
   const steps: [string, string | null, React.ReactNode][] = [
     ['Approved', r.approved_at, <>by {r.approved_by ?? 'someone'}{r.method ? ` · ${METHOD_LABEL[r.method]}` : ''}</>],
-    ['Ran on the computer', r.started_at, <>{r.device_name}</>],
-    ['Computer answered', r.finished_at, r.message ?? (r.status === 'failed' ? 'The fix did not work' : '')],
+    ['Executed on device', r.started_at, <>{r.device_name}</>],
+    ['Device response', r.finished_at, r.message ?? (r.status === 'failed' ? 'Remediation failed' : '')],
     ['Defender confirmed', r.verified_at, r.verified_at
       ? setting ? <>Defender no longer lists this setting as wrong</> : <>No longer listed as vulnerable{cleared ? <>: <b>{num(cleared)} vulnerabilities</b> cleared</> : ''}</>
       : r.status === 'still_there' ? 'Defender still lists it' : setting ? 'Waiting for Defender’s next settings check (usually within a day)' : 'Waiting for Defender’s next scan (2–6 hours)'],
@@ -118,7 +118,7 @@ function RunCard({ r, cleared, events }: { r: FixRow; cleared: number; events: {
             <div className="mt-2.5 grid gap-3 lg:grid-cols-2 animate-in fade-in duration-200">
               {res?.log?.length ? (
                 <div>
-                  <div className="mb-1 text-xs font-semibold text-ink-2">What the computer printed</div>
+                  <div className="mb-1 text-xs font-semibold text-ink-2">Command output</div>
                   <pre className="overflow-x-auto rounded-lg bg-well p-3 font-mono text-[11px] leading-relaxed text-ink-2">
                     {res.log.join('\n')}{res.exit != null ? `\n(exit code ${res.exit}${res.reboot ? ', restart needed' : ''})` : ''}
                   </pre>
@@ -149,8 +149,8 @@ function DefenderLog({ fixed, portalKeys }: { fixed: FixedFinding[]; portalKeys:
   const days = Object.entries(groupBy(shown, (f) => f.fixed)).sort((a, b) => b[0].localeCompare(a[0]))
   return (
     <Card
-      title="Everything Defender reported fixed, day by day"
-      description="Grouped by the app and computer it was on. Open a group to see each vulnerability."
+      title="All findings Defender reported as resolved, by day"
+      description="Grouped by application and device. Expand a group to view each vulnerability."
       action={
         <label className="flex items-center gap-2 rounded-lg border border-hairline-strong bg-field px-3 py-1.5 text-sm transition-[border-color,box-shadow] focus-within:border-blue/60 focus-within:ring-3 focus-within:ring-blue/15">
           <Search className="size-3.5 text-ink-3" />
@@ -175,7 +175,7 @@ function DefenderLog({ fixed, portalKeys }: { fixed: FixedFinding[]; portalKeys:
             )
           })}
         </div>
-      ) : <Empty text={ql ? 'Nothing fixed matches.' : 'Defender has not reported any fixes yet.'} />}
+      ) : <Empty text={ql ? 'No remediated items match.' : 'Defender has not reported any resolved findings yet.'} />}
     </Card>
   )
 }

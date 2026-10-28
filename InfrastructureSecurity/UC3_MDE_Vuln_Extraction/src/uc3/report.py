@@ -163,7 +163,7 @@ def run_lines(d: dict) -> list[str]:
     when = datetime.fromisoformat(started).astimezone(timezone.utc).strftime("%d %b %Y, %H:%M UTC") if started else d["snapshot"]
     export = m.get("export_generated_time")
     lines = [f"Scan of {when}" + (f" · Defender data exported {str(export)[:16].replace('T', ' ')} UTC" if export else ""),
-             f"{t['machines']} computers · {t['defender_rows']:,} vulnerabilities in Defender · data quality {t['quality']}",
+             f"{t['machines']} computers · {t['unique']:,} vulnerabilities in Defender · data quality {t['quality']}",
              f"Created {datetime.now(timezone.utc):%d %b %Y, %H:%M} UTC · this report shows this scan only"]
     return lines
 
@@ -171,7 +171,7 @@ def run_lines(d: dict) -> list[str]:
 def summary_tiles(t: dict) -> list[tuple]:
     """The same six numbers and wording as the portal's run card."""
     return [
-        (f"{t['defender_rows']:,}", "Vulnerabilities in Defender", f"found on {t['machines']} computers", ds.BLUE),
+        (f"{t['unique']:,}", "Vulnerabilities in Defender", f"found on {t['machines']} computers", ds.BLUE),
         (f"{t['new']:,}", "New in this run", "not there in the last run", ds.SERIOUS),
         (f"{t['fixed']:,}", "Fixed since the last run", "no longer found by Defender", ds.GOOD),
         (f"{t['critical']:,}", "Critical vulnerabilities", "most dangerous: fix these first", ds.BAD),
@@ -208,11 +208,9 @@ def build_report(settings: Settings, d: dict | None = None) -> dict:
     r.h1("1. Summary")
     r.tiles(summary_tiles(t))
     r.tiles([(f"{t['overdue']:,}", "Overdue", "past their fix-by date", ds.BAD),
-             (f"{t['kev_cves']:,}", "Used by attackers", "CVEs on the CISA KEV list", ds.BAD),
              (f"{t['p1']:,}", "Priority P1", "fix first (see appendix)", ds.SERIOUS),
              (f"{t['app_versions']:,}", "App versions to update", "each clears several findings", ds.BLUE)])
-    r.para(f"This scan found {t['unique']:,} vulnerabilities on {t['machines']} computers "
-           f"({t['defender_rows']:,} rows from Microsoft Defender, of which {t['repeats']:,} were repeats). "
+    r.para(f"This scan found {t['unique']:,} vulnerabilities on {t['machines']} computers. "
            f"{t['critical']:,} are Critical and {t['high']:,} High; {t['overdue']:,} are past their fix-by date. "
            f"Since the last scan, {t['new']:,} appeared and {t['fixed']:,} were fixed.")
     sev_names = [*SEVS, "Unrated"]
@@ -239,23 +237,15 @@ def build_report(settings: Settings, d: dict | None = None) -> dict:
         r.image(ds.hbar([a["app"][:40] for a in top], [a["findings"] for a in top],
                         [URGENCY_COLOURS.get(a["urgency"]["level"], ds.BLUE) for a in top],
                         "Findings each fix clears (top 10)"))
-        r.table(["App", "Urgency", "Fix", "Findings", "Critical", "High", "Used by attackers", "Fix by"],
+        r.table(["App", "Urgency", "Fix", "Findings", "Critical", "High", "Fix by"],
                 [[a["app"], a["urgency"]["label"], (a.get("fix") or {}).get("action"), f"{a['findings']:,}", a["critical"],
-                  a["high"], len(a["kev_cves"]) or "", fmt_date(a.get("fix_by"))] for a in apps[:20]],
-                [4, 4, 5, 1.6, 1.5, 1.4, 1.8, 2.2])
+                  a["high"], fmt_date(a.get("fix_by"))] for a in apps[:20]],
+                [4, 4, 5, 1.6, 1.5, 1.4, 2.2])
     else:
         r.note("The fix guide has not been built for this scan.")
 
-    # 3. Used by attackers
-    r.h1("3. Used by attackers (CISA KEV list)")
-    r.para("These CVEs are on the US government's list of vulnerabilities attackers really use. It does not mean they were "
-           "used against us, but they come first whatever their severity.")
-    r.table(["CVE", "Name", "Severity", "CVSS", "Apps", "Computers"],
-            [[k["cve_id"], k["name"] or "", k["severity"], k["cvss"], k["apps"], k["devices"]] for k in d["kev"]],
-            [2.8, 5, 1.8, 1.2, 4.5, 3], severity_col=2)
-
-    # 4. Where the risk is
-    r.h1("4. Where the risk is")
+    # 3. Where the risk is
+    r.h1("3. Where the risk is")
     r.h2("By OpCo")
     r.table(["OpCo", "Critical", "High", "Medium", "Low", "Total", "P1", "Overdue", "Computers"],
             [[o["opco"], o["critical"], o["high"], o["medium"], o["low"], f"{o['total']:,}", o["p1"], o["overdue"], o["devices"]]
@@ -266,8 +256,8 @@ def build_report(settings: Settings, d: dict | None = None) -> dict:
               x["critical"], x["high"], x["p1"], x["overdue"], x["exposure_level"] or "", fmt_date(x["last_seen"])]
              for x in d["devices"]], [3, 2, 3, 1.5, 1.4, 1.2, 1.1, 1.4, 1.6, 2])
 
-    # 5. Deadlines
-    r.h1("5. Deadlines and the oldest findings")
+    # 4. Deadlines
+    r.h1("4. Deadlines and the oldest findings")
     r.image(ds.stacked(list(AGES), {s: [(d["ages"].get(a) or {}).get(s.lower(), 0) for a in AGES] for s in SEVS},
                        ds.SEVERITY, "How long findings have been open (days)", height=2.3))
     r.table(["Severity", "Fix within (days)", "Open", "Overdue"],
@@ -279,8 +269,8 @@ def build_report(settings: Settings, d: dict | None = None) -> dict:
               fmt_date(v["fix_by"]), "Yes" if v["sla_breached"] else ""] for v in d["oldest"]],
             [3, 4, 2.6, 1.8, 1.6, 2.2, 1.4], severity_col=3, colour_cols={6: {"Yes": ds.BAD}})
 
-    # 6. What changed
-    r.h1("6. What changed in this scan")
+    # 5. What changed
+    r.h1("5. What changed in this scan")
     ch = d["changes"]
     r.tiles([(f"{t['new']:,}", "New", "not there in the last run", ds.SERIOUS),
              (f"{t['fixed']:,}", "Fixed", "no longer found by Defender", ds.GOOD),
@@ -305,15 +295,15 @@ def build_report(settings: Settings, d: dict | None = None) -> dict:
               ", ".join(sorted({x["device"] for x in v}))] for k, v in sorted(fixed_apps.items(), key=lambda kv: -len(kv[1]))[:30]],
             [6, 1.6, 1.6, 1.6, 4])
 
-    # 7. Top CVEs
-    r.h1("7. Top 25 CVEs")
-    r.table(["CVE", "Severity", "CVSS", "Priority", "Used by attackers", "Computers", "Apps"],
-            [[c["cve_id"], c["severity"], c["cvss"], c["priority"], "Yes" if c["kev"] else "", c["devices"], c["apps"]]
-             for c in d["top_cves"][:25]], [3, 1.8, 1.2, 1.4, 2, 1.6, 5], severity_col=1, colour_cols={4: {"Yes": ds.BAD}})
+    # 6. Top CVEs
+    r.h1("6. Top 25 CVEs")
+    r.table(["CVE", "Severity", "CVSS", "Priority", "Computers", "Apps"],
+            [[c["cve_id"], c["severity"], c["cvss"], c["priority"], c["devices"], c["apps"]]
+             for c in d["top_cves"][:25]], [3, 1.8, 1.2, 1.4, 1.6, 5], severity_col=1)
 
-    # 8. Fix guides
+    # 7. Fix guides
     r.page_break()
-    r.h1("8. How to fix each one (AI fix guides)")
+    r.h1("7. How to fix each one (AI fix guides)")
     r.para("One guide per vulnerable app and per weak security setting. Versions, CVEs, computers, deadlines and commands "
            "come from the data; the AI explains them in plain words. Check the steps before acting.")
     r.h2(f"Apps ({len(apps)})")
@@ -321,7 +311,6 @@ def build_report(settings: Settings, d: dict | None = None) -> dict:
         vers = ", ".join(v["version"] for v in a["versions"])
         meta = (f"{a.get('fix_type', '')} · versions {vers} · {len(a['devices'])} computer(s): "
                 f"{', '.join(x['name'] for x in a['devices'])} · {a['cves']} CVEs ({a['critical']} critical, {a['high']} high)"
-                + (f" · {len(a['kev_cves'])} used by attackers" if a["kev_cves"] else "")
                 + (f" · fix by {fmt_date(a['fix_by'])}" if a.get("fix_by") else ""))
         r.card(a["app"], meta, guide_sections(a) + [("Source", guide_source(a))],
                URGENCY_COLOURS.get(a["urgency"]["level"], ds.BLUE), a["urgency"]["label"])
@@ -337,6 +326,9 @@ def build_report(settings: Settings, d: dict | None = None) -> dict:
     # Appendix
     r.page_break()
     r.h1("Appendix A: data quality checks")
+    r.para(f"Downloaded {t['defender_rows']:,} rows from Microsoft Defender. {t['repeats']:,} of them were repeats "
+           f"(Defender listed the same vulnerability twice), so {t['unique']:,} vulnerabilities were kept."
+           if t["repeats"] else f"Downloaded {t['defender_rows']:,} rows from Microsoft Defender, with no repeats.")
     checks = d["quality"].get("checks", [])
     r.table(["Check", "Result", "Value", "Expected"],
             [[c["name"].replace("_", " "), c["status"], c["value"], c["expected"]] for c in checks],
@@ -345,11 +337,10 @@ def build_report(settings: Settings, d: dict | None = None) -> dict:
     r.bullets([
         "Severity (Critical, High, Medium, Low) comes from Microsoft Defender, mostly from the CVE's CVSS score. "
         "A brand-new CVE Microsoft has not rated yet is shown as Unrated.",
-        "Priority adds whether attackers can really use it: P1 = Critical, or High with a verified exploit or one in attack "
+        "Priority adds whether a working exploit exists: P1 = Critical, or High with a verified exploit or one in attack "
         "kits; P2 = High, or Medium with such an exploit; P3 = Medium or Unrated; P4 = Low.",
         "Fix-by date = the day Defender first saw it + the deadline for its severity: Critical 15 days, High 30, "
         "Medium 90, Low 180. After that it is overdue.",
-        "Used by attackers = the CVE is on the CISA Known Exploited Vulnerabilities list; those guides say \"Fix now\".",
         "New and Fixed come from Defender's own change list for this scan.",
     ])
     out = settings.reporting_dir / f"Vulnerability_Report_{d['snapshot']}.docx"

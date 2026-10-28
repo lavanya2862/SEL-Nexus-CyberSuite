@@ -40,12 +40,12 @@ export function FixProgress() {
     <div className="flex flex-col gap-5">
       <Link to="/fixes" className="inline-flex w-fit items-center gap-1.5 text-sm text-ink-3 hover:text-ink"><ArrowLeft className="size-4" /> Fix</Link>
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Fix progress</h1>
-        <p className="mt-1 text-sm text-ink-3">Every fix moves forward as the computer reports back. You can leave this page; the fixes keep going.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Remediation progress</h1>
+        <p className="mt-1 text-sm text-ink-3">Each remediation advances as the device reports back. Remediations continue if you leave this page.</p>
       </div>
       {isLoading ? <Skeleton className="h-64 rounded-2xl" /> : error ? (
         <Panel className="p-6">
-          {error instanceof FixDown ? <GettingReady what="fix progress" {...auto} /> : <Empty text={`Could not load the fixes: ${(error as Error).message}`} />}
+          {error instanceof FixDown ? <GettingReady what="fix progress" {...auto} /> : <Empty text={`Unable to load remediations: ${(error as Error).message}`} />}
         </Panel>
       ) : v && <Body v={v} />}
     </div>
@@ -70,10 +70,10 @@ function Body({ v }: { v: FixView }) {
             {live ? <Loader2 className="mt-0.5 size-6 animate-spin text-sky" /> : <CheckCircle2 className="mt-0.5 size-6" style={{ color: statusColor.good }} />}
             <div>
               <h2 className="text-xl font-semibold tracking-tight">
-                {live ? (v.worker.task === 'probe' ? 'Checking the computers…' : 'Fixing now…') : rows.length ? 'Last fix run finished' : 'No fixes have run yet'}
+                {live ? (v.worker.task === 'probe' ? 'Checking device connectivity…' : 'Remediating…') : rows.length ? 'Last remediation run complete' : 'No remediations executed yet'}
               </h2>
               <p key={v.worker.step || v.worker.message} className="mt-0.5 text-sm text-ink-3 animate-in fade-in slide-in-from-left-1 duration-300">
-                {live ? v.worker.step || 'Starting' : v.worker.message || 'Put fixes in the basket on the Fix page, then press Run fixes.'}
+                {live ? v.worker.step || 'Starting' : v.worker.message || 'Add items to the remediation queue in Remediation, then select Execute remediation.'}
                 {startedAt && <> · started {dateTime(startedAt)}</>}
               </p>
             </div>
@@ -127,14 +127,14 @@ function Body({ v }: { v: FixView }) {
       {!live && rows.some((r) => r.status === 'done') && (
         <Panel className="flex items-start gap-3 px-5 py-4 text-sm text-ink-2">
           <ShieldCheck className="mt-0.5 size-5 shrink-0" style={{ color: statusColor.good }} />
-          <p><span className="font-medium text-ink">What happens next:</span> Defender rescans the computer and the vulnerability agent picks that up, usually within a few hours. Each fix then turns to “Confirmed by Defender”. Leave a switched-on computer running until then.</p>
+          <p><span className="font-medium text-ink">What happens next:</span> Defender rescans the device and the Vulnerability Agent records the result, usually within a few hours. Each remediation then shows “Confirmed by Defender”. Keep powered-on devices running until then.</p>
         </Panel>
       )}
 
       {/* activity log */}
       <Panel className="p-6">
         <h3 className="font-semibold tracking-tight">Activity</h3>
-        <p className="mt-1 text-sm text-ink-3">What the fixer did, newest first.</p>
+        <p className="mt-1 text-sm text-ink-3">Remediation activity, most recent first.</p>
         {v.events.length ? (
           <ol className="mt-4 flex max-h-[420px] flex-col gap-2 overflow-y-auto">
             {[...v.events].reverse().slice(0, 60).map((e, i) => (
@@ -149,7 +149,7 @@ function Body({ v }: { v: FixView }) {
 
       {v.impact && (
         <p className="text-xs text-ink-3">
-          All fixes so far clear {num(v.impact.findings_cleared)} of {num(v.impact.findings_open + v.impact.findings_cleared)} findings and {v.impact.kev_cleared} known exploited vulnerabilities.
+          Remediations to date resolve {num(v.impact.findings_cleared)} of {num(v.impact.findings_open + v.impact.findings_cleared)} findings.
         </p>
       )}
     </>
@@ -162,7 +162,7 @@ function FixTrack({ r }: { r: FixRow }) {
     <li className="grid grid-cols-1 gap-3 py-4 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] md:items-center">
       <div className="min-w-0">
         <div className="truncate text-sm font-medium">{ACTION_LABEL[r.action]} {r.app}</div>
-        <div className="truncate text-xs text-ink-3">{isSetting(r) ? 'Security setting (not a vulnerability)' : <>{r.version} · clears {num(r.findings)} findings{r.kev ? ` · ${r.kev} exploited` : ''}</>}</div>
+        <div className="truncate text-xs text-ink-3">{isSetting(r) ? 'Security setting (not a vulnerability)' : <>{r.version} · clears {num(r.findings)} findings</>}</div>
       </div>
       <div className="min-w-0">
         <ol className="flex items-start">

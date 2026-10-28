@@ -2,8 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowUpRight, Bug, CalendarX2, Download, Search, SlidersHorizontal, Zap } from 'lucide-react'
 import { Chart, axisStyle } from '@/components/Chart'
-import { Empty, HopLink, Panel, SevTag, Tabs, Tag } from '@/components/kit'
-import { useKevThreatHref } from '@/lib/uc1'
+import { Empty, Panel, SevTag, Tabs, Tag } from '@/components/kit'
 import { dateTime, num, shortDate } from '@/lib/format'
 import { chartTokens, inkOn, statusColor, useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
@@ -32,7 +31,7 @@ export function Vulnerabilities() {
     <div className="flex flex-col gap-5">
       <Uc3Header
         title="Vulnerability management"
-        description="What Microsoft Defender found on our computers: vulnerable software, weak security settings and unsupported software"
+        description="Vulnerabilities, security misconfigurations and unsupported software reported by Microsoft Defender"
         data={data}
         view={view}
         actions={
@@ -90,16 +89,9 @@ function Kpi({ label, value, hint, hue }: { label: string; value: number; hint: 
 }
 
 function Overview({ data, v }: { data: Uc3Data; v: Uc3View }) {
-  const kevHref = useKevThreatHref()
   const rows = v.rows
   const crit = rows.filter((f) => f.sev === 'Critical').length
   const onboarded = data.devices.filter((d) => v.keepOpco(d.opco)).length
-  const kevList = useMemo(() => {
-    const info = new Map(data.kev.map((x) => [x.cve, x]))
-    return Object.entries(groupBy(rows.filter((f) => f.kev), (f) => f.cve))
-      .map(([cve, fs]) => ({ cve, fs, info: info.get(cve) }))
-      .sort((a, b) => Number(!!b.info?.rw) - Number(!!a.info?.rw) || b.fs.length - a.fs.length)
-  }, [rows, data.kev])
   const latest = data.changes.filter((c) => v.keepOpco(c[1]) && (c[3] === 'None' || v.sevs.has(c[3] as never)))
   const lastDay = latest.map((c) => c[0]).sort().at(-1)
   const changeCount = (st: string) => sumBy(latest.filter((c) => c[0] === lastDay && c[2] === st), (c) => c[4])
@@ -111,13 +103,13 @@ function Overview({ data, v }: { data: Uc3Data; v: Uc3View }) {
       <div className="card-row gap-4 [--card-min:150px]">
         <Kpi hue="blue" label="Open findings" value={rows.length} hint="device × app × CVE" />
         <Kpi label="Critical" value={crit} hint={`${rows.length ? Math.round((crit / rows.length) * 100) : 0}% of findings`} hue="red" />
-        <Kpi label="Priority 1 · fix first" value={rows.filter((f) => f.pr === 'P1').length} hint="Critical, or High with an exploit" hue="orange" />
+        <Kpi label="Priority 1 · remediate first" value={rows.filter((f) => f.pr === 'P1').length} hint="Critical, or High with an exploit" hue="orange" />
         <Kpi label="Devices affected" value={new Set(rows.map((f) => f.d)).size} hint={`of ${onboarded} onboarded`} hue="green" />
         <Kpi label="Apps to update" value={new Set(rows.map((f) => f.u)).size} hint="app versions with findings" hue="violet" />
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <Card className="xl:col-span-7" title="Where the risk lives" description="Box size = findings per app · darker = bigger share of Critical/High">
+        <Card className="xl:col-span-7" title="Risk concentration by application" description="Box size = findings per app · darker = bigger share of Critical/High">
           {rows.length ? (
             <Chart
               height={330}
@@ -141,7 +133,7 @@ function Overview({ data, v }: { data: Uc3Data; v: Uc3View }) {
           ) : <Empty text="No findings for this filter." />}
         </Card>
         <div className="flex flex-col gap-5 xl:col-span-5">
-        <Card title="How serious are they?" description="Findings per CVSS score band (0 = harmless, 10 = worst)">
+        <Card title="Severity distribution (CVSS)" description="Findings per CVSS score band (0 = none, 10 = critical)">
           <Chart
             height={170}
             build={(tk) => {
@@ -165,39 +157,6 @@ function Overview({ data, v }: { data: Uc3Data; v: Uc3View }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <Card
-          className="xl:col-span-12"
-          title="Known to be used by attackers (CISA KEV list)"
-          description={`Our CVEs on the free CISA Known Exploited Vulnerabilities list (${num(data.meta.kev.entries)} entries, version ${data.meta.kev.version ?? 'n/a'})`}
-        >
-          {kevList.length ? (
-            <DTable head={[['CVE'], ['What it is'], ['App'], ['Severity'], ['CVSS', 'right'], ['VMs'], ['Devices', 'right'], ['On list since'], ['Follow this vulnerability']]} minWidth={960}>
-              {kevList.map(({ cve, fs, info }) => (
-                <tr key={cve} className="hover:bg-well/60">
-                  <td className="tabular whitespace-nowrap font-medium">{cve}</td>
-                  <td className="max-w-[280px]">
-                    {(info?.name ?? '').replace(/ Vulnerability$/, '')} {info?.rw && <Tag tone="bad">ransomware</Tag>}
-                  </td>
-                  <td className="whitespace-nowrap">{[...new Set(fs.map((f) => pretty(f.sw)))].join(', ')}</td>
-                  <td><SevTag sev={fs[0].sev} /></td>
-                  <td className="tabular text-right">{(fs[0].cvss ?? 0).toFixed(1)}</td>
-                  <td className="whitespace-nowrap">{[...new Set(fs.map((f) => f.o))].map((o) => <Tag key={o}>{o}</Tag>)}</td>
-                  <td className="tabular text-right">{new Set(fs.map((f) => f.d)).size}</td>
-                  <td className="tabular whitespace-nowrap text-ink-3">{info?.added ?? ''}</td>
-                  <td>
-                    <div className="flex gap-1.5">
-                      {kevHref(cve) && <HopLink to={kevHref(cve)!} title="What the outside world says about this vulnerability, and whether anyone used it on us">Threats</HopLink>}
-                      <HopLink to={`/fixes?sw=${encodeURIComponent(fs[0].sw)}`} title="Open its card on the Fix page">Fix</HopLink>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </DTable>
-          ) : <Empty text="None for the current filter." />}
-        </Card>
-
-      </div>
     </div>
   )
 }
@@ -221,10 +180,10 @@ function DefenderChanges({ data, fallback, fallbackDay }: { data: Uc3Data; fallb
         : fallbackDay ? `Changes Defender recorded on ${shortDate(fallbackDay)}` : 'No change events yet'}
     >
       <div className="grid grid-cols-3 gap-3">
-        {([['New', 'appeared on our computers', t.severity.High], ['Fixed', 'gone from our computers', statusColor.good], ['Updated', 'details changed (e.g. severity)', 'var(--sky)']] as const).map(([st, l, col]) => (
+        {([['New', 'newly reported on managed devices', t.severity.High], ['Fixed', 'no longer reported on managed devices', statusColor.good], ['Updated', 'details changed (e.g. severity)', 'var(--sky)']] as const).map(([st, l, col]) => (
           <div key={st} className="rounded-xl bg-well p-4">
             <div className="tabular text-2xl leading-none" style={{ color: st === 'Fixed' && count(st) ? col : undefined }}>{num(count(st))}</div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs text-ink-3"><span className="size-1.5 rounded-full" style={{ background: col }} />{st}</div>
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-ink-3"><span className="size-1.5 rounded-full" style={{ background: col }} />{st === 'Fixed' ? 'Remediated' : st}</div>
             <div className="text-[11px] leading-snug text-ink-3">{l}</div>
           </div>
         ))}
@@ -232,9 +191,7 @@ function DefenderChanges({ data, fallback, fallbackDay }: { data: Uc3Data; fallb
       <p className="mt-3 text-xs leading-relaxed text-ink-3">
         {stale ? <><b className="text-ink-2">No changes:</b> Defender has not refreshed its data since the last run. </>
           : known && !count('New') && !count('Fixed') && !count('Updated') ? <><b className="text-ink-2">No changes</b> in Defender since the last run. </> : null}
-        {c.vulnerability_rows != null && (c.export_reused
-          ? <>Full list (<b className="text-ink-2">{num(c.vulnerability_rows)}</b> rows) not downloaded again: Defender has not rebuilt it since the last run, so that copy was reused. </>
-          : <>Every new Defender export is downloaded in full: <b className="text-ink-2">{num(c.vulnerability_rows)}</b> rows this time{typeof c.previous_rows === 'number' ? <>, {num(c.previous_rows)} the run before</> : null}. </>)}
+        {c.export_reused && <>Full list not downloaded again: Defender has not rebuilt it since the last run, so that copy was reused. </>}
         {known && 'Counts are for all computers and severities.'} The Trends tab shows every day.
       </p>
     </Card>
@@ -253,12 +210,12 @@ function RunFound({ data, v }: { data: Uc3Data; v: Uc3View }) {
   const tiles = [
     {
       icon: Bug, to: '/fixes', value: v.rows.length, label: 'Software vulnerabilities',
-      text: `Known vulnerabilities in ${num(new Set(v.rows.map((f) => f.u)).size)} software versions. Fixed by updating the app or Windows.`,
+      text: `Known vulnerabilities in ${num(new Set(v.rows.map((f) => f.u)).size)} software versions. Remediated by updating the application or Windows.`,
       extra: noPatch ? `${num(noPatch)} have no fix from the vendor yet` : null,
     },
     {
       icon: SlidersHorizontal, to: '/fixes/settings', value: settings.length, label: 'Weak security settings',
-      text: 'Windows and Defender set weaker than Microsoft recommends. Fixed by changing the setting.',
+      text: 'Windows and Defender settings below Microsoft’s recommended baseline. Remediated by changing the setting.',
       extra: null,
     },
     {
@@ -271,7 +228,7 @@ function RunFound({ data, v }: { data: Uc3Data; v: Uc3View }) {
     <Panel className="p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="font-semibold tracking-tight">What the last Defender run found</h2>
-        <span className="text-xs text-ink-3">Three different kinds of weakness, each fixed a different way, so each is counted on its own</span>
+        <span className="text-xs text-ink-3">Three categories of finding, each remediated differently and counted separately</span>
       </div>
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
         {tiles.map((t) => (
@@ -294,8 +251,8 @@ function RunFound({ data, v }: { data: Uc3Data; v: Uc3View }) {
 
 const PRIO_ORDER: Record<string, number> = { P1: 1, P2: 2, P3: 3, P4: 4 }
 
-/** Top risks: Priority 1, or on the list of vulnerabilities attackers really use (CISA KEV). */
-const isTopRisk = (f: Finding) => f.pr === 'P1' || !!f.kev
+/** Top risks: Priority 1 */
+const isTopRisk = (f: Finding) => f.pr === 'P1'
 
 /** "Added" = the day Defender first saw the finding; the quick picks count back from the data's own date, not today. */
 const ADDED_PICKS: [number, string][] = [[0, 'Any time'], [1, 'Latest run'], [7, 'Last 7 days'], [30, 'Last 30 days']]
@@ -325,8 +282,8 @@ function AllVulns({ v, top: topAtStart, snap }: { v: Uc3View; top: boolean; snap
     <Card
       title={top ? 'Top risks' : 'All vulnerabilities'}
       description={top
-        ? 'Priority 1 findings and vulnerabilities known to be used by attackers (CISA KEV). Most urgent first. Click a row for its details.'
-        : 'Every vulnerability Defender found: one row per vulnerability, app version and computer. Most urgent first. Click a row for its details.'}
+        ? 'Priority 1 findings. Most urgent first. Select a row for details.'
+        : 'Every vulnerability Defender found: one row per vulnerability, app version and computer. Most urgent first. Select a row for details.'}
       action={
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-xs">
@@ -368,7 +325,7 @@ function AllVulns({ v, top: topAtStart, snap }: { v: Uc3View; top: boolean; snap
           <DTable head={[['Vulnerability'], ['App'], ['Computer'], ['Severity'], ['Priority'], ['Added'], ['Days open', 'right'], ['Deadline']]} minWidth={980} maxHeight={640}>
             {shown.slice(0, limit).map((f) => (
               <tr key={findingKey(f)} onClick={() => navigate(findingHref(f))} className="cursor-pointer hover:bg-well/60">
-                <td className="tabular whitespace-nowrap font-medium">{f.cve} {f.kev ? <Tag tone="warn">used by attackers</Tag> : null}</td>
+                <td className="tabular whitespace-nowrap font-medium">{f.cve}</td>
                 <td className="max-w-[220px] truncate" title={`${pretty(f.sw)} ${f.ver}`}>{pretty(f.sw)} <span className="text-ink-3">{f.ver}</span></td>
                 <td className="whitespace-nowrap">{f.dev?.name}<span className="text-xs text-ink-3">{groupAfter(f)}</span></td>
                 <td><SevTag sev={f.sev} /></td>
@@ -450,7 +407,7 @@ function AgeSla({ data, v }: { data: Uc3Data; v: Uc3View }) {
           })}
         </DTable>
       </Card>
-      <Card className="xl:col-span-6" title="Oldest Critical and High findings" description="The ones to chase first">
+      <Card className="xl:col-span-6" title="Oldest Critical and High findings" description="Highest-priority remediation targets">
         {old.length ? (
           <DTable head={[['Device'], ['App'], ['CVE'], ['Severity'], ['Age', 'right'], ['SLA']]} minWidth={520} maxHeight={330}>
             {old.map((f, i) => (
@@ -532,7 +489,7 @@ function Trends({ data, v }: { data: Uc3Data; v: Uc3View }) {
             )
           })}
         </DTable>
-        {rem.length < 20 && <p className="mt-3 text-xs leading-relaxed text-ink-3">Few fixes so far. This fills in as apps get updated, for example after using the Fix page.</p>}
+        {rem.length < 20 && <p className="mt-3 text-xs leading-relaxed text-ink-3">Not enough remediation history yet. This metric fills in as remediations are verified.</p>}
       </Card>
     </div>
   )
@@ -549,23 +506,23 @@ function Computers({ data, v }: { data: Uc3Data; v: Uc3View }) {
   const fs: Finding[] = dev ? v.rows.filter((f) => f.d === current) : []
   const bySw = Object.entries(groupBy(fs, (f) => pretty(f.sw))).map(([k, x]) => ({ k, fs: x, t: x.length })).sort((a, b) => a.t - b.t)
   const upd = Object.entries(groupBy(fs, (f) => f.u))
-    .map(([u, x]) => ({ u, sw: x[0].sw, t: x.length, c: x.filter((f) => f.sev === 'Critical').length, k: new Set(x.filter((f) => f.kev).map((f) => f.cve)).size }))
+    .map(([u, x]) => ({ u, sw: x[0].sw, t: x.length, c: x.filter((f) => f.sev === 'Critical').length }))
     .sort((a, b) => b.t - a.t)
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
       <Card
         className="xl:col-span-12"
         title="Computers"
-        description="Click a computer to see its vulnerabilities and the updates it needs"
+        description="Select a device to view its vulnerabilities and required updates"
         action={
           <label className="flex items-center gap-2 rounded-lg border border-hairline-strong bg-field px-3 py-1.5 text-sm transition-[border-color,box-shadow] focus-within:border-blue/60 focus-within:ring-3 focus-within:ring-blue/15">
             <Search className="size-3.5 text-ink-3" />
-            <input value={q} onChange={(e) => { setQ(e.target.value); setSel(null) }} placeholder="Computer name" className="w-36 bg-transparent outline-none placeholder:text-ink-3" />
+            <input value={q} onChange={(e) => { setQ(e.target.value); setSel(null) }} placeholder="Device name" className="w-36 bg-transparent outline-none placeholder:text-ink-3" />
           </label>
         }
       >
         {devs.length ? (
-          <DTable head={[['Computer'], ['Operating system'], ['Vulnerabilities', 'right'], ['Critical', 'right'], ['Priority 1', 'right'], ['Overdue', 'right'], ['Used by attackers', 'right'], ['Last seen']]} minWidth={900}>
+          <DTable head={[['Computer'], ['Operating system'], ['Vulnerabilities', 'right'], ['Critical', 'right'], ['Priority 1', 'right'], ['Overdue', 'right'], ['Last seen']]} minWidth={900}>
             {devs.map(({ d, i }) => {
               const x = v.rows.filter((f) => f.d === i)
               return (
@@ -576,15 +533,14 @@ function Computers({ data, v }: { data: Uc3Data; v: Uc3View }) {
                   <td className="tabular text-right">{num(x.filter((f) => f.sev === 'Critical').length)}</td>
                   <td className="tabular text-right">{num(x.filter((f) => f.pr === 'P1').length)}</td>
                   <td className="tabular text-right">{num(x.filter((f) => f.br).length)}</td>
-                  <td className="tabular text-right">{new Set(x.filter((f) => f.kev).map((f) => f.cve)).size}</td>
                   <td className="tabular whitespace-nowrap text-ink-3">{d.last_seen ?? '–'}</td>
                 </tr>
               )
             })}
           </DTable>
-        ) : <Empty text="No computers match." />}
+        ) : <Empty text="No devices match." />}
       </Card>
-      <Card className="xl:col-span-7" title={dev ? `Vulnerabilities by app on ${dev.name}` : 'Vulnerabilities by app'} description={dev ? `${num(fs.length)} vulnerabilities` : 'Select a computer above'}>
+      <Card className="xl:col-span-7" title={dev ? `Vulnerabilities by app on ${dev.name}` : 'Vulnerabilities by app'} description={dev ? `${num(fs.length)} vulnerabilities` : 'Select a device above'}>
         {bySw.length ? (
           <Chart
             height={Math.max(280, bySw.length * 26 + 40)}
@@ -597,23 +553,22 @@ function Computers({ data, v }: { data: Uc3Data; v: Uc3View }) {
               series: sevStack(tk, v.activeSevs, bySw, (r, s) => r.fs.filter((f) => f.sev === s).length, true, bySw.map((r) => r.t)),
             })}
           />
-        ) : <Empty text="No vulnerabilities for this computer and filter." />}
+        ) : <Empty text="No vulnerabilities for this device and filter." />}
       </Card>
-      <Card className="xl:col-span-5" title="Updates to install on this computer" description="In order of impact">
+      <Card className="xl:col-span-5" title="Updates required on this device" description="In order of impact">
         {upd.length ? (
-          <DTable head={[['#', 'right'], ['Update'], ['Clears', 'right'], ['Critical', 'right'], ['KEV', 'right'], ['']]} minWidth={340} maxHeight={Math.max(280, bySw.length * 26 + 40)}>
+          <DTable head={[['#', 'right'], ['Update'], ['Clears', 'right'], ['Critical', 'right'], ['']]} minWidth={340} maxHeight={Math.max(280, bySw.length * 26 + 40)}>
             {upd.map((r, i) => (
               <tr key={r.u}>
                 <td className="tabular text-right text-ink-3">{i + 1}</td>
                 <td>{r.u}</td>
                 <td className="tabular text-right">{num(r.t)}</td>
                 <td className="tabular text-right">{num(r.c)}</td>
-                <td className="tabular text-right">{r.k || ''}</td>
-                <td><Link to={`/fixes?sw=${encodeURIComponent(r.sw)}`} title="Open on the Fix page (you can let the portal fix it)" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Fix</Link></td>
+                <td><Link to={`/fixes?sw=${encodeURIComponent(r.sw)}`} title="Open in Remediation" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Fix</Link></td>
               </tr>
             ))}
           </DTable>
-        ) : <Empty text="Nothing to install." />}
+        ) : <Empty text="No updates required." />}
       </Card>
     </div>
   )

@@ -11,7 +11,7 @@ import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
 type Show = 'open' | 'saved' | 'all'
-const SHOWS: [Show, string][] = [['open', 'To decide'], ['saved', 'Saved for later'], ['all', 'Everything']]
+const SHOWS: [Show, string][] = [['open', 'Pending decision'], ['saved', 'Deferred'], ['all', 'Everything']]
 const shown = (r: FixRow, show: Show) => show === 'all' || (show === 'open' ? r.status === 'proposed' : r.status === 'saved')
 const foundAt = (r: FixRow) => fixTime(r.found_by?.attack_detection) ?? ''
 
@@ -67,11 +67,11 @@ export function AttackResponses() {
         </div>
         <div className="text-sm text-ink-2">
           <p>
-            For every sign of attack the <span className="inline-flex items-center gap-1.5 font-medium"><span className={cn('size-2 rounded-full', UC_DOT.attack)} />{UC_NAME.attack}</span> finds,
-            it proposes one fixed response: <b>update Defender, run a quick scan and remove what it finds</b> on that computer. Nothing runs until you press Fix and then Run fixes.
+            For every detection the <span className="inline-flex items-center gap-1.5 font-medium"><span className={cn('size-2 rounded-full', UC_DOT.attack)} />{UC_NAME.attack}</span> finds,
+            it proposes a standard response: <b>update Defender, run a quick scan and remove any threats found</b> on the affected device. Nothing runs until you select Approve and then Execute remediation.
           </p>
           <p className="mt-1.5 text-xs text-ink-3">
-            Isolating a computer is not offered (the agent has no permission for it): do that in Defender itself. The evidence on each card comes from Defender, never from the AI.
+            Device isolation is outside this agent's scope; perform it in Microsoft Defender. The evidence on each card comes directly from Defender.
           </p>
         </div>
       </Panel>
@@ -98,7 +98,7 @@ export function AttackResponses() {
       {act.error && <p className="text-sm" style={{ color: statusColor.critical }}>{(act.error as Error).message}</p>}
 
       {ordered.length === 0 && (
-        <Empty text={show === 'open' ? 'Nothing to decide: every response has a decision.' : show === 'saved' ? 'No responses saved for later.' : 'No signs of attack, so no responses yet.'} />
+        <Empty text={show === 'open' ? 'No pending decisions.' : show === 'saved' ? 'No deferred responses.' : 'No detections, so no responses are required.'} />
       )}
 
       {ordered.map(([at, rs]) => {

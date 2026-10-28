@@ -70,7 +70,8 @@ Rules:
   steps that reduce the risk until the fix ships, and never promise that an update fixes them.
 - If fix_type is "Install the Windows update", the fix is a Windows (operating system) update installed through
   Windows Update, WSUS or Intune, usually with a restart; it is not an app update.
-- Never say the problem is fixed or safe; the next Defender scan confirms it."""
+- Never say the problem is fixed or safe; the next Defender scan confirms it.
+- Never say a vulnerability is actively exploited or used by attackers."""
 
 SCHEMA = {
     "type": "OBJECT",
@@ -97,7 +98,8 @@ Rules:
   text describes. If 'command' is empty, turn Microsoft's remediation text into simple steps.
 - If user_impact is true, or fix_note warns about side effects, tell them to test on a few PCs first.
 - If defender_details lists items (for example services), say the fix applies to each of them.
-- Never say the problem is fixed or safe; the next Defender scan confirms it."""
+- Never say the problem is fixed or safe; the next Defender scan confirms it.
+- Never say a vulnerability is actively exploited or used by attackers."""
 
 SETTING_SCHEMA = {
     "type": "OBJECT",
@@ -192,7 +194,7 @@ def refresh_kb(settings: Settings, client=None) -> dict:
 
 def urgency(kev: int, p1: int, critical_high: int) -> dict:
     if kev:
-        return {"level": 1, "label": "Fix now: attackers are known to use this"}
+        return {"level": 1, "label": "Fix now"}
     if p1:
         return {"level": 1, "label": "Fix now"}
     if critical_high:
@@ -375,11 +377,11 @@ def ai_facts(app: dict, today: date) -> dict:
                                 "install_folders": v["folders"]} for v in app["versions"]],
         "devices_affected": len(app["devices"]), "business_units": len(app["opcos"]),
         "cves": app["cves"], "p1_cves": app["p1"], "critical_cves": app["critical"], "high_cves": app["high"],
-        "on_attacker_use_list_CISA_KEV": app["kev_cves"], "cves_with_public_exploit": app["exploit_public"],
+        "cves_with_public_exploit": app["exploit_public"],
         "findings_past_deadline": app["overdue"], "fix_by": app["fix_by"], "today": today.isoformat(),
         "urgency_label": app["urgency"]["label"],
         "fix_action": app["fix"]["action"], "command": app["fix"]["command"] or "", "fix_note": app["fix"]["note"] or "",
-        "most_urgent_cves": [{k: v[k] for k in ("cve", "severity", "cvss", "kev", "description")} for v in app["top_cves"]],
+        "most_urgent_cves": [{k: v[k] for k in ("cve", "severity", "cvss", "description")} for v in app["top_cves"]],
         "fix_type": app["fix_type"],
         "end_of_support": [{"version": v["version"], **v["eos"]} for v in app["versions"] if v.get("eos")],
         # only when there are some, so cards without them keep their cached AI text
@@ -454,7 +456,6 @@ def guard(answer: dict, facts: dict) -> tuple[dict, list[str]]:
 
 def rules_text(app: dict) -> dict:
     """Plain card text without AI (no key, quota used up, or the AI answer failed every check)."""
-    kev = len(app["kev_cves"])
     if app["fix_type"] == FIX_OS:
         steps = ["Agree a restart time with the device users.", app["fix"]["action"] + ".", "Restart the PC.",
                  "Check the findings disappear after the next scan."]
@@ -475,7 +476,7 @@ def rules_text(app: dict) -> dict:
             steps.insert(0, f"{n} of these weaknesses {'has' if n == 1 else 'have'} no fix from the vendor yet; updating closes the others.")
     return {
         "what_is_wrong": f"{app['app']} has {app['cves']} known security weaknesses on {len(app['devices'])} device(s)"
-                         + (f"; {kev} of them are on the CISA list of vulnerabilities attackers are known to use." if kev else "."),
+                         + ".",
         "worst_case": "", "why_now": app["urgency"]["label"] + ".", "steps": steps,
         "verify": "After updating, the app's version on the PC is newer and its findings leave the dashboard on the next run.",
         "side_effects": "The PC restarts." if app["fix_type"] == FIX_OS else "The app closes while it updates.",

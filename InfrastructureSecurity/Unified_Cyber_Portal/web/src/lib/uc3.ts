@@ -26,7 +26,8 @@ export interface Uc3Device {
 }
 export interface Uc3Run {
   run_date: string; started_at: string; duration_seconds: number; export_generated_time: string | null; machines: number
-  vulnerability_rows: number; defender_count: number | null; coverage: number | null; change_rows: number; retries: number; quality: string | null
+  /** vulnerability_rows = rows downloaded; repeats = findings Defender listed twice (one copy kept); vulnerabilities = kept */
+  vulnerability_rows: number; repeats?: number | null; vulnerabilities?: number | null; defender_count: number | null; coverage: number | null; change_rows: number; retries: number; quality: string | null
 }
 export interface Uc3Check { name: string; status: string; value: string; expected: string; message: string }
 /** How a card gets fixed (UC3 fixes.py decides; first match wins in that order). */
@@ -202,13 +203,13 @@ export function cveList(rows: Finding[]) {
 }
 
 export function downloadCsv(rows: Finding[], snapshot: string, opco: string) {
-  const cols = ['device', 'opco', 'software', 'version', 'cve', 'severity', 'cvss', 'exploitability', 'priority', 'age_days', 'sla_breached', 'cisa_kev', 'recommended_update', 'first_seen']
+  const cols = ['device', 'opco', 'software', 'version', 'cve', 'severity', 'cvss', 'exploitability', 'priority', 'age_days', 'sla_breached', 'recommended_update', 'first_seen']
   const q = (v: unknown) => {
     const s = String(v ?? '')
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
   const lines = [cols.join(',')].concat(
-    rows.map((f) => [f.dev?.name, f.o, f.sw, f.ver, f.cve, f.sev, f.cvss, f.ex, f.pr, f.age, f.br ? 'yes' : 'no', f.kev ? 'yes' : 'no', f.upd, f.fs].map(q).join(',')),
+    rows.map((f) => [f.dev?.name, f.o, f.sw, f.ver, f.cve, f.sev, f.cvss, f.ex, f.pr, f.age, f.br ? 'yes' : 'no', f.upd, f.fs].map(q).join(',')),
   )
   const a = document.createElement('a')
   a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }))

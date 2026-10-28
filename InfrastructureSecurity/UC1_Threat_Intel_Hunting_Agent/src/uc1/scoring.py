@@ -43,9 +43,9 @@ def score_threat(t: dict, cves: list[dict], exposure: list[dict], hits: int, exp
         factors.append(f"{label} (+{int(n)})")
 
     if any(c.get("kev_added") for c in cves):
-        add(p["kev_points"], "on CISA's known-exploited list (KEV)")
+        add(p["kev_points"], "listed by CISA (KEV)")
     if any((c.get("kev_ransomware") or "").lower() == "known" for c in cves):
-        add(p["ransomware_points"], "used in ransomware campaigns")
+        add(p["ransomware_points"], "CISA links it to ransomware")
     epss = max((c.get("epss") or 0 for c in cves), default=0)
     if epss >= p["epss_high"]:
         add(p["epss_high_points"], f"EPSS {epss:.0%} chance of attack in 30 days")

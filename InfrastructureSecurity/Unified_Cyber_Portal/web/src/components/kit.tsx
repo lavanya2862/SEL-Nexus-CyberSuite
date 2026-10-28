@@ -1,7 +1,9 @@
 // Shared building blocks for every portal page (one look, no copies per page).
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Info } from 'lucide-react'
+import { ArrowRight, ChevronDown, Info } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { num } from '@/lib/format'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { chartTokens, useTheme, type ChartTokens } from '@/lib/theme'
 import { cn } from '@/lib/utils'
@@ -29,7 +31,8 @@ export function Chip({ children, tone }: { children: ReactNode; tone?: 'signal' 
 
 export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: [T, string][]; value: T; onChange: (t: T) => void }) {
   return (
-    <div role="tablist" className="flex gap-1 border-b border-hairline">
+    // scrolls sideways on a phone instead of making the whole page wider
+    <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-hairline [scrollbar-width:none]">
       {tabs.map(([id, label]) => (
         <button
           key={id}
@@ -38,7 +41,7 @@ export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: [T, st
           onClick={() => onChange(id)}
           className={cn(
             'relative shrink-0 px-2 pb-3 pt-1 text-sm text-ink-3 transition-colors hover:text-ink',
-            value === id && 'font-medium text-ink after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-blue',
+            value === id && 'font-medium text-ink after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-blue',
           )}
         >
           {label}
@@ -140,5 +143,43 @@ export function DTable({ head, children, minWidth = 720, maxHeight }: { head: [s
         <tbody className="[&_td]:px-3 [&_td]:py-2.5 [&_tr]:border-t [&_tr]:border-hairline">{children}</tbody>
       </table>
     </div>
+  )
+}
+
+export interface ChoiceOption { value: string; label: string; count?: number; dot?: string }
+
+/** The portal's dropdown (themed, not the browser's): the chosen option with its count; it turns blue while it filters
+ *  (anything but the first option). dot = a colour shown before the label. */
+export function Choice({ value, onChange, options, label, className }: {
+  value: string; onChange: (v: string) => void; options: ChoiceOption[]; label: string; className?: string
+}) {
+  const cur = options.find((o) => o.value === value) ?? options[0]
+  const on = value !== options[0]?.value
+  const dot = (o: ChoiceOption) => o.dot && <span className="size-2 shrink-0 rounded-full" style={{ background: o.dot }} />
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button aria-label={label}
+          className={cn('flex w-full min-w-0 items-center gap-2 rounded-lg border bg-field px-3 py-2 text-left text-sm transition-[border-color,box-shadow] hover:border-blue/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-blue/15 data-[state=open]:border-blue/60 data-[state=open]:ring-3 data-[state=open]:ring-blue/15',
+            on ? 'border-blue/60 text-ink' : 'border-hairline-strong text-ink-2', className)}>
+          {dot(cur)}
+          <span className="min-w-0 flex-1 truncate">{cur?.label}</span>
+          {cur?.count != null && <span className="tabular text-xs text-ink-3">{num(cur.count)}</span>}
+          <ChevronDown className="size-4 shrink-0 text-ink-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-48 rounded-xl border border-hairline bg-panel p-1.5 shadow-xl">
+        <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
+          {options.map((o) => (
+            <DropdownMenuRadioItem key={o.value} value={o.value}
+              className="gap-2 rounded-lg py-2 pl-2.5 text-ink-2 focus:bg-well focus:text-ink data-[state=checked]:font-medium data-[state=checked]:text-ink">
+              {dot(o)}
+              <span className="min-w-0 flex-1 truncate">{o.label}</span>
+              {o.count != null && <span className={cn('tabular text-xs', o.count ? 'text-ink-3' : 'text-ink-3/50')}>{num(o.count)}</span>}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

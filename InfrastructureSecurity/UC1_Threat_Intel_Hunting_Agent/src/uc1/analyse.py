@@ -21,7 +21,7 @@ log = logging.getLogger("uc1.analyse")
 
 
 def pending(store: Store, limit: int) -> list[dict]:
-    """Threats needing analysis, most important first (exposed, actively exploited, newest)."""
+    """Threats needing analysis, most important first (exposed, on the CISA KEV list, newest)."""
     return store.query("""
         SELECT t.* FROM threats t LEFT JOIN analysis a ON a.threat_id = t.threat_id
         WHERE a.threat_id IS NULL OR a.content_hash IS DISTINCT FROM t.content_hash
@@ -70,7 +70,16 @@ def _save(store: Store, threat: dict, result: dict, dropped: dict, model: str, f
     store.link(tid, "product", [f"{p['vendor']}|{p['product']}" for p in result["products"]], origin="ai")
 
 
+def redo_old_wording(store: Store) -> None:
+    """Summaries written before the prompt forbade "actively exploited" wording are analysed again, once (a redone
+    one has a newer analysed_at, so this never repeats)."""
+    store.execute("""UPDATE analysis SET ai_status = 'pending'
+        WHERE ai_status = 'done' AND analysed_at < TIMESTAMP '2026-10-28 10:30'
+          AND regexp_matches(summary, '(?i)actively exploited|exploited in the wild|used by attackers|known exploited')""")
+
+
 def run(store: Store, ai: GeminiClient | None, limit: int = 2000, workers: int = 8) -> dict:
+    redo_old_wording(store)
     todo = pending(store, limit)
     stats = {"candidates": len(todo), "ai_done": 0, "rules_only": 0, "failed": 0, "dropped_items": 0}
     techniques = {r["technique_id"] for r in store.query("SELECT technique_id FROM attack_techniques")}

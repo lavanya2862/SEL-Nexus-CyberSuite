@@ -173,7 +173,7 @@ export function HelpBot() {
                     </div>
                   )}
                   {m.kind === 'ready' && <p className="mt-1.5 text-[10px] text-ink-3">From today’s data</p>}
-                  {m.kind === 'ai' && <p className="mt-1.5 flex items-center gap-1 text-[10px] text-ink-3"><Sparkles className="size-3" /> AI answer from the portal’s data · check important numbers on the page</p>}
+                  {m.kind === 'ai' && <p className="mt-1.5 flex items-center gap-1 text-[10px] text-ink-3"><Sparkles className="size-3" /> Agent answer from the portal’s data · verify key figures on the page</p>}
                 </Bubble>
               ),
             )}
@@ -197,7 +197,7 @@ export function HelpBot() {
             </div>
             {aiOff || used ? (
               <p className="rounded-xl bg-well px-3 py-2 text-xs text-ink-2">
-                {aiOff ? 'Free questions need the AI, which isn’t set up for the portal yet. The two questions above still work.' : `Today’s ${status.data?.cap} free questions are used up. The two questions above still work.`}
+                {aiOff ? 'Open questions require the help agent, which is not yet configured for the portal. The two questions above are still available.' : `Today’s limit of ${status.data?.cap} open questions has been reached. The two questions above are still available.`}
               </p>
             ) : (
               <div className="flex items-end gap-2 rounded-xl border border-hairline bg-field px-3 py-2 transition-[border-color,box-shadow] focus-within:border-blue/60 focus-within:ring-3 focus-within:ring-blue/15">

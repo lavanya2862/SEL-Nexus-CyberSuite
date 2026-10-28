@@ -33,7 +33,7 @@ export function Respond() {
 
       {isLoading ? <Skeleton className="h-40 rounded-2xl" /> : error ? (
         <Panel className="p-6">
-          <Empty text={error instanceof NotFound ? 'Nothing triaged yet. Press “Check for new incidents” above.' : `Could not load the queue: ${(error as Error).message}`} />
+          <Empty text={error instanceof NotFound ? 'No incidents triaged yet. Select “Check for new incidents” above.' : `Could not load the queue: ${(error as Error).message}`} />
         </Panel>
       ) : data && (
         <>
@@ -43,7 +43,7 @@ export function Respond() {
             <Card
               className="xl:col-span-2"
               title="The queue"
-              description="Newest first. Open an incident to see the evidence."
+              description="Most recent first. Open an incident to view the evidence."
               action={<span className="tabular whitespace-nowrap text-xs text-ink-3">{shown.length} of {rows.length}</span>}
             >
               <div className="mb-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Filter the queue">
@@ -64,7 +64,7 @@ export function Respond() {
                 <ul className="flex flex-col divide-y divide-hairline rounded-xl border border-hairline">
                   {shown.map((r) => <QueueItem key={r.incident_id} r={r} who={who(r)} />)}
                 </ul>
-              ) : <Empty text={rows.length ? 'Nothing in this view.' : 'No incidents yet. A quiet lab is a good lab.'} />}
+              ) : <Empty text={rows.length ? 'No incidents in this view.' : 'No incidents to triage.'} />}
             </Card>
             <Accuracy byVerdict={data.by_verdict} />
           </div>
@@ -83,7 +83,7 @@ function Header({ lastRun }: { lastRun: string | null }) {
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Alert triage</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-3">Defender or Sentinel raised an alarm. True positive or false positive, how bad is it, and what should we do?</p>
+        <p className="mt-1 max-w-3xl text-sm text-ink-3">Agent-assisted triage of Microsoft Defender and Sentinel incidents: classification, severity and recommended response</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-xs text-ink-3">Last checked {ago(iso(lastRun))}</span>
@@ -92,7 +92,7 @@ function Header({ lastRun }: { lastRun: string | null }) {
           className="inline-flex items-center gap-2 rounded-lg btn-blue px-4 py-2 text-sm font-medium text-white"
         >
           {running ? <span className="size-2 animate-pulse rounded-full bg-sky" /> : <Play className="size-3.5" />}
-          {running ? 'Checking… watch' : 'Check for new incidents'}
+          {running ? 'Checking… view progress' : 'Check for new incidents'}
         </button>
       </div>
     </div>
@@ -104,10 +104,10 @@ function Kpis({ rows }: { rows: QueueRow[] }) {
   rows.forEach((r) => { const s = sourceNames(r.sources) || 'Unknown'; bySource.set(s, (bySource.get(s) ?? 0) + 1) })
   const count = (v: string) => rows.filter((r) => r.verdict === v).length
   const tiles: { label: string; value: string; sub: string; dot?: string; tip: string; hue: string }[] = [
-    { hue: '', label: 'Incidents triaged', value: num(rows.length), sub: [...bySource].map(([s, n]) => `${n} ${s}`).join(' · '), tip: 'Incidents from Microsoft Defender and Sentinel that the AI has given a verdict.' },
+    { hue: '', label: 'Incidents triaged', value: num(rows.length), sub: [...bySource].map(([s, n]) => `${n} ${s}`).join(' · '), tip: 'Incidents from Microsoft Defender and Sentinel classified by the Alert Triage Agent.' },
     { hue: 'card-hero-red', label: 'True positive', value: num(count('likely_true_positive')), sub: 'escalated in Defender', dot: VERDICT.likely_true_positive.color, tip: VERDICT.likely_true_positive.help },
     { hue: 'card-hero-green', label: 'False positive', value: num(count('likely_false_positive') + count('benign_positive')), sub: 'closed in Defender', dot: VERDICT.likely_false_positive.color, tip: VERDICT.likely_false_positive.help },
-    { hue: 'card-hero-amber', label: 'Needs review', value: num(count('needs_investigation')), sub: 'the AI could not decide: your decision', dot: VERDICT.needs_investigation.color, tip: 'The only incidents a person decides.' },
+    { hue: 'card-hero-amber', label: 'Needs review', value: num(count('needs_investigation')), sub: 'the agent could not classify: analyst decision', dot: VERDICT.needs_investigation.color, tip: 'The only incidents that require an analyst decision.' },
   ]
   return (
     <div className="card-row gap-4 [--card-min:175px]">
@@ -128,9 +128,9 @@ function Kpis({ rows }: { rows: QueueRow[] }) {
 const STEPS = [
   { icon: Siren, title: 'Defender or Sentinel raises it', text: 'A new or changed incident' },
   { icon: Search, title: 'Evidence', text: 'Searches around the time, threat intel, past cases' },
-  { icon: Scale, title: 'Never overrule Microsoft', text: 'Not closed if Microsoft rated it high or malicious' },
-  { icon: Bot, title: 'AI verdict, checked', text: 'Every claim must match the evidence' },
-  { icon: UserCheck, title: 'Act', text: 'Clear calls are escalated or closed. You decide the unclear ones' },
+  { icon: Scale, title: 'Microsoft severity respected', text: 'Never closed if Microsoft rated it high or malicious' },
+  { icon: Bot, title: 'Agent verdict, validated', text: 'Every claim must match the evidence' },
+  { icon: UserCheck, title: 'Act', text: 'Clear verdicts are escalated or closed; analysts decide the rest' },
 ]
 
 function HowItWorks() {
@@ -176,10 +176,10 @@ function QueueItem({ r, who }: { r: QueueRow; who: Who }) {
             {who === 'agent' ? (r.verdict === 'likely_true_positive'
               ? <Tag tone="bad">Escalated</Tag>
               : <Tag>Closed</Tag>)
-              : who === 'person' ? <Tag tone="warn"><UserCheck className="size-3" /> Your decision</Tag>
-              : <Tag><UserCheck className="size-3" /> Decided by you</Tag>}
+              : who === 'person' ? <Tag tone="warn"><UserCheck className="size-3" /> Analyst decision</Tag>
+              : <Tag><UserCheck className="size-3" /> Analyst decided</Tag>}
             {r.guardrails.filter((g) => RULES[g]).map((g) => <Tag key={g} tone="warn">{RULES[g].label}</Tag>)}
-            {r.ai_status !== 'ai' && <Tag tone="warn">rules only (no AI)</Tag>}
+            {r.ai_status !== 'ai' && <Tag tone="warn">rules only</Tag>}
           </span>
         </span>
         <ChevronRight className="mt-1 size-4 text-ink-3 group-hover:text-ink" />
@@ -193,13 +193,13 @@ function Accuracy({ byVerdict }: { byVerdict: Record<string, number> }) {
   const g = data?.backtest?.sets?.guide
   const total = Object.values(byVerdict).reduce((a, b) => a + b, 0)
   const bars = g ? [
-    ['Made a call (did not hand to a person)', g.decided_pct],
-    ['Right, when it made a call', g.accuracy_when_decided_pct],
-    ['True positives kept for review', g.real_attacks_kept_for_humans_pct],
-    ['False positives it could close', g.false_alarms_closable_pct],
+    ['Auto-classification rate', g.decided_pct],
+    ['Precision (auto-classified)', g.accuracy_when_decided_pct],
+    ['True positives retained for review', g.real_attacks_kept_for_humans_pct],
+    ['False positives auto-closed', g.false_alarms_closable_pct],
   ] as const : []
   return (
-    <Card title="Can we trust it?" description={g ? `Tested on ${g.n} real incidents that experts already graded (Microsoft GUIDE)` : 'Run the backtest  to fill this in'}>
+    <Card title="Model accuracy (backtest)" description={g ? `Tested on ${g.n} real incidents with expert-graded verdicts (Microsoft GUIDE)` : 'Run the backtest to populate this view'}>
       {g ? (
         <ul className="flex flex-col gap-3">
           {bars.map(([label, pct]) => (
@@ -213,7 +213,7 @@ function Accuracy({ byVerdict }: { byVerdict: Record<string, number> }) {
             {(() => {
               const attacks = Object.values(g.confusion?.TP ?? {}).reduce((a, b) => a + b, 0)
               const m = g.missed_true_positives
-              return `Of ${attacks || 'the'} real attacks in the test, it called ${m} harmless${m ? ', so those would have been closed' : ''}. Everything else it either escalated or handed to a person.`
+              return `Of ${attacks || 'the'} real attacks in the test, it called ${m} harmless${m ? ', so those would have been closed' : ''}. All others were escalated or routed for analyst review.`
             })()}
           </li>
         </ul>
@@ -238,9 +238,9 @@ function WhereItFits() {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       {([
-        [Wrench, 'Fix', 'Prevent', 'Fix vulnerable apps, unsupported software and weak settings before anyone uses them. Planned work: days.', '/fixes'],
-        [Radar, 'Attack detection', 'Detect quietly', 'Search for an attacker who got in without setting off an alarm.', '/uc1/hunts'],
-        [BellRing, 'Triage', 'Respond', 'Defender has raised an alarm: decide and act. Urgent work: minutes.', null],
+        [Wrench, 'Remediation', 'Prevent', 'Remediate vulnerable applications, unsupported software and weak settings before they are exploited. Planned work: days.', '/fixes'],
+        [Radar, 'Attack detection', 'Hunt proactively', 'Identify attackers who gained access without triggering an alert.', '/uc1/hunts'],
+        [BellRing, 'Triage', 'Respond', 'Defender has raised an incident: classify and respond. Urgent work: minutes.', null],
       ] as const).map(([Icon, title, role, text, to]) => (
         <Panel key={title} className="flex flex-col gap-2 p-5">
           <div className="flex items-center gap-2">

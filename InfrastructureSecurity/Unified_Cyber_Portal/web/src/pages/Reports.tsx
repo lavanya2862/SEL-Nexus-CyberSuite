@@ -21,13 +21,12 @@ const KIND: Record<string, { icon: typeof FileText; label: string }> = {
 const size = (b: number) => (b > 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`)
 
 function describe(name: string) {
-  if (name.startsWith('Vulnerability_Report') && name.endsWith('.xlsx')) return 'Every vulnerability with its fix, AI fix plan, charts'
-  if (name.startsWith('Vulnerability_Report')) return 'Vulnerability report: summary, charts, what to fix first, AI fix guides'
-  if (name.startsWith('UC3_Before_After')) return 'Before / after: time saved by the agent'
-  if (name.startsWith('Threat_Intel_Report')) return 'New threats from this run, what affects us, AI fix steps'
-  if (name.startsWith('Attack_Detection_Report')) return 'Signs of attack, evidence and AI steps to resolve them'
+  if (name.startsWith('Vulnerability_Report') && name.endsWith('.xlsx')) return 'Every vulnerability with its remediation, agent remediation plan and charts'
+  if (name.startsWith('Vulnerability_Report')) return 'Vulnerability report: summary, charts, priorities and agent remediation guidance'
+  if (name.startsWith('Threat_Intel_Report')) return 'New threats from this run, applicable threats and agent remediation steps'
+  if (name.startsWith('Attack_Detection_Report')) return 'Detections, evidence and agent resolution steps'
   if (name.startsWith('Alert_Triage_Report')) return 'Incidents triaged in this run, verdicts, evidence and actions'
-  if (name.startsWith('UC1_AI_Spotcheck')) return 'Sheet to check the AI’s answers by hand'
+  if (name.startsWith('UC1_AI_Spotcheck')) return 'Worksheet for manual review of agent output'
   return 'Report file'
 }
 
@@ -37,7 +36,7 @@ export function Reports() {
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
-        <p className="mt-1 text-sm text-ink-3">Word, PDF and Excel files the agents produce. Newest first.</p>
+        <p className="mt-1 text-sm text-ink-3">Agent-generated reports in Word, PDF and Excel, most recent first.</p>
       </div>
       {error && <Empty text={String((error as Error).message)} />}
       {data && (

@@ -16,7 +16,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from uc3.api_client import ApiError, DefenderClient, LinkExpired
+from uc3.api_client import ApiError, DefenderClient, EmptyDownload, LinkExpired
 from uc3.auth import EntraTokenProvider
 from uc3.config import Settings
 from uc3.posture import extract_posture
@@ -30,7 +30,7 @@ HUNTING = "/api/advancedqueries/run"
 SOURCE_COUNT_QUERY = "DeviceTvmSoftwareVulnerabilities | count"
 DELTA_MAX_DAYS = 14
 PAGE_SIZE = 200_000
-EXPORT_ATTEMPTS = 2           # request a fresh export once if download links expire mid-way
+EXPORT_ATTEMPTS = 2           # request a fresh export once if download links expire or a file comes back empty
 
 
 def make_client(settings: Settings, **kwargs) -> DefenderClient:
@@ -78,7 +78,10 @@ def _load_state(settings: Settings) -> dict:
 
 
 def _previous_export(settings: Settings, generated_time: str | None) -> tuple[Path, list] | None:
-    """The newest finished download of this same Defender export (same generatedTime) with all its files on disk."""
+    """The newest finished download of this same Defender export (same generatedTime) with all its files on disk.
+
+    Empty (0-byte) files are never reused, so one bad download can't be copied into every later run.
+    """
     if not generated_time:
         return None
     for manifest_path in sorted(settings.raw_dir.glob("????-??-??/manifest.json"), reverse=True):
@@ -90,8 +93,8 @@ def _previous_export(settings: Settings, generated_time: str | None) -> tuple[Pa
             continue
         folder = manifest_path.parent / "vulnerabilities"
         files = manifest.get("files") or []
-        if files and all((folder / f["name"]).is_file() and (folder / f["name"]).stat().st_size == f["bytes"]
-                         for f in files):
+        if files and all(f["bytes"] > 0 and (folder / f["name"]).is_file()
+                         and (folder / f["name"]).stat().st_size == f["bytes"] for f in files):
             return folder, files
     return None
 
@@ -121,10 +124,11 @@ def _download_export(client: DefenderClient, folder: Path, settings: Settings) -
                 name = f"part-{i:05d}.json.gz"
                 size, rows = client.download(url, folder / name)
                 files.append({"name": name, "bytes": size, "rows": rows})
-        except LinkExpired:
+        except (LinkExpired, EmptyDownload) as exc:
             if attempt == EXPORT_ATTEMPTS:
                 raise
-            log.warning("Download links expired; requesting a fresh export")
+            log.warning("%s; requesting a fresh export",
+                        "Download links expired" if isinstance(exc, LinkExpired) else "A downloaded file was empty")
             continue
         return {"generated_time": export.get("generatedTime"), "files": files, "attempts": attempt}
     raise AssertionError("unreachable")

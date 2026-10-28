@@ -35,7 +35,7 @@ export function Uc3Header({ title, description, data, view, actions, hideSev }: 
             {failed
               ? <>The latest run did not publish new data: {data.status?.message}. You are looking at the last good snapshot.</>
               : <>This data is {age} days old.</>}{' '}
-            <button onClick={() => openDrawer('uc3')} className="font-medium underline underline-offset-4">Run the vulnerability update now</button>
+            <button onClick={() => openDrawer('uc3')} className="font-medium underline underline-offset-4">Run Vulnerability Agent now</button>
           </span>
         </div>
       )}

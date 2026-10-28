@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
 from typing import Callable
+from urllib.parse import quote
 
 
 def _now() -> str:
@@ -59,40 +60,40 @@ class Step:
 # Members must follow the pipeline's own order (they are matched against the log one after another).
 def uc3_steps() -> list[Step]:
     return [
-        Step("download", "Download from Defender", "The full list of weaknesses, plus what Defender changed since the last run"),
-        Step("check", "Validate", "Save today's copy and check nothing is missing"),
-        Step("score", "Score and report", "Rate each problem and prepare the report numbers"),
-        Step("advice", "Remediation agent", "AI writes the steps to fix every problem"),
-        Step("fix", "Fix", "Propose the fixes that are new in this run; you approve each one below"),
+        Step("download", "Download from Defender", "Full vulnerability export, plus changes Defender recorded since the last run"),
+        Step("check", "Validate", "Store today's snapshot and verify completeness"),
+        Step("score", "Score and report", "Score each finding and compute report metrics"),
+        Step("advice", "Remediation agent", "The agent writes remediation steps for every finding"),
+        Step("fix", "Remediation", "Propose new remediations from this run for your approval below"),
     ]
 
 
 def uc1_steps() -> list[Step]:
     return [
-        Step("gather", "Gather threat news and understand it", "New threats from 10 public feeds; AI reads each one and how likely it is to be used",
+        Step("gather", "Collect and analyse threat intelligence", "New threats from 10 public feeds; the agent analyses each one and its likelihood of exploitation",
              ("collect", "inventory", "derive", "nvd_details", "epss", "products", "analyse")),
-        Step("affects", "Check if it affects us", "Is the software these threats target on our computers?",
+        Step("affects", "Assess exposure", "Check whether the targeted software is present on managed devices",
              ("exposure", "score", "correlate")),
-        Step("fixes", "Write fix steps", "AI writes how to fix each threat that affects us, checked against Defender's data",
+        Step("fixes", "Write remediation steps", "The agent writes remediation steps for each applicable threat, validated against Defender data",
              ("fix_advice",)),
-        Step("outputs", "Write the report", "The new threats that affect us and how to fix them, alerts and the report",
+        Step("outputs", "Publish the report", "Applicable threats, remediation guidance, alerts and the report",
              ("alerts", "report", "dashboard", "metrics")),
-        Step("fix", "Fix", "Propose the fixes that are new in this run; you approve each one below", ("fix_plan",)),
+        Step("fix", "Remediation", "Propose new remediations from this run for your approval below", ("fix_plan",)),
     ]
 
 
 def attack_steps() -> list[Step]:
     """The Attack Detection Agent: UC1's `attack-check` run, on its own so it can run more often than the news."""
     return [
-        Step("search", "Search our computers", "Look in Microsoft Defender (last 30 days) for the warning signs from threat news and known attacker tricks",
+        Step("search", "Hunt across managed devices", "Search Microsoft Defender (last 30 days) for indicators from threat intelligence and known attacker techniques",
              ("hunt",)),
-        Step("evidence", "Connect the evidence", "Who was logged in and what Defender said; earlier signs are kept, new ones added",
+        Step("evidence", "Correlate the evidence", "Signed-in users and Defender context; earlier detections are kept, new ones added",
              ("correlate", "exposure", "rescore")),
-        Step("resolve", "Write resolution steps", "AI writes how to resolve each new sign of attack, checked against the evidence",
+        Step("resolve", "Write resolution steps", "The agent writes resolution steps for each new detection, validated against the evidence",
              ("resolve",)),
         Step("publish", "Publish", "Update the Attack detection page, raise alerts and write the report",
              ("alerts", "report", "dashboard")),
-        Step("fix", "Fix", "Propose a Defender scan-and-clean for every new sign of attack; you approve each one below",
+        Step("fix", "Remediation", "Propose a Defender scan-and-clean for every new detection, for your approval below",
              ("fix_plan",)),
     ]
 
@@ -100,12 +101,12 @@ def attack_steps() -> list[Step]:
 def uc4_steps() -> list[Step]:
     return [
         # The pipeline's own housekeeping (feedback import, lab grading) still runs; it is just not shown as a step.
-        Step("ingest", "Read new alerts", "New or changed incidents from Microsoft Defender and Sentinel", ("ingest",)),
-        Step("triage", "Check each alert", "AI looks at the evidence and decides: real threat, false alarm, or needs a person",
+        Step("ingest", "Ingest new incidents", "New or changed incidents from Microsoft Defender and Sentinel", ("ingest",)),
+        Step("triage", "Classify each incident", "The agent reviews the evidence and classifies it: true positive, false positive or needs review",
              ("triage",)),
-        Step("act", "Take action", "Close false alarms, escalate real threats, ask Defender to scan or clean up (when switched on)",
+        Step("act", "Respond", "Close false positives, escalate true positives, request Defender scans and clean-up (when enabled)",
              ("auto_resolve", "respond", "writeback", "actions")),
-        Step("publish", "Update the queue", "Results ready to review on the Alert triage page", ("metrics", "export", "report")),
+        Step("publish", "Publish the triage queue", "Results available for review on the Alert triage page", ("metrics", "export", "report")),
     ]
 
 
@@ -143,12 +144,15 @@ def defender_new(info: dict) -> tuple[int, int] | None:
     return int(info.get("new") or 0), int(info.get("fixed") or 0)
 
 
-def download_words(info: dict) -> str:
-    """ "4,524 vulnerabilities in Defender · none new in this run" or "… · 2 new in this run · 13 fixed" """
-    rows = info.get("vulnerability_rows")
-    if rows is None:
+def download_words(info: dict, vulns: int | None = None) -> str:
+    """ "4,524 vulnerabilities in Defender · none new in this run" or "… · 2 new in this run · 13 fixed".
+
+    `vulns` is the count after the load step drops the repeats Defender lists twice, so it matches every page. Until
+    the load finishes (or in logs from before it was logged) the count is left out: the export's row count includes
+    those repeats; the Data quality page shows both."""
+    if info.get("vulnerability_rows") is None:
         return ""
-    text = f"{int(rows):,} vulnerabilities in Defender"
+    text = f"{vulns:,} vulnerabilities in Defender" if vulns is not None else "Downloaded from Defender"
     counts = defender_new(info)
     if counts is None:
         return text
@@ -158,7 +162,7 @@ def download_words(info: dict) -> str:
 
 
 def advice_summary(info: dict, stopped: str = "") -> str:
-    """The Remediation agent step in plain words: "Fix steps ready for every vulnerability", no counts.
+    """The Remediation agent step in plain words: "Remediation steps ready for every vulnerability", no counts.
 
     Counts confused people: the total ("111 fix guides") read as "111 new", and the rewritten count ("14 new") as
     "only 14 problems get a fix". Only a problem is spelled out: guides the AI could not update this run keep basic
@@ -167,16 +171,16 @@ def advice_summary(info: dict, stopped: str = "") -> str:
     """
     behind = info.get("rules", 0) + max(0, info.get("ai", 0) - info.get("reused", 0) - info.get("asked", 0))
     if not behind:
-        return "Fix steps ready for every vulnerability"
-    why = ("AI daily limit reached" if "quota" in stopped.lower() else "AI not available" if stopped
-           else "AI answers did not pass the checks")
-    return f"Fix steps ready · some are basic: {why}"
+        return "Remediation steps ready for every vulnerability"
+    why = ("agent daily limit reached" if "quota" in stopped.lower() else "agent unavailable" if stopped
+           else "agent output did not pass validation")
+    return f"Remediation steps ready · some use standard guidance: {why}"
 
 
 def fix_words(info: dict) -> str:
     """The Fix stage in a few words: "6 new fixes to approve · 102 waiting from earlier runs"."""
     new, waiting = int(info.get("new") or 0), int(info.get("waiting") or 0)
-    text = f"{new} new fix{'es' if new > 1 else ''} to approve" if new else "No new fixes this run"
+    text = f"{new} new remediation{'s' if new > 1 else ''} to approve" if new else "No new remediations this run"
     return text + (f" · {waiting:,} waiting from earlier runs" if waiting else "")
 
 
@@ -207,16 +211,16 @@ def _new_steps(d: dict) -> int:
 
 def _searched(d: dict) -> str:
     """The attack search in plain words: no counts of searches or rows, only whether some could not run."""
-    return "Looked through the last 30 days of activity" + (" · some searches could not run" if d.get("errors") else "")
+    return "Searched the last 30 days of activity" + (" · some searches could not run" if d.get("errors") else "")
 
 
 def threats_words(ex: dict) -> str:
     """Only what this run found: "No new threats affect our computers" / "3 new threats affect our computers".
     The running total is on the Threats page; runs from before the new count say only that the check ran."""
     if "new_threats_exposed" not in ex:
-        return "Checked against the software on our computers"
+        return "Checked against the software on managed devices"
     new = ex["new_threats_exposed"]
-    return f"{_plural(new, 'new threat')} affect our computers" if new else "No new threats affect our computers"
+    return f"{_plural(new, 'new applicable threat')}" if new else "No new applicable threats"
 
 
 def _alerts(n: int) -> str:
@@ -267,10 +271,10 @@ def friendly(name: str, value) -> str | None:
             return _alerts(d["new_alerts"]).capitalize()
         if name == "fix_advice":
             new = _new_steps(d)
-            return f"Fix steps written for {_plural(new, 'threat')}" if new else "No new fix steps needed"
+            return f"Fix steps written for {_plural(new, 'threat')}" if new else "No new remediation steps needed"
         if name == "resolve":
             new = _new_steps(d)
-            return f"Fix steps written for {_plural(new, 'sign')} of attack" if new else "No new fix steps needed"
+            return f"Resolution steps written for {_plural(new, 'detection')}" if new else "No new remediation steps needed"
         if name == "report":
             return "Word and PDF report written"
         if name == "dashboard":
@@ -284,7 +288,7 @@ def friendly(name: str, value) -> str | None:
             return f"{_plural(d.get('feedback', 0), 'feedback click')} · {_plural(d.get('actions', 0), 'action')} imported"
         if name == "auto_resolve":
             return (f"{d.get('resolve', 0)} closed · {d.get('escalate', 0)} escalated · "
-                    f"{d.get('needs_human', 0)} left for a person" + (f" · {d['failed']} failed" if d.get("failed") else ""))
+                    f"{d.get('needs_human', 0)} left for analyst review" + (f" · {d['failed']} failed" if d.get("failed") else ""))
         if name == "writeback":
             return f"{_n(value)} comments posted in Defender"
         if name == "actions":
@@ -292,7 +296,7 @@ def friendly(name: str, value) -> str | None:
         if name == "ledger":
             return f"{d.get('matched', 0)} of {d.get('loaded', 0)} known cases matched to incidents"
         if name == "accuracy":
-            return f"{d.get('lab_correct', 0)} of {d.get('lab_incidents', 0)} known cases called right"
+            return f"{d.get('lab_correct', 0)} of {d.get('lab_incidents', 0)} benchmark cases classified correctly"
         if name == "export":
             return "Triage queue published"
     except (KeyError, TypeError, ValueError):
@@ -309,20 +313,20 @@ def group_summary(key: str, r: dict) -> str | None:
             feeds, an = get("collect"), get("analyse")
             news = sum(int(n) for v in feeds.values() for n in re.findall(r"\d+", str(v)))
             failed = [k for k, v in feeds.items() if not str(v).startswith(("ok", "skipped"))]
-            text = f"{_n(news)} news items checked"
+            text = f"{_n(news)} threat intelligence items checked"
             return text + (f" · {_plural(len(failed), 'source')} could not be reached" if failed else "")
         if key == "affects":
             return threats_words(get("exposure"))
         if key == "fixes":
             new = _new_steps(get("fix_advice"))
-            return f"Fix steps written for {_plural(new, 'threat')} that affect us" if new else "No new fix steps needed"
+            return f"Remediation steps written for {_plural(new, 'applicable threat')}" if new else "No new remediation steps needed"
         if key == "fix":
             return fix_words(get("fix_plan"))
         if key == "search":
             return _searched(get("hunt"))
         if key == "resolve":
             new = _new_steps(get("resolve"))
-            return f"Fix steps written for {_plural(new, 'sign')} of attack" if new else "No new fix steps needed"
+            return f"Resolution steps written for {_plural(new, 'detection')}" if new else "No new remediation steps needed"
         if key == "publish":
             al = get("alerts")
             return f"Attack detection page updated · {_alerts(al['new_alerts'])}"
@@ -330,19 +334,19 @@ def group_summary(key: str, r: dict) -> str | None:
             # what this run added; the Attack detection page keeps every earlier sign as well
             co = get("correlate")
             if "new_hits" not in co:                                  # runs from before signs were kept
-                return f"{_plural(co['hit_findings'], 'sign')} of attack found" if co["hit_findings"] else "No signs of attack found"
-            return f"{_plural(co['new_hits'], 'new sign')} of attack found" if co["new_hits"] else "No new signs of attack"
+                return f"{_plural(co['hit_findings'], 'detection')} found" if co["hit_findings"] else "No detections found"
+            return f"{_plural(co['new_hits'], 'new detection')} found" if co["new_hits"] else "No new detections"
         if key == "outputs":
             al, rs = get("alerts"), get("resolve")
             text = "Report ready"
             if _new_steps(rs):
-                text += f" · fix steps for {_plural(_new_steps(rs), 'sign')} of attack"
+                text += f" · resolution steps for {_plural(_new_steps(rs), 'detection')}"
             return text + f" · {_alerts(al['new_alerts'])}"
         # UC4
         if key == "act":
             ar, rs = get("auto_resolve"), get("respond")
             done = [f"{ar[k]} {w}" for k, w in (("resolve", "closed"), ("escalate", "escalated"),
-                                                 ("needs_human", "left for a person")) if ar.get(k)]
+                                                 ("needs_human", "left for analyst review")) if ar.get(k)]
             if rs.get("requested"):
                 n, s = rs["requested"], "" if rs["requested"] == 1 else "s"
                 done.append(f"Asked Defender for {n} scan{s} or clean-up{s}")
@@ -437,6 +441,10 @@ class RunState:
             if isinstance(info, dict):
                 self.results["extract"] = info
             self.steps[d].detail = download_words(info) if isinstance(info, dict) else ""
+        elif "Load finished:" in line:
+            info = _literal(line.split("Load finished:", 1)[1].strip())
+            if isinstance(info, dict) and isinstance(self.results.get("extract"), dict):
+                self.steps[d].detail = download_words(self.results["extract"], int(info.get("vulnerabilities") or 0))
         elif "uc3.extract:" in line:
             self.steps[d].detail = line.split("uc3.extract:", 1)[1].strip()
         elif "Updating the data lake" in line:
@@ -604,17 +612,15 @@ class RunState:
 
     # ---------- the plain-English summary shown when a run ends ----------
     def facts(self) -> list[dict]:
-        r, out = self.results, []
+        r, out, named = self.results, [], self.new_ids()     # named: the items the run page lists by name
 
         def add(label: str, value, hint: str = "") -> None:
             if value not in (None, ""):
                 out.append({"label": label, "value": str(value), "hint": hint})
 
         if self.uc == "uc3":
-            # Each card's small text explains its own big number, never a second number
+            # Only what this run did: totals of everything still open are on the Dashboard
             ex = r.get("extract") or {}
-            add("Vulnerabilities in Defender", f"{ex['vulnerability_rows']:,}" if "vulnerability_rows" in ex else None,
-                f"found on {ex.get('machines', '?')} computers")
             counts = defender_new(ex)
             if counts is not None:
                 stale = ex.get("defender_refreshed") is False
@@ -622,14 +628,18 @@ class RunState:
                     "Defender has no newer data yet" if stale else "not there in the last run")
                 add("Fixed since the last run", f"{counts[1]:,}",
                     "Defender has no newer data yet" if stale else "no longer found by Defender")
-            sev = r.get("severity") or {}
-            if sev:
-                add("Critical vulnerabilities", f"{sev.get('Critical', 0):,}", "most dangerous: fix these first")
-                add("High vulnerabilities", f"{sev.get('High', 0):,}", "fix after the critical ones")
-            quality = r.get("quality")
-            add("Data quality", quality, {"PASS": "every automatic check passed", "WARN": "some checks need a look",
-                                          "FAIL": "a check failed: open Data quality"}.get(quality or "", ""))
-            self._fix_fact(add)
+            adv = r.get("advice") if isinstance(r.get("advice"), dict) else {}
+            if adv:
+                settings = adv.get("settings", 0)
+                add("Fix cards written", f"{adv.get('apps', 0) + settings:,}",
+                    f"applying them resolves {adv.get('vulnerabilities', 0):,} vulnerabilities"
+                    + (f" and {settings:,} weak setting{'s' if settings != 1 else ''}" if settings else ""))
+            fx = self.fix_result()
+            if fx:
+                new = int(fx.get("new") or 0)
+                # fix_waiting() replaces this hint with the decisions made on the run page
+                add(APPROVED_FACT, "0", f"{new} new remediation{'s' if new != 1 else ''} awaiting your approval below" if new
+                    else "no new remediations in this run")
             return out
         if self.uc == "uc4":
             got = re.findall(r"\d+", r.get("ingest_text") or "")
@@ -647,7 +657,7 @@ class RunState:
                     f"{ar.get('resolve', 0)} closed, {ar.get('escalate', 0)} escalated")
             acc = r.get("accuracy") if isinstance(r.get("accuracy"), dict) else {}
             if acc.get("lab_incidents"):
-                add("Known cases called right", f"{acc.get('lab_correct', 0)} / {acc['lab_incidents']}",
+                add("Benchmark cases classified correctly", f"{acc.get('lab_correct', 0)} / {acc['lab_incidents']}",
                     f"{acc.get('lab_missed_tp', 0)} true positives missed")
             fb = r.get("feedback") if isinstance(r.get("feedback"), dict) else {}
             add("Your feedback imported", fb.get("feedback") if fb else None, "agree / disagree clicks")
@@ -656,37 +666,49 @@ class RunState:
             # only what this run added: earlier signs and their fix steps are on the Attack detection page
             co = r.get("correlate") if isinstance(r.get("correlate"), dict) else {}
             if co:
-                add("New signs of attack", co.get("new_hits", 0), "since the last run")
+                add("New detections", co.get("new_hits", 0),
+                    ("since the last run" + (", listed below" if named.get("attack") else "")) if co.get("new_hits")
+                    else "Defender hunts found nothing new on managed devices")
             rs = r.get("resolve") if isinstance(r.get("resolve"), dict) else {}
             if rs:
-                add("Fix steps written this run", _new_steps(rs), "for signs of attack")
+                add("Remediation steps written this run", _new_steps(rs), "for detections")
             al = r.get("alerts") if isinstance(r.get("alerts"), dict) else {}
-            add("Alerts sent", al.get("new_alerts"), "to the security team" if al.get("new_alerts") else "no one needed to be told")
+            add("Alerts sent", al.get("new_alerts"),
+                ("to the security team" + (", listed below" if named.get("alerts") else "")) if al.get("new_alerts")
+                else "only for applicable Critical or High threats; none new this run")
             self._fix_fact(add)
             return out
         feeds = r.get("collect") if isinstance(r.get("collect"), dict) else {}
         new_items = sum(int(n) for v in feeds.values() for n in re.findall(r"\d+", str(v)))
         ok = sum(1 for v in feeds.values() if str(v).startswith("ok"))
         failed = sum(1 for v in feeds.values() if not str(v).startswith(("ok", "skipped")))
-        add("News items checked", f"{new_items:,}" if feeds else None,
+        add("Threat intelligence items checked", f"{new_items:,}" if feeds else None,
             f"from {_plural(ok, 'public source')}" + (f" · {failed} could not be reached" if failed else ""))
         ex = r.get("exposure") if isinstance(r.get("exposure"), dict) else {}
-        add("New threats affecting us", ex.get("new_threats_exposed"), "since the last run")
+        add("New applicable threats", ex.get("new_threats_exposed"),
+            ("since the last run" + (", listed below" if named.get("threats") else "")) if ex.get("new_threats_exposed")
+            else "nothing new on managed devices")
         fx = r.get("fix_advice") if isinstance(r.get("fix_advice"), dict) else {}
         if fx:
-            add("Fix steps written this run", _new_steps(fx), "for threats that affect us")
+            add("Remediation steps written this run", _new_steps(fx), "for applicable threats")
         co = r.get("correlate") if isinstance(r.get("correlate"), dict) else {}
         if co:
-            add("New signs of attack", co.get("new_hits", co.get("hit_findings", 0)), "since the last run")
+            hits = co.get("new_hits", co.get("hit_findings", 0))
+            add("New detections", hits, ("since the last run" + (", listed below" if named.get("attack") else "")) if hits
+                else "Defender hunts found nothing new on managed devices")
         al = r.get("alerts") if isinstance(r.get("alerts"), dict) else {}
-        add("Alerts sent", al.get("new_alerts"), "to the security team" if al.get("new_alerts") else "no one needed to be told")
+        add("Alerts sent", al.get("new_alerts"),
+            ("to the security team" + (", listed below" if named.get("alerts") else "")) if al.get("new_alerts")
+            else "only for applicable Critical or High threats; none new this run")
         self._fix_fact(add)
         return out
 
     def _fix_fact(self, add) -> None:
         fx = self.fix_result()
         if fx:
-            add("New fixes to approve", f"{int(fx.get('new') or 0):,}", "proposed in this run: approve them below")
+            new = int(fx.get("new") or 0)
+            add("New fixes to approve", f"{new:,}", "proposed in this run: decide on each below" if new
+                else "nothing new to approve in this run")
 
     def report_file(self) -> str | None:
         rep = self.results.get("report")
@@ -716,7 +738,19 @@ class RunState:
             "log_tail": list(self.log_tail)[-12:],
             # UC3's Fix stage: the fixes this run proposed (the run page shows them as cards to approve)
             "fix": self.fix_result(),
+            "new_ids": self.new_ids(),
         }
+
+    def new_ids(self) -> dict[str, list[str]]:
+        """The new threats affecting us, signs of attack and alerts of a Threat Intel / Attack Detection run, by id
+        (logged by those agents since 28 Oct 2026; older runs have none). run_findings() turns them into names."""
+        def ids(step: str, key: str) -> list[str]:
+            res = self.results.get(step)
+            return [str(i) for i in res.get(key) or []] if isinstance(res, dict) else []
+        if self.uc not in ("uc1", "attack"):
+            return {}
+        return {"threats": ids("exposure", "new_threat_ids"), "attack": ids("correlate", "new_hit_ids"),
+                "alerts": ids("alerts", "new_alert_ids")}
 
 
 def _pid_alive(pid: int | None) -> bool:
@@ -746,6 +780,7 @@ def _read_json(path: Path) -> dict | None:
 
 
 FIX_TO_DO = {"approved", "queued", "running", "done", "failed", "verified", "still_there", "gone"}
+APPROVED_FACT = "Remediations approved"       # UC3's result card for this run's new fixes, kept current by fix_waiting()
 
 
 def fix_waiting(run: dict, fix_dir: Path, read: Callable[[Path], dict | None] = _read_json) -> dict:
@@ -769,8 +804,58 @@ def fix_waiting(run: dict, fix_dir: Path, read: Callable[[Path], dict | None] = 
                     detail=f"Waiting for you: {len(open_ids)} of {len(ids)} new fix{'es' if len(ids) != 1 else ''} to decide")
     elif ids:
         step["detail"] = f"All {len(ids)} handled: {to_fix} to fix, {saved} saved for later"
-    return {**run, "fix": {**fix, "open": len(open_ids), "to_fix": to_fix, "saved_now": saved},
+    hint = (f"{len(open_ids)} still waiting for you below" if open_ids
+            else f"of {len(ids)} new fix{'es' if len(ids) != 1 else ''} in this run" if ids else "no new remediations in this run")
+    facts = [{**f, "value": str(to_fix), "hint": hint} if f.get("label") == APPROVED_FACT else f
+             for f in run.get("facts") or []]
+    return {**run, "fix": {**fix, "open": len(open_ids), "to_fix": to_fix, "saved_now": saved}, "facts": facts,
             "steps": [step if s["key"] == "fix" else s for s in run["steps"]], "waiting_for_you": bool(open_ids)}
+
+
+def _line(message: str, prefix: str) -> str:
+    return next((ln[len(prefix):].strip() for ln in message.splitlines() if ln.startswith(prefix)), "")
+
+
+def _clip(text: str | None, n: int = 220) -> str:
+    text = " ".join(str(text or "").split())
+    return text if len(text) <= n else text[:n].rsplit(" ", 1)[0] + "…"
+
+
+def run_findings(new_ids: dict | None, dashboard: dict | None) -> list[dict]:
+    """What a Threat Intel / Attack Detection run found, by name, with why it matters and the first thing to do.
+
+    The run logs only ids; the details come from the Threat Intel Agent's dashboard_data.json, written at the end of
+    the same run. Something the dashboard no longer lists (rescored, closed) is left out.
+    """
+    if not new_ids or not dashboard:
+        return []
+    out: list[dict] = []
+    threats = {t.get("id"): t for t in dashboard.get("explorer") or []}
+    for tid in new_ids.get("threats") or []:
+        t = threats.get(tid)
+        if t:
+            out.append({"kind": "threat", "id": tid, "title": t.get("title") or tid, "rating": t.get("rating"),
+                        "why": _clip(t.get("summary")), "where": t.get("devices") or "",
+                        "action": t.get("action") or "", "test": bool(t.get("test")), "to": f"/uc1/threat/{quote(tid, safe='')}"})
+    hits = {h.get("finding_id"): h for h in dashboard.get("hits") or []}
+    for fid in new_ids.get("attack") or []:
+        h = hits.get(fid)
+        if h:
+            res = h.get("resolution") or {}
+            out.append({"kind": "attack", "id": fid, "title": str(h.get("title") or h.get("detail") or "").removeprefix("Hunt hit: "),
+                        "rating": None, "why": _clip(res.get("what_happened") or h.get("detail")),
+                        "where": h.get("device_name") or "", "action": ((res.get("steps") or [""])[0]),
+                        "test": bool(h.get("is_test")), "to": "/uc1/hunts"})
+    alerts = {a.get("alert_id"): a for a in dashboard.get("alerts") or []}
+    for aid in new_ids.get("alerts") or []:
+        a = alerts.get(aid)
+        if a:
+            msg = a.get("message") or ""
+            out.append({"kind": "alert", "id": aid, "title": a.get("title") or "", "rating": a.get("rating"),
+                        "why": f"Rated {a.get('rating')} and it affects our computers, so the security team is told",
+                        "where": _line(msg, "Affected:"), "action": _line(msg, "First action:"),
+                        "test": bool(a.get("is_test")), "to": f"/uc1/threat/{quote(str(a.get('threat_id')), safe='')}"})
+    return out
 
 
 class _MtimeCache:
@@ -793,9 +878,11 @@ class RunManager:
     """Runs live in data/runs/<run_id>/; the latest one per use case is what the run page shows."""
 
     def __init__(self, uc_dirs: dict[str, Path], runs_dir: Path | None = None,
-                 spawn: Callable[..., subprocess.Popen] | None = None, alive: Callable[[int | None], bool] = _pid_alive):
+                 spawn: Callable[..., subprocess.Popen] | None = None, alive: Callable[[int | None], bool] = _pid_alive,
+                 audit_dir: Path | None = None):
         self.uc_dirs = uc_dirs
         self.runs_dir = runs_dir or Path(__file__).resolve().parents[2] / "data" / "runs"
+        self.audit_dir = audit_dir      # the wrapper writes "run finished" to the audit log there (audit.py)
         self.spawn = spawn or subprocess.Popen
         self.alive = alive
         self.lock = threading.Lock()
@@ -863,8 +950,17 @@ class RunManager:
             for uc in self.uc_dirs:
                 st = self.latest(uc)
                 run = {**st.to_dict(), "typical_seconds": self.typical_seconds(uc)} if st else None
+                if run and run["status"] != "running" and any((run.get("new_ids") or {}).values()):
+                    run["findings"] = run_findings(run["new_ids"], self._fix_files(self.uc_dirs[uc] / "data" / "dashboard" / "dashboard_data.json"))
                 out[uc] = fix_waiting(run, self.fix_dir, self._fix_files) if run and self.fix_dir else run
             return out
+
+    def fixes_waiting(self, uc: str, current: RunState | None) -> int:
+        """New fixes of the last run that nobody has decided on yet (Fix or Save for later)."""
+        if not current or not self.fix_dir:
+            return 0
+        run = fix_waiting(current.to_dict(), self.fix_dir, self._fix_files)
+        return int((run.get("fix") or {}).get("open") or 0) if run.get("waiting_for_you") else 0
 
     def history(self, limit: int = 12) -> list[dict]:
         with self.lock:
@@ -884,7 +980,8 @@ class RunManager:
         return {"run_id": dirs[0].name, "lines": lines[after:after + 2000], "next": min(len(lines), after + 2000)}
 
     # ---------- starting ----------
-    def start(self, uc: str) -> tuple[bool, RunState | None, str]:
+    def start(self, uc: str, by: dict | None = None) -> tuple[bool, RunState | None, str]:
+        """by = who pressed Run ({email, name}); kept in meta.json and in the audit log."""
         root = self.uc_dirs.get(uc)
         if root is None:
             return False, None, "unknown use case"
@@ -894,6 +991,12 @@ class RunManager:
             current = self.latest(uc)
             if current and current.status == "running":
                 return False, current, "already running"
+            # the run is not over until a person decided on its new fixes: a new run would bury them
+            waiting = self.fixes_waiting(uc, current)
+            if waiting:
+                return False, current, (f"The last run is paused at the Fix step: {waiting} new "
+                                        + ("fix still needs" if waiting == 1 else "fixes still need")
+                                        + " your decision. Press Fix or Save for later on each one below, then run again.")
             # uc1 and attack both run in UC1's folder and open its one DuckDB file, which only one process may hold
             for other, other_root in self.uc_dirs.items():
                 if other != uc and other_root == root and self.running(other):
@@ -902,9 +1005,11 @@ class RunManager:
             run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uc
             run_dir = self.runs_dir / run_id
             run_dir.mkdir(parents=True, exist_ok=True)
-            (run_dir / "meta.json").write_text(json.dumps({"uc": uc, "run_id": run_id, "started_at": _now(), "by": "portal"}),
-                                               encoding="utf-8")
+            (run_dir / "meta.json").write_text(json.dumps({"uc": uc, "run_id": run_id, "started_at": _now(), "by": by or "portal",
+                                                           "agent": AGENT_NAMES.get(uc, uc)}), encoding="utf-8")
             cmd = [sys.executable, "-m", "portal.runner", "--uc", uc, "--root", str(root), "--run-dir", str(run_dir)]
+            if self.audit_dir:
+                cmd += ["--audit-dir", str(self.audit_dir)]
             env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
             self._spawn_detached(cmd, env)
             state = self.load(run_dir)

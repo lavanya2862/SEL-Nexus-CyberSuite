@@ -13,7 +13,7 @@ import logging
 import requests
 
 from uc1.config import Settings
-from uc1.store import Store, utcnow
+from uc1.store import NEW_IDS_SHOWN, Store, utcnow
 
 log = logging.getLogger("uc1.alerts")
 
@@ -58,4 +58,4 @@ def run(store: Store, settings: Settings) -> dict:
             fh.write(json.dumps(a, default=str, ensure_ascii=False) + "\n")
     for a in new:
         log.warning("ALERT %s", a["message"].replace("\n", " | "))
-    return {"new_alerts": len(new)}
+    return {"new_alerts": len(new), "new_alert_ids": [a["alert_id"] for a in new][:NEW_IDS_SHOWN]}

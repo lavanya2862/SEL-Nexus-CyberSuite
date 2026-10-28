@@ -1,7 +1,7 @@
 import { useSearchParams } from 'react-router-dom'
 import { X } from 'lucide-react'
 import { fixTime, type FixRow, type FixSource } from '@/lib/fix'
-import { dateTime } from '@/lib/format'
+import { dateTime, num } from '@/lib/format'
 import { UC_DOT, UC_NAME } from '@/lib/runs'
 import { cn } from '@/lib/utils'
 
@@ -51,7 +51,7 @@ export function useAgentFilter() {
 export function AgentFilterBar({ filter, counts, total, what }: {
   filter: ReturnType<typeof useAgentFilter>; counts: Record<TagAgent, number>; total: number; what: string
 }) {
-  const { agent, since } = filter
+  const { agent } = filter
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="Proposed by agent">
@@ -59,18 +59,25 @@ export function AgentFilterBar({ filter, counts, total, what }: {
         <Chip on={!agent} onClick={() => filter.set(null)} label="All agents" n={total} />
         {(['uc3', 'uc1'] as const).map((a) => (
           <Chip key={a} on={agent === a} onClick={() => filter.set(a)} label={UC_NAME[a]} n={counts[a]} dot={UC_DOT[a]}
-            title={a === 'uc1' ? 'Fixes for apps that a threat in the news targets on our computers' : "Everything in Defender's vulnerability list"} />
+            title={a === 'uc1' ? 'Remediations for applications targeted by current threat intelligence' : "Everything in Defender's vulnerability list"} />
         ))}
       </div>
-      {agent && since != null && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-signal/40 bg-signal/10 px-4 py-2.5 text-sm">
-          <span className={cn('size-2 rounded-full', UC_DOT[agent])} />
-          <span>Showing the {what} the <b>{UC_NAME[agent]}</b> proposed in its run of <b>{dateTime(new Date(since).toISOString())}</b>{' '}(new in that run).</span>
-          <button onClick={filter.clearSince} className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium hover:bg-panel">
-            <X className="size-3.5" /> Show all from this agent
-          </button>
-        </div>
-      )}
+      <RunBanner filter={filter} what={what} />
+    </div>
+  )
+}
+
+/** From a run page link (?agent=…&since=…): which run's fixes are shown, with a way back to all of them */
+export function RunBanner({ filter, what }: { filter: ReturnType<typeof useAgentFilter>; what: string }) {
+  const { agent, since } = filter
+  if (!agent || since == null) return null
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-signal/40 bg-signal/10 px-4 py-2.5 text-sm">
+      <span className={cn('size-2 rounded-full', UC_DOT[agent])} />
+      <span>Showing the {what} the <b>{UC_NAME[agent]}</b> proposed in its run of <b>{dateTime(new Date(since).toISOString())}</b>{' '}(new in that run).</span>
+      <button onClick={filter.clearSince} className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium hover:bg-panel">
+        <X className="size-3.5" /> Show all from this agent
+      </button>
     </div>
   )
 }
@@ -84,8 +91,10 @@ function Chip({ on, onClick, label, n, dot, title }: { on: boolean; onClick: () 
   )
 }
 
-/** The tags on a card: which agents gave these fixes, when, and (Threat Intel) the threat in the news */
-export function AgentTags({ rows }: { rows: FixRow[] }) {
+/** The tags on a card: which agents gave these fixes, when, and (Threat Intel) the threat in the news.
+ *  inNews: how many of the app's vulnerabilities a threat in the news named before the Vulnerability Agent found them
+ *  (all of them, not just the fix rows' top 3); 0 hides the Threat Intel tag. */
+export function AgentTags({ rows, inNews }: { rows: FixRow[]; inNews?: number }) {
   const mine = rows.filter((r) => r.action !== 'respond')
   if (!mine.length) return null
   const latest = (a: TagAgent) => {
@@ -93,24 +102,27 @@ export function AgentTags({ rows }: { rows: FixRow[] }) {
     return times.length ? Math.max(...times) : null
   }
   const threats = [...new Map(mine.flatMap((r) => r.threats ?? []).map((t) => [t.id, t])).values()]
+  const news = inNews ?? threats.length
   return (
-    <div className="flex flex-wrap gap-1.5">
-      <Tag agent="uc3" text={UC_NAME.uc3} at={latest('uc3')} />
-      {threats.length > 0 && (
-        <Tag agent="uc1" text={`${UC_NAME.uc1}: ${threats.length === 1 ? 'a threat in the news targets it' : `${threats.length} threats in the news target it`}`}
-          at={latest('uc1')} title={threats.map((t) => t.title).join('\n')} />
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+      <span className="text-ink-3">Found by</span>
+      <Tag agent="uc3" at={latest('uc3')} />
+      {news > 0 && (
+        <Tag agent="uc1" at={latest('uc1')} note={inNews !== undefined ? `${num(inNews)} in threat intel` : undefined}
+          title={threats.map((t) => t.title).join('\n') || undefined} />
       )}
     </div>
   )
 }
 
-function Tag({ agent, text, at, title }: { agent: TagAgent; text: string; at: number | null; title?: string }) {
+/** One agent: its dot and name (the run time is in the tooltip, so the card stays short) */
+function Tag({ agent, at, note, title }: { agent: TagAgent; at: number | null; note?: string; title?: string }) {
+  const when = at ? `Proposed in the ${UC_NAME[agent]}'s run of ${dateTime(new Date(at).toISOString())}` : 'Proposed before agents were recorded'
   return (
-    <span title={title ?? (at ? `Proposed in the ${UC_NAME[agent]}'s run of ${dateTime(new Date(at).toISOString())}` : 'Proposed before agents were recorded')}
-      className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-hairline px-1.5 py-0.5 text-[11px] text-ink-2">
-      <span className={cn('size-1.5 shrink-0 rounded-full', UC_DOT[agent])} />
-      <span className="truncate">{text}</span>
-      {at && <span className="shrink-0 text-ink-3">· {dateTime(new Date(at).toISOString())}</span>}
+    <span title={title ? `${when}\n\n${title}` : when} className="inline-flex max-w-full items-center gap-1.5 text-ink-2">
+      <span className={cn('size-2 shrink-0 rounded-full', UC_DOT[agent])} />
+      <span className="truncate font-medium">{UC_NAME[agent]}</span>
+      {note && <span className="shrink-0 text-ink-3">· {note}</span>}
     </span>
   )
 }

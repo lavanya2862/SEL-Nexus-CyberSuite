@@ -232,7 +232,7 @@ function Radar() {
 
 function EmberCta({ v }: { v: View }) {
   const { setWorkTab } = useFilters()
-  const kevFixes = v.fixes.filter((f) => f.kev_cves > 0)
+  const kevFixes = v.fixes.filter((f) => f.urgency.startsWith('Fix now'))
   const go = () => {
     setWorkTab('fixes')
     document.getElementById('work')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -242,10 +242,10 @@ function EmberCta({ v }: { v: View }) {
       <Radar />
       <div className="relative flex h-full flex-col">
         <h3 className="text-[22px] font-semibold leading-tight tracking-tight">
-          {kevFixes.length} updates fix every exploited vulnerability
+          {kevFixes.length} updates clear every urgent vulnerability
         </h3>
         <p className="mt-2 max-w-[24ch] text-sm text-[#2b1309]/80">
-          Attackers are known to use these flaws (CISA KEV list). Updating the apps below takes the list to zero.
+          These apps are marked Fix now. Updating them takes the list to zero.
         </p>
         <div className="mt-4 flex -space-x-2">
           {kevFixes.slice(0, 4).map((f) => (
@@ -269,11 +269,8 @@ function EmberCta({ v }: { v: View }) {
 /* ───────── selectable app bars ───────── */
 
 function AppBars({ v }: { v: View }) {
-  const [metric, setMetric] = useState<'findings' | 'kev'>('findings')
-  const rows = useMemo(
-    () => [...v.apps].filter((a) => (metric === 'kev' ? a.kev > 0 : true)).sort((a, b) => b[metric] - a[metric]).slice(0, 6),
-    [v.apps, metric],
-  )
+  const metric = 'findings'
+  const rows = useMemo(() => [...v.apps].sort((a, b) => b.findings - a.findings).slice(0, 6), [v.apps])
   const [sel, setSel] = useState(0)
   const max = Math.max(...rows.map((r) => r[metric]), 1)
   const pick = Math.min(sel, rows.length - 1)
@@ -284,10 +281,9 @@ function AppBars({ v }: { v: View }) {
           <h3 className="text-sm text-[var(--g-ink-2)]">Where the risk sits</h3>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="tabular text-[26px] font-medium leading-none tracking-tight">{rows[pick] ? num(rows[pick][metric]) : '–'}</span>
-            <span className="text-sm text-[var(--g-ink-3)]">{rows[pick] ? `${metric === 'kev' ? 'exploited vulnerabilities' : 'findings'} in ${shortApp(rows[pick].app)}` : ''}</span>
+            <span className="text-sm text-[var(--g-ink-3)]">{rows[pick] ? `findings in ${shortApp(rows[pick].app)}` : ''}</span>
           </div>
         </div>
-        <Seg small items={[['findings', 'Findings'], ['kev', 'Exploited']]} value={metric} onChange={(m) => { setMetric(m); setSel(0) }} />
       </div>
       <div className="mt-6 flex h-[190px] items-end gap-2.5">
         {rows.map((r, i) => {
@@ -317,11 +313,10 @@ function AppBars({ v }: { v: View }) {
   )
 }
 
-/* ───────── right column: exploited stack + top threats ───────── */
+/* ───────── right column: actions + top threats ───────── */
 
 function ExposureColumn({ v }: { v: View }) {
   const { setWorkTab } = useFilters()
-  const back = v.kevApps.slice(0, 3)
   const goTab = (t: WorkTab) => {
     setWorkTab(t)
     document.getElementById('work')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -330,45 +325,6 @@ function ExposureColumn({ v }: { v: View }) {
   const what = (t: string) => (t.match(/\(([^)]+)\)/)?.[1] ?? '').replace(/ Vulnerability$/, '')
   return (
     <section className="glass-panel flex flex-col gap-5 p-5 md:p-6 xl:col-span-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-medium">Known exploited</h3>
-        <span className="rounded-full border border-[var(--g-line)] px-3 py-1 text-xs text-[var(--g-ink-3)]">CISA KEV</span>
-      </div>
-
-      {/* card stack: the apps behind the number */}
-      <div className="relative pt-[78px]">
-        {back.map((a, i) => (
-          <div
-            key={a.app}
-            className="absolute inset-x-0 flex items-center justify-between rounded-2xl border border-[var(--g-line)] px-4 pt-2.5 text-xs backdrop-blur"
-            style={{
-              top: i * 26, height: 64, marginInline: (2 - i) * 14 + 6,
-              background: `linear-gradient(180deg, rgba(255,${190 - i * 30},${140 - i * 30},${0.22 + i * 0.06}), rgba(60,30,18,0.6))`,
-              zIndex: i,
-            }}
-          >
-            <span className="self-start font-medium text-[var(--g-ink-2)]">{shortApp(a.app)}</span>
-            <span className="tabular self-start text-[var(--g-ink-3)]">{a.kev} exploited</span>
-          </div>
-        ))}
-        <div className="relative z-10 overflow-hidden rounded-2xl border border-[var(--g-line-2)] p-5 shadow-[0_20px_40px_-20px_rgba(0,0,0,.8)]"
-          style={{ background: 'radial-gradient(120% 120% at 100% 0%, rgba(232,102,42,0.35), transparent 55%), linear-gradient(160deg, #2b1a12, #140c08)' }}>
-          <div className="flex items-start justify-between">
-            <span className="text-lg font-bold italic tracking-wide text-[var(--g-ink)]">KEV</span>
-            <span className="grid size-10 place-items-center rounded-lg border border-[var(--g-line-2)] bg-white/10">
-              <ShieldAlert className="size-5 text-[var(--g-ember-hi)]" />
-            </span>
-          </div>
-          <div className="mt-6 text-sm text-[var(--g-ink-3)]">Exploited vulnerabilities on our devices</div>
-          <div className="mt-1 flex items-end justify-between">
-            <span className="tabular text-[32px] font-medium leading-none tracking-tight">{num(v.totals.kev)}</span>
-            <span className="flex items-center gap-1 rounded-md bg-[var(--g-ember)]/20 px-2 py-1 text-xs font-medium text-[var(--g-ember-hi)]">
-              <AlertTriangle className="size-3" /> {v.totals.ransomware} ransomware
-            </span>
-          </div>
-        </div>
-      </div>
-
       <div className="grid grid-cols-2 gap-3">
         <button onClick={() => goTab('fixes')} className="flex items-center justify-center gap-2 rounded-xl border border-[var(--g-line-2)] bg-white/[0.06] py-3 text-sm font-medium hover:bg-white/10">
           <ArrowDownRight className="size-4" /> Fix plan
@@ -423,13 +379,7 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
-function Urgency({ kev, urgency }: { kev: number; urgency: string }) {
-  if (kev > 0)
-    return (
-      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[var(--g-ember)]/15 px-2.5 py-1 text-xs font-medium text-[var(--g-ember-hi)]">
-        <AlertTriangle className="size-3" /> {kev} known exploited
-      </span>
-    )
+function Urgency({ urgency }: { urgency: string }) {
   return <span className="whitespace-nowrap rounded-full border border-[var(--g-line)] px-2.5 py-1 text-xs text-[var(--g-ink-2)]">{urgency.split(':')[0]}</span>
 }
 
@@ -484,7 +434,7 @@ function Fixes({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'grid' 
           <Tile key={f.rank}>
             <div className="flex items-start justify-between gap-2"><div className="font-medium">{f.app}</div><span className="tabular text-xs text-[var(--g-ink-3)]">#{f.rank}</span></div>
             <div className="mt-1 truncate text-xs text-[var(--g-ink-3)]">{f.installed_versions}</div>
-            <div className="mt-3 flex items-center justify-between"><Urgency kev={f.kev_cves} urgency={f.urgency} /><span className="tabular text-xs text-[var(--g-ink-2)]">{num(f.cves)} CVEs</span></div>
+            <div className="mt-3 flex items-center justify-between"><Urgency urgency={f.urgency} /><span className="tabular text-xs text-[var(--g-ink-2)]">{num(f.cves)} CVEs</span></div>
             <div className="mt-3 flex items-center gap-2 border-t border-[var(--g-line)] pt-3 text-xs text-[var(--g-ink-2)]"><span className="flex-1">{f.fix_action}</span>{f.command && <CopyButton text={f.command} />}</div>
           </Tile>
         ))}
@@ -497,7 +447,7 @@ function Fixes({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'grid' 
           <tr key={f.rank} className="glass-row">
             <td className="tabular w-10 text-[var(--g-ink-3)]">{f.rank}</td>
             <td><div className="font-medium">{f.app}</div><div className="max-w-[220px] truncate text-xs text-[var(--g-ink-3)]">{f.installed_versions}</div></td>
-            <td><Urgency kev={f.kev_cves} urgency={f.urgency} /></td>
+            <td><Urgency urgency={f.urgency} /></td>
             <td className="tabular text-right">{num(f.cves)}</td>
             <td className="tabular text-right">{f.devices}</td>
             <td><div className="flex items-center gap-1 text-[var(--g-ink-2)]"><span>{f.fix_action}</span>{f.command && <CopyButton text={f.command} />}</div></td>
@@ -510,7 +460,7 @@ function Fixes({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'grid' 
 }
 
 function Threats({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
-  const title = (t: string) => t.replace(/^Actively exploited: /, '')
+  const title = (t: string) => t.replace(/^(Actively exploited|CISA alert): /, '')
   if (layout === 'grid')
     return (
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -670,7 +620,7 @@ function Uc3Panel({ s }: { s: Summary }) {
     <Card className="flex flex-col gap-5">
       <PipeHead tag="the assistant" tone="#3d8fe8" title="Vulnerability Extraction" h={h} />
       <div className="grid grid-cols-3 gap-3">
-        <Stat value={num(h?.rows)} label={h?.rows === h?.defender_count ? "rows = Defender's count" : `Defender: ${num(h?.defender_count)}`} />
+        <Stat value={num(h?.vulnerabilities ?? h?.rows)} label="vulnerabilities in Defender" />
         <Stat value={`${Math.round((h?.coverage ?? 0) * 100)}%`} label="coverage" />
         <Stat value={num(s.uc3.totals.cves)} label="different CVEs" />
       </div>

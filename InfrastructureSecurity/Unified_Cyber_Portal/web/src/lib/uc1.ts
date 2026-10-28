@@ -132,15 +132,28 @@ export const isClueBundle = (kind: string) => kind === 'ioc'
 export const useThreat = (id: string) =>
   useQuery({ queryKey: ['uc1', 'threat', id], queryFn: () => getJson<ThreatDetail>(`/api/uc1/threats/${encodeURIComponent(id)}`), enabled: !!id })
 
+/** One app's vulnerabilities that a threat in the news names (GET /api/uc1/matches/<software>, UC1's threat_matches.json).
+ *  found = when UC1 first collected the news, published = when the source published it ("YYYY-MM-DD"). */
+export interface ThreatMatches {
+  built_at: string | null
+  rows: { device: string; version: string; cve: string; threat: string }[]
+  threats: Record<string, { title: string; found: string | null; published: string | null; score: number }>
+}
+export const useThreatMatches = (software: string) =>
+  useQuery({ queryKey: ['uc1', 'matches', software], queryFn: () => getJson<ThreatMatches>(`/api/uc1/matches/${encodeURIComponent(software)}`), enabled: !!software, staleTime: 60_000, retry: false })
+/** Per app (Defender's software name): how many of its vulnerabilities are in the news; split = [still open, fixed] */
+export const useThreatMatchCounts = () =>
+  useQuery({ queryKey: ['uc1', 'matches'], queryFn: () => getJson<{ built_at: string | null; counts: Record<string, number>; split?: Record<string, [number, number]> }>('/api/uc1/matches'), staleTime: 60_000, retry: false })
+
 export const RATINGS: Rating[] = ['Critical', 'High', 'Medium', 'Low']
 export const FEED_NAME: Record<string, string> = {
-  attack: 'MITRE ATT&CK', kev: 'CISA KEV', nvd: 'NVD', epss: 'FIRST EPSS', ncsc_nl: 'NCSC-NL', cert_eu: 'CERT-EU', msrc: 'Microsoft MSRC',
-  threatfox: 'ThreatFox', urlhaus: 'URLhaus', malwarebazaar: 'MalwareBazaar', otx: 'AlienVault OTX', abusech: 'abuse.ch', lab_test: 'Lab tests',
+  attack: 'MITRE ATT&CK', kev: 'CISA', nvd: 'NVD', epss: 'FIRST EPSS', ncsc_nl: 'NCSC-NL', cert_eu: 'CERT-EU', msrc: 'Microsoft MSRC',
+  threatfox: 'ThreatFox', urlhaus: 'URLhaus', malwarebazaar: 'MalwareBazaar', otx: 'AlienVault OTX', abusech: 'abuse.ch', lab_test: 'Validation',
 }
 export const IOC_NAME: Record<string, string> = {
   ip: 'IP addresses', domain: 'Domains', url: 'Web links', sha256: 'Files (SHA-256)', sha1: 'Files (SHA-1)', md5: 'Files (MD5)',
 }
-export const cleanTitle = (t: string) => t.replace(/^Actively exploited: /, '')
+export const cleanTitle = (t: string) => t.replace(/^(Actively exploited|CISA alert): /, '')
 /** A hidden PowerShell command that UC1 decoded, if this timeline event has one. */
 export const decoded = (what: string) => String(what).split(' | decoded command: ')[1] ?? null
 export const threatHref = (id: string) => `/uc1/threat/${encodeURIComponent(id)}`
@@ -162,17 +175,17 @@ export function attackType(kind: string, detail: string): AttackType {
   if (kind === 'ioc_hit') {
     const [, type = '', value = ''] = detail.match(/^matched (\w+) (.+)$/) ?? []
     if (type === 'domain' || type === 'url')
-      return { label: 'Connection to a known bad website', category: 'Bad website', what: `The computer connected to ${value}, a website on a list of addresses used by attackers.` }
+      return { label: 'Connection to a known malicious domain', category: 'Malicious domain', what: `The device connected to ${value}, a domain on a known-malicious list.` }
     if (type === 'ip')
-      return { label: 'Connection to a known bad IP address', category: 'Bad network address', what: `The computer connected to ${value}, an address on a list used by attackers.` }
-    return { label: 'Known malicious file found', category: 'Malware', what: 'A file on the computer matches a file known to be used by attackers.' }
+      return { label: 'Connection to a known malicious IP address', category: 'Malicious IP', what: `The device connected to ${value}, an address on a known-malicious list.` }
+    return { label: 'Known malicious file found', category: 'Malware', what: 'A file on the computer matches a known malicious file.' }
   }
   if (d.includes('powershell') && (d.includes('encoded') || d.includes('hidden')))
-    return { label: 'Hidden PowerShell command', category: 'Hidden script', what: 'A PowerShell command was run in scrambled (encoded) form, a trick attackers use to hide what a script does.' }
+    return { label: 'Encoded PowerShell command', category: 'Obfuscated script', what: 'A PowerShell command was run in encoded form, a technique used to conceal what a script does.' }
   if (d.includes('antivirus'))
     return { label: 'Malware caught by antivirus', category: 'Malware', what: 'Microsoft Defender antivirus found a harmful file on the computer.' }
   if (/\bt1204\b/.test(d) || d.includes('user execution'))
-    return { label: 'Program started from a document', category: 'Booby-trapped document', what: 'A document app (such as a PDF reader) started another program. Booby-trapped documents attack this way.' }
+    return { label: 'Program started from a document', category: 'Malicious document', what: 'A document application (such as a PDF reader) launched another program, a common technique of malicious documents.' }
   const name = detail.replace(/^AI-drafted:\s*/, '').replace(/^T\d{4}(\.\d{3})?\s+/, '')
   return { label: name, category: 'Suspicious activity', what: `Activity that matches a known attacker trick: ${name}.` }
 }

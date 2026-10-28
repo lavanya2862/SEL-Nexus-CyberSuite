@@ -29,10 +29,6 @@ from uc3 import __version__
 from uc3.config import ConfigError, load_settings
 
 LIBRARIES = ("msal", "requests", "duckdb", "pyarrow", "dotenv")
-LIBREOFFICE_PATHS = (
-    Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "LibreOffice" / "program" / "soffice.exe",
-    Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "LibreOffice" / "program" / "soffice.exe",
-)
 
 
 def cmd_check(_args: argparse.Namespace) -> int:
@@ -84,9 +80,10 @@ def cmd_check(_args: argparse.Namespace) -> int:
                     else "set - AI fix guide on") if keys
                    else "no AI set (AZURE_FOUNDRY_* or GEMINI_API_KEY) - fix cards without AI text")
 
-    libreoffice = next((p for p in LIBREOFFICE_PATHS if p.is_file()), None) or shutil.which("soffice")
-    record("OK" if libreoffice else "WARN", "LibreOffice",
-           str(libreoffice) if libreoffice else "not found - needed only to open the Excel summary")
+    from uc3.docstyle import pdf_converter
+    converter = pdf_converter()
+    record("OK" if converter else "WARN", "PDF report",
+           f"made by {converter}" if converter else "Microsoft Word not installed - reports come as Word and Excel only")
 
     width = max(len(name) for _, name, _ in results)
     print(f"UC3 environment check (uc3 {__version__})\n")
@@ -230,8 +227,7 @@ def _print_publish(published: dict) -> None:
     print(f"  Portal data   : {published['dashboard']}")
     print(f"  Excel report  : {published['excel']}")
     print(f"  Word report   : {published['report']['docx']}")
-    print(f"  PDF report    : {published['report']['pdf'] or 'not made (LibreOffice missing)'}")
-    print(f"  Before/after  : {published['metrics']}")
+    print(f"  PDF report    : {published['report']['pdf'] or 'not made (Microsoft Word not installed)'}")
     fixes = published.get("ai_fixes")
     print(f"  AI fix guide  : " + (f"{fixes['apps']} apps, {fixes['ai']} explained by AI ({fixes['asked']} asked now)"
                                    if fixes else "not updated (see log)"))
@@ -243,7 +239,7 @@ def cmd_metrics(_args: argparse.Namespace) -> int:
     result = build_metrics(load_settings(require_credentials=False))
     for metric, before, after, change in result["table"]:
         print(f"\n{metric}\n  Before : {before}\n  After  : {after}\n  Change : {change}")
-    print(f"\nSaved to {result['path']}  (edit assumptions in config/assumptions.csv)")
+    print("\n(edit assumptions in config/assumptions.csv)")
     return 0
 
 

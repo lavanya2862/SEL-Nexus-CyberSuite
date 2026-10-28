@@ -1,8 +1,7 @@
 """CISA Known Exploited Vulnerabilities (KEV): flaws with proof that attackers have used them in real attacks.
 
 Every KEV entry is stored in `cves` (so scoring and exposure know the full list). Entries added in the last
-KEV_BACKFILL_DAYS become threats straight away; older ones become threats only if Defender shows we are
-exposed to them (done in `derive.py`).
+KEV_BACKFILL_DAYS become threats straight away; older ones do not (Defender's list already shows them on our devices).
 """
 
 from __future__ import annotations
@@ -39,7 +38,7 @@ def threat_from_entry(e: dict) -> dict:
             f"Known ransomware use: {e['ransomware']}.\nRequired action: {e['action']}\n"
             f"CISA remediation due date: {e['due']}.\nNotes: {e['notes']}")
     return {"threat_id": f"kev:{e['cve_id']}", "source": "CISA KEV", "kind": "kev",
-            "title": f"Actively exploited: {e['cve_id']} in {e['vendor']} {e['product']}",
+            "title": f"CISA alert: {e['cve_id']} in {e['vendor']} {e['product']}",
             "text": text, "url": f"https://nvd.nist.gov/vuln/detail/{e['cve_id']}",
             "published_at": e["added"], "content_hash": content_hash(text)}
 

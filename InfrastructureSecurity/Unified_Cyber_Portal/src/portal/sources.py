@@ -63,6 +63,65 @@ class UC1:
             UC1._site_cache = cache = (mtime, data)
         return cache[1].get(threat_id)
 
+    _matches_cache: tuple[float, dict] | None = None
+
+    def _matches(self) -> dict | None:
+        """UC1's threat_matches.json, cached until the file changes."""
+        path = self.dashboard_dir / "threat_matches.json"
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            return None
+        cache = UC1._matches_cache
+        if cache is None or cache[0] != mtime:
+            data = _read_json(path)
+            if not isinstance(data, dict) or not isinstance(data.get("rows"), list):
+                return None
+            UC1._matches_cache = cache = (mtime, data)
+        return cache[1]
+
+    def _early_rows(self, data: dict, first_found: dict[tuple[str, str], str]) -> list:
+        """The matches where Threat Intel found the threat no later than the Vulnerability Agent found that CVE on that
+        computer (first_found: UC3.first_found()). A later one only repeats Defender's list, so it is not reported."""
+        threats = data.get("threats", {})
+        def early(r: list) -> bool:
+            found, vuln_found = (threats.get(r[4]) or [None, None])[1], first_found.get((r[0], r[3]))
+            return not (found and vuln_found and found > vuln_found)
+        return [r for r in data["rows"] if early(r)]
+
+    def threat_match_counts(self, first_found: dict[tuple[str, str], str], list_rows: dict[tuple[str, str, str], tuple[int, int]]) -> dict | None:
+        """Per app (Defender's software name): how many rows of its vulnerability list (UC3.list_rows: one per computer,
+        version and CVE) a threat in the news names, so the card and the list show the same number;
+        split: {app: [still open, fixed]}."""
+        data = self._matches()
+        if data is None:
+            return None
+        pairs: dict[str, set] = {}
+        for r in self._early_rows(data, first_found):
+            pairs.setdefault(r[1], set()).add((r[0], r[3]))
+        split: dict[str, list[int]] = {}
+        for sw, p in pairs.items():
+            o = f = 0
+            for k in p:
+                ro, rf = list_rows.get((sw, *k), (0, 0)) if list_rows else (1, 0)
+                o, f = o + ro, f + rf
+            if o + f:
+                split[sw] = [o, f]
+        return {"built_at": data.get("built_at"), "counts": {sw: o + f for sw, (o, f) in split.items()}, "split": split}
+
+    def threat_matches(self, software: str, first_found: dict[tuple[str, str], str]) -> dict | None:
+        """One app's vulnerabilities that a threat in the news names:
+        {built_at, rows: [{device, version, cve, threat}], threats: {id: {title, found, published, score}}}."""
+        data = self._matches()
+        if data is None:
+            return None
+        rows = [{"device": r[0], "version": r[2], "cve": r[3], "threat": r[4]} for r in self._early_rows(data, first_found) if r[1] == software]
+        threats = {}
+        for r in rows:
+            t = data.get("threats", {}).get(r["threat"]) or [r["threat"], None, None, 0]
+            threats[r["threat"]] = {"title": t[0], "found": t[1], "published": t[2], "score": t[3]}
+        return {"built_at": data.get("built_at"), "rows": rows, "threats": threats}
+
     def reports(self) -> list[dict]:
         folder = self.root / "data" / "reports"
         files = sorted(folder.glob("*.*"), key=lambda p: p.stat().st_mtime, reverse=True) if folder.is_dir() else []
@@ -104,6 +163,52 @@ class UC3:
         data = _read_json(self.root / "data" / "dashboard" / "dashboard_data.json")
         return data if isinstance(data, dict) else None
 
+    _index_cache: tuple[float, dict] | None = None
+
+    def _index(self) -> dict:
+        """first: {(computer, CVE): 'YYYY-MM-DD'} the earliest Defender first-seen date of its open and fixed findings;
+        rows: {(app, computer, CVE): (open, fixed)} the rows the portal's vulnerability list shows for it: one per open
+        version, else one fixed row (open 0, fixed 1). Cached until the file changes; empty when absent."""
+        path = self.root / "data" / "dashboard" / "dashboard_data.json"
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            return {"first": {}, "rows": {}}
+        cache = UC3._index_cache
+        if cache is None or cache[0] != mtime:
+            data = self.dashboard() or {}
+            names = [(d.get("name") or "").split(".")[0].lower() for d in data.get("devices") or []]
+            first: dict[tuple[str, str], str] = {}
+            rows: dict[tuple[str, str, str], tuple[int, int]] = {}
+            for key in ("f", "fixed"):
+                t = data.get(key) or {}
+                cols = t.get("cols") or []
+                if not {"d", "sw", "cve", "fs"} <= set(cols):
+                    continue
+                d, sw, cve, fs = (cols.index(c) for c in ("d", "sw", "cve", "fs"))
+                for r in t.get("rows") or []:
+                    if not (isinstance(r[d], int) and r[d] < len(names)):
+                        continue
+                    k = (names[r[d]], r[cve])
+                    day = str(r[fs] or "")[:10]
+                    if day and (k not in first or day < first[k]):
+                        first[k] = day
+                    rk = (r[sw], *k)
+                    if key == "f":
+                        rows[rk] = (rows.get(rk, (0, 0))[0] + 1, 0)
+                    else:
+                        rows.setdefault(rk, (0, 1))  # fixed everywhere: one row (f comes first, so open rows win)
+            UC3._index_cache = cache = (mtime, {"first": first, "rows": rows})
+        return cache[1]
+
+    def first_found(self) -> dict[tuple[str, str], str]:
+        """When the Vulnerability Agent first found each CVE on each computer: {(computer, CVE): 'YYYY-MM-DD'}."""
+        return self._index()["first"]
+
+    def list_rows(self) -> dict[tuple[str, str, str], tuple[int, int]]:
+        """The vulnerability list's rows per (app, computer, CVE): (open rows, fixed rows)."""
+        return self._index()["rows"]
+
     def ai_fixes_meta(self) -> dict | None:
         data = _read_json(self.reporting / "ai_fixes.json")
         if not isinstance(data, dict):
@@ -120,7 +225,7 @@ class UC3:
         files = sorted([*self.reporting.glob("UC3_*.*"), *self.reporting.glob("Vulnerability_Report_*.*")], key=lambda p: p.stat().st_mtime, reverse=True) \
             if self.reporting.is_dir() else []
         return [{"name": p.name, "size": p.stat().st_size, "modified": mtime_iso(p)}
-                for p in files if p.suffix.lower() in (".xlsx", ".docx", ".pdf", ".md")
+                for p in files if p.suffix.lower() in (".xlsx", ".docx", ".pdf")
                 and not p.name.startswith("UC3_Vulnerability_Summary")]    # replaced by Vulnerability_Report_*
 
 

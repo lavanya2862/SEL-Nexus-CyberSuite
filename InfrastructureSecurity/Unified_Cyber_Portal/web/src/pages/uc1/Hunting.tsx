@@ -40,7 +40,7 @@ export function Hunting() {
     <div className="flex flex-col gap-5">
       <Uc1Header
         title="Attack detection"
-        description="Is anyone already inside our computers? Our own checks by the Attack Detection Agent, plus attacks Microsoft’s alarms caught"
+        description="Proactive hunting for active compromise across managed devices, plus incidents confirmed by Microsoft detections"
         data={data}
         actions={
           <button onClick={() => start('attack')} disabled={checking}
@@ -57,11 +57,11 @@ export function Hunting() {
         </span>
         <div>
           <div className="text-2xl font-semibold tracking-tight">
-            {found ? `${total} sign${total === 1 ? '' : 's'} of attack found` : 'No signs of attack found'}
+            {found ? `${total} detection${total === 1 ? '' : 's'} found` : 'No detections found'}
           </div>
           <div className="text-sm text-ink-3">
-            {hits.length ? `${hits.length} from our own checks on ${computers} computer${computers === 1 ? '' : 's'} · ` : ''}
-            {caught.length ? `${caught.length} caught by Microsoft’s alarms · ` : ''}
+            {hits.length ? `${hits.length} on ${computers} device${computers === 1 ? '' : 's'} · ` : ''}
+            {caught.length ? `${caught.length} detected by Microsoft · ` : ''}
             Checked {dateTime(utc(data.generated.replace(/[+Z].*$/, '')))}{took != null ? ` (took ${took} s)` : ''}
           </div>
           {hits.length > 0 && (
@@ -79,15 +79,15 @@ export function Hunting() {
 
       {/* 2. one card per sign of attack */}
       {found && (
-        <Card title="What we found" description="Each sign of attack, where it happened and what to do next">
+        <Card title="Findings" description="Each detection, where it occurred and the recommended next steps">
           <div className="flex flex-col gap-3">{hits.map((h) => <SignCard key={h.finding_id} h={h} threat={threats.get(h.threat_id)} />)}</div>
         </Card>
       )}
 
       {caught.length > 0 && (
         <Card
-          title={<span className="flex items-center gap-2"><Siren className="size-4" /> Caught by Microsoft’s alarms</span>}
-          description="Incidents Microsoft Defender or Sentinel raised that the triage agent judged a true positive (a likely real attack). Each one is escalated to the security team."
+          title={<span className="flex items-center gap-2"><Siren className="size-4" /> Detected by Microsoft</span>}
+          description="Incidents raised by Microsoft Defender or Sentinel and classified as true positives by the Alert Triage Agent. Each is escalated to the security team."
         >
           <div className="flex flex-col gap-3">{caught.map((r) => <CaughtCard key={r.incident_id} r={r} />)}</div>
         </Card>
@@ -95,10 +95,10 @@ export function Hunting() {
 
       {/* 3. what was checked */}
       <Panel className="p-5 text-sm text-ink-2">
-        <b className="text-ink">What we checked.</b> We searched the last 30 days of activity on {num(data.devices.length)} computers for{' '}
-        {num(iocTotal)} warning signs from attacks in the news (bad websites, IP addresses and files), plus the tricks attackers are known to use.
-        {errors > 0 && <> Some searches could not run; see the technical details.</>}
-        <div className="mt-1 text-ink-3">Fixing vulnerabilities stops new break-ins. This check looks for anyone who already got in.</div>
+        <b className="text-ink">Hunt coverage.</b> The last 30 days of activity on {num(data.devices.length)} devices were searched for{' '}
+        {num(iocTotal)} indicators from threat intelligence (malicious domains, IP addresses and files), plus known attacker techniques.
+        {errors > 0 && <> Some searches could not run; view the technical details.</>}
+        <div className="mt-1 text-ink-3">Remediating vulnerabilities prevents new intrusions; hunting identifies any existing compromise.</div>
       </Panel>
 
       {/* 4. for the security team */}
@@ -116,7 +116,7 @@ function CaughtCard({ r }: { r: QueueRow }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="rounded-md bg-well px-1.5 py-0.5 text-[11px] font-medium text-ink-2">Caught by {by}</span>
+            <span className="rounded-md bg-well px-1.5 py-0.5 text-[11px] font-medium text-ink-2">Detected by {by}</span>
             <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold" style={{ color: tone, background: `color-mix(in oklab, ${tone} 14%, transparent)` }}>
               <ShieldAlert className="size-3" /> True positive · escalated
             </span>
@@ -126,7 +126,7 @@ function CaughtCard({ r }: { r: QueueRow }) {
             {(r.devices.join(', ') || r.accounts.slice(0, 2).join(', ') || 'no computer named')}{when ? ` · ${dateTime(when.toISOString())}` : ''}
           </div>
         </div>
-        <HopLink to={`/respond/${encodeURIComponent(r.incident_id)}`}>See the incident</HopLink>
+        <HopLink to={`/respond/${encodeURIComponent(r.incident_id)}`}>View incident</HopLink>
       </div>
       <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
         <dt className="text-ink-3">What happened</dt>
@@ -163,7 +163,7 @@ function SignCard({ h, threat }: { h: Hit; threat?: ExplorerRow }) {
           <div className="mt-1.5 text-base font-semibold leading-snug">{type.label}</div>
           <div className="text-xs text-ink-3">{h.device_name} · {dateTime(utc(h.first_hit))}</div>
         </div>
-        {threat && <HopLink to={threatHref(h.threat_id)}>See details</HopLink>}
+        {threat && <HopLink to={threatHref(h.threat_id)}>View details</HopLink>}
       </div>
       <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
         <dt className="text-ink-3">What happened</dt>
@@ -190,7 +190,7 @@ function SignCard({ h, threat }: { h: Hit; threat?: ExplorerRow }) {
           <>
             <dt className="text-ink-3">What to do</dt>
             <dd className="font-medium">
-              {threat?.action || `Ask ${users[0] ?? 'the user'} whether this was expected. If not, have the security team isolate ${h.device_name}.`}
+              {threat?.action || `Confirm with ${users[0] ?? 'the user'} that this activity was expected; if not, escalate to the security team to isolate ${h.device_name}.`}
             </dd>
           </>
         )}
@@ -199,7 +199,7 @@ function SignCard({ h, threat }: { h: Hit; threat?: ExplorerRow }) {
       {hidden && (
         <div className="mt-3 flex items-start gap-2 rounded-lg bg-signal/10 p-2.5 text-xs">
           <Lock className="mt-0.5 size-3.5 shrink-0 text-signal" />
-          <span><b>The hidden command said:</b> <code className="break-all font-mono">{hidden}</code></span>
+          <span><b>Decoded command:</b> <code className="break-all font-mono">{hidden}</code></span>
         </div>
       )}
       {h.timeline.length > 0 && (
@@ -234,7 +234,7 @@ function TechnicalDetails({ data, errors, iocFound }: { data: NonNullable<Return
       </summary>
       <div className="mt-4 flex flex-col gap-5">
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-          <Card className="xl:col-span-5" title="Warning signs searched for" description={`${num(iocFound)} of them found on our computers`}>
+          <Card className="xl:col-span-5" title="Indicators searched" description={`${num(iocFound)} found on managed devices`}>
             <div className="card-row gap-3 [--card-min:120px]">
               {Object.entries(data.ioc_types).sort((a, b) => b[1] - a[1]).map(([k, n]) => (
                 <div key={k} className="rounded-xl bg-well px-3 py-2.5">
@@ -269,13 +269,13 @@ function TechnicalDetails({ data, errors, iocFound }: { data: NonNullable<Return
                 }
               }}
             />
-            <p className="mt-2 text-xs text-ink-3">Orange = that technique’s searches returned rows.</p>
+            <p className="mt-2 text-xs text-ink-3">Highlighted techniques returned matches.</p>
           </Card>
         </div>
 
         <Card
           title="Searches in the latest run"
-          description="Template searches run every time; AI-drafted ones are checked by a validator before they run"
+          description="Template searches run every time; agent-drafted searches are validated before they run"
           action={
             <label className="flex items-center gap-2 rounded-lg border border-hairline-strong bg-field px-3 py-1.5 text-sm transition-[border-color,box-shadow] focus-within:border-blue/60 focus-within:ring-3 focus-within:ring-blue/15">
               <Search className="size-3.5 text-ink-3" />
@@ -284,13 +284,13 @@ function TechnicalDetails({ data, errors, iocFound }: { data: NonNullable<Return
           }
         >
           <div className="mb-3 flex flex-wrap gap-1.5 text-xs">
-            {([['all', `All ${data.hunts.length}`], ['hits', 'Returned rows'], ['ai', 'AI-drafted'], ['errors', `Errors ${errors}`]] as const).map(([k, l]) => (
+            {([['all', `All ${data.hunts.length}`], ['hits', 'Returned matches'], ['ai', 'Agent-drafted'], ['errors', `Errors ${errors}`]] as const).map(([k, l]) => (
               <button key={k} onClick={() => setOnly(k)} aria-pressed={only === k}
                 className={cn('rounded-full border px-3 py-1', only === k ? 'pill-on' : 'border-hairline hover:bg-well')}>{l}</button>
             ))}
           </div>
           {hunts.length ? (
-            <DTable head={[['Search'], ['Technique'], ['Made by'], ['Status'], ['Rows found', 'right']]} minWidth={640} maxHeight={480}>
+            <DTable head={[['Search'], ['Technique'], ['Made by'], ['Status'], ['Matches', 'right']]} minWidth={640} maxHeight={480}>
               {hunts.map((h, i) => (
                 <tr key={i}>
                   <td className="font-medium">{h.name}</td>

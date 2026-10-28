@@ -5,22 +5,20 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { cn } from '@/lib/utils'
 
 const TERMS: [string, string][] = [
-  ['Vulnerability', 'A known weak spot in a piece of software that an attacker could use. Fixed by updating or removing the app.'],
-  ['CVE', 'The official ID of one vulnerability, for example CVE-2025-8088. One old app can have hundreds.'],
-  ['Known exploited (KEV)', 'On the US government (CISA) list of vulnerabilities that attackers have really used against organisations. It does not mean they were used against us. Always fix these first.'],
-  ['Used by ransomware', 'A vulnerability that criminal gangs use to lock up computers and demand money.'],
-  ['Priority 1 (P1)', 'Our most urgent findings: critical severity, or a vulnerability attackers can already use.'],
-  ['Severity', 'How bad a vulnerability is if someone uses it: Critical, High, Medium or Low.'],
-  ['VM', 'Virtual machine: one of our computers (VM 1, VM 2). Use Filters to look at just one of them.'],
-  ['Microsoft Defender', 'The security tool on our computers. It finds the vulnerabilities and records activity we can hunt through.'],
-  ['Threat intelligence', 'News about attacks from public security sources (CISA, NVD, NCSC-NL, CERT-EU, abuse.ch). The assistant reads it for us.'],
-  ['Attack hunting', 'Searching Defender records for signs that an attacker is already on one of our computers.'],
-  ['Agent', 'An automatic helper that does one job end to end. Threat Intel Agent: reads attack news and hunts for attackers. Vulnerability Agent: collects every vulnerability from Defender. Alert Triage Agent: judges Defender’s and Sentinel’s alarms. Run them from Agents in the menu.'],
-  ['Data quality check', 'An automatic test that the data is complete and fresh, for example that our row count matches Defender’s.'],
-  ['Alert / incident', 'An alarm Microsoft Defender raises when it sees something suspicious. Related alarms are grouped into one incident.'],
-  ['Triage', 'Deciding quickly what an alarm is: true positive, false positive, or needs review. The assistant prepares this for you.'],
-  ['True / false positive, needs review', 'True positive: a real attack, escalated. False positive: nothing to worry about (the alarm was wrong, or the activity was harmless, like our own antivirus test file EICAR), closed. Needs review: the AI could not decide, so an analyst does.'],
-  ['Fix command', 'A ready-made winget line that updates the app. Shown so you can copy it; never run by this portal.'],
+  ['Vulnerability', 'A known security flaw in software that an attacker could exploit. Remediated by updating or removing the application.'],
+  ['CVE', 'The official ID of one vulnerability, for example CVE-2025-8088. A single outdated application can have hundreds.'],
+  ['Priority 1 (P1)', 'Highest-priority findings: Critical, or High with a known exploit.'],
+  ['Severity', 'The impact of a vulnerability if exploited: Critical, High, Medium or Low.'],
+  ['VM', 'Virtual machine: a managed device (VM 1, VM 2). Use Filters to view a single VM.'],
+  ['Microsoft Defender', 'The endpoint security platform on managed devices. It reports vulnerabilities and records activity used for threat hunting.'],
+  ['Threat intelligence', 'Threat reports from public security sources (CISA, NVD, NCSC-NL, CERT-EU, abuse.ch), analysed by the Threat Intel Agent.'],
+  ['Attack detection', 'Proactive hunting in Defender records for evidence of an attacker already present on a managed device.'],
+  ['Agent', 'An autonomous component that performs one function end to end. Vulnerability Agent: collects every vulnerability from Defender. Threat Intel Agent: analyses threat intelligence and assesses exposure. Attack Detection Agent: hunts for active compromise. Alert Triage Agent: classifies Defender and Sentinel incidents. Run them from Agents in the menu.'],
+  ['Data quality check', 'An automatic test that the data is complete and fresh, for example that the ingested record count matches Defender’s.'],
+  ['Alert / incident', 'A notification Microsoft Defender raises on suspicious activity. Related alerts are grouped into one incident.'],
+  ['Triage', 'Classifying an incident as true positive, false positive or needs review. The Alert Triage Agent prepares this for analysts.'],
+  ['True / false positive, needs review', 'True positive: confirmed malicious activity, escalated. False positive: a false detection or authorised activity, closed. Needs review: the agent could not classify it, so an analyst decides.'],
+  ['Remediation command', 'A ready-made winget command that updates the application. It can be copied and run manually, or executed by the portal through automated remediation after approval.'],
 ]
 
 export function Glossary({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
@@ -28,8 +26,8 @@ export function Glossary({ open, onOpenChange }: { open: boolean; onOpenChange: 
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full overflow-y-auto border-hairline bg-panel sm:max-w-[440px]">
         <SheetHeader>
-          <SheetTitle className="flex items-center gap-2 text-lg"><BookOpen className="size-5" /> What does this mean?</SheetTitle>
-          <SheetDescription>The words used on this portal, in plain English.</SheetDescription>
+          <SheetTitle className="flex items-center gap-2 text-lg"><BookOpen className="size-5" /> Glossary</SheetTitle>
+          <SheetDescription>Definitions of terms used in this portal.</SheetDescription>
         </SheetHeader>
         <dl className="flex flex-col gap-4 px-4 pb-6">
           {TERMS.map(([term, text]) => (
@@ -45,11 +43,11 @@ export function Glossary({ open, onOpenChange }: { open: boolean; onOpenChange: 
 }
 
 const TOUR = [
-  { icon: LayoutGrid, title: 'Dashboard: everything at a glance', text: 'Three headline numbers, the fixes that matter most, and which apps cause the most risk. Use Filters to look at one VM.' },
-  { icon: ScanSearch, title: 'Vulnerabilities, Threats and Attack hunting', text: 'The vulnerabilities Defender found, threat news that affects us, and whether attackers are already inside.' },
-  { icon: Wrench, title: 'Fix and Alert triage', text: 'Fix: the apps and Windows updates to install, unsupported software to upgrade and security settings to change, most dangerous first. Press ⚡ Fix it for me and the portal does it for you. Triage: every Defender alarm with the AI’s checked verdict; you agree or disagree.' },
-  { icon: Database, title: 'Data quality and Reports', text: 'Vulnerabilities › Data quality checks that every number is complete and fresh. Reports gives Word, PDF and Excel downloads.' },
-  { icon: Play, title: 'Agents', text: 'Open Agents in the menu (or press Run agents at the top) to fetch new data, see how fresh each agent’s data is, and watch every step finish, live.' },
+  { icon: LayoutGrid, title: 'Summary: security posture at a glance', text: 'Headline metrics, priority remediations and the applications contributing most risk. Use Filters to view a single VM.' },
+  { icon: ScanSearch, title: 'Vulnerabilities, Threats and Attack detection', text: 'Vulnerabilities reported by Defender, applicable threat intelligence, and hunting for active compromise.' },
+  { icon: Wrench, title: 'Remediation and Alert triage', text: 'Remediation: application and Windows updates, unsupported software upgrades and security setting changes, highest risk first. Select ⚡ Remediate to queue automated remediation. Triage: every Defender incident with the agent’s validated verdict for analyst review.' },
+  { icon: Database, title: 'Data quality and Reports', text: 'Vulnerabilities › Data quality verifies that every figure is complete and current. Reports provides Word, PDF and Excel downloads.' },
+  { icon: Play, title: 'Agents', text: 'Open Agents in the menu (or select Run agents at the top) to refresh data, check each agent’s data freshness, and track every stage in real time.' },
 ]
 
 const TOUR_KEY = 'portal-tour-done'
@@ -90,7 +88,7 @@ export function Tour({ open, onOpenChange }: { open: boolean; onOpenChange: (o: 
               onClick={() => (i < TOUR.length - 1 ? setI(i + 1) : close())}
               className="inline-flex items-center gap-1 rounded-lg btn-blue px-4 py-2 text-sm font-medium text-white"
             >
-              {i < TOUR.length - 1 ? <>Next <ArrowRight className="size-4" /></> : 'Start using the portal'}
+              {i < TOUR.length - 1 ? <>Next <ArrowRight className="size-4" /></> : 'Get started'}
             </button>
           </div>
         </div>

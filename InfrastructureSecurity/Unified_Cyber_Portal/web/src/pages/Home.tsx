@@ -2,13 +2,13 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
-  AlertTriangle, ArrowRight, CheckCircle2, Clock, Copy, ExternalLink, HelpCircle, LayoutGrid, List, Play, SlidersHorizontal,
+  AlertTriangle, ArrowRight, CheckCircle2, Clock, Copy, ExternalLink, Hand, HelpCircle, LayoutGrid, List, Play, SlidersHorizontal,
   X, XCircle, Zap,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
-  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { UC_LABEL, useRuns, type UcKey } from '@/lib/runs'
 import { VERDICT, VERDICT_ORDER, sourceNames, useUc4Queue, utc } from '@/lib/uc4'
@@ -28,7 +28,7 @@ export function Home() {
   if (error || !data)
     return (
       <Panel className="p-6">
-        <h2 className="font-semibold">The portal API is not answering</h2>
+        <h2 className="font-semibold">Unable to reach the portal service</h2>
         <p className="mt-1 text-sm text-ink-3">{String(error ?? 'No data')}. Start it with `python -m portal serve`, then reload.</p>
       </Panel>
     )
@@ -82,7 +82,7 @@ export type View = ReturnType<typeof useView>
 
 // The page's own tab row (same look as the other pages): each tab jumps to its part of the page.
 type Section = 'summary' | WorkTab | 'agents'
-const SECTIONS: [Section, string][] = [['summary', 'Summary'], ['fixes', 'Top fixes'], ['threats', 'Threats'], ['devices', 'Devices'], ['agents', 'Agents']]
+const SECTIONS: [Section, string][] = [['summary', 'Summary'], ['fixes', 'Priority remediations'], ['threats', 'Threats'], ['devices', 'Devices'], ['agents', 'Agents']]
 const SECTION_TARGET: Record<Section, string> = { summary: 'top', fixes: 'work', threats: 'work', devices: 'work', agents: 'pipelines' }
 
 function HomeView({ s }: { s: Summary }) {
@@ -189,7 +189,7 @@ function PriorityCard({ v }: { v: View }) {
   return (
     <Panel className="card-hero flex flex-col p-6">
       <div className="flex items-start justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm">Priority 1 findings <InfoTip text="Share of all findings that are our most urgent: critical severity, or a vulnerability attackers can already use. The chip shows how many." /></h3>
+        <h3 className="flex items-center gap-1.5 text-sm">Priority 1 findings <InfoTip text="Share of all findings that are highest priority: critical severity, or a vulnerability with a known exploit. The chip shows the count." /></h3>
         <Chip>{num(v.totals.p1)}</Chip>
       </div>
       <div className="mt-2 text-[34px] font-normal leading-none tracking-tight tabular">{pct.toFixed(1)}%</div>
@@ -212,7 +212,7 @@ function FixedCard({ v }: { v: View }) {
   return (
     <Panel className="flex flex-col p-6">
       <div className="flex items-start justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm">Problems fixed <InfoTip text="Problems Defender found on our computers that are now gone, counted since we started tracking. The ring shows fixed against still open." /></h3>
+        <h3 className="flex items-center gap-1.5 text-sm">Problems fixed <InfoTip text="Vulnerabilities Defender no longer reports on managed devices, counted since tracking began. The ring shows remediated against still open." /></h3>
         <Chip>{num(open)} still open</Chip>
       </div>
       <div className="mt-2 flex flex-1 items-end justify-between gap-4">
@@ -250,7 +250,7 @@ function TrendCard({ v }: { v: View }) {
   return (
     <Panel className="flex flex-col p-6 md:col-span-2 xl:col-span-1">
       <div className="flex items-start justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm">Open vulnerabilities <InfoTip text="Every vulnerability Defender reports, counted once per app per computer. The line shows each daily snapshot." /></h3>
+        <h3 className="flex items-center gap-1.5 text-sm">Open vulnerabilities <InfoTip text="Every vulnerability Defender reports, counted once per application per device. The line shows each daily snapshot." /></h3>
         <Chip>{delta >= 0 ? '+' : '−'}{num(Math.abs(delta))} since {v.trend.at(-2) ? shortDate(v.trend.at(-2)!.date) : '–'}</Chip>
       </div>
       <div className="mt-2 text-[34px] leading-none tracking-tight tabular">{num(last)}</div>
@@ -286,7 +286,7 @@ function WorkPanel({ s, v }: { s: Summary; v: View }) {
           <Tabs<WorkTab>
             value={workTab}
             onChange={setWorkTab}
-            tabs={[['fixes', `Top fixes · ${v.fixes.length}`], ['threats', `Threats affecting us · ${v.threats.length}`], ['devices', `Devices · ${v.devices.length}`]]}
+            tabs={[['fixes', `Priority remediations · ${v.fixes.length}`], ['threats', `Applicable threats · ${v.threats.length}`], ['devices', `Affected devices · ${v.devices.length}`]]}
           />
         </div>
         <div className="mb-2 flex shrink-0 rounded-lg bg-well p-0.5" role="group" aria-label="Layout">
@@ -313,14 +313,7 @@ function WorkPanel({ s, v }: { s: Summary; v: View }) {
 }
 
 
-function UrgencyTag({ kev, urgency }: { kev: number; urgency: string }) {
-  if (kev > 0)
-    return (
-      <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm">
-        <AlertTriangle className="size-3.5" style={{ color: statusColor.critical }} />
-        {kev} known exploited
-      </span>
-    )
+function UrgencyTag({ urgency }: { urgency: string }) {
   return <span className="whitespace-nowrap text-ink-2">{urgency.split(':')[0]}</span>
 }
 
@@ -351,7 +344,7 @@ const fixHref = (f: { app: string; installed_versions: string | null }) =>
   f.installed_versions ? `/fixes?app=${encodeURIComponent(f.app)}` : `/fixes/settings?q=${encodeURIComponent(f.app)}`
 
 function FixesView({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'grid' }) {
-  if (!v.fixes.length) return <Empty text="No fixes needed for this filter." />
+  if (!v.fixes.length) return <Empty text="No remediations required for this filter." />
   if (layout === 'grid')
     return (
       <div className="grid gap-3 sm:grid-cols-2">
@@ -365,13 +358,13 @@ function FixesView({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'gr
               <span className="tabular text-xs text-ink-3">#{f.rank}</span>
             </div>
             <div className="mt-3 flex items-center justify-between text-sm">
-              <UrgencyTag kev={f.kev_cves} urgency={f.urgency} />
+              <UrgencyTag urgency={f.urgency} />
               <span className="tabular text-ink-2">{num(f.cves)} CVEs</span>
             </div>
             <div className="mt-3 flex items-center gap-2 border-t border-hairline pt-3 text-sm text-ink-2">
               <span className="flex-1">{f.fix_action}</span>
               {f.command && <CopyButton text={f.command} />}
-                <Link to={fixHref(f)} title="Open on the Fix page (you can let the portal fix it)" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Fix</Link>
+                <Link to={fixHref(f)} title="Open in Remediation" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Remediate</Link>
             </div>
           </div>
         ))}
@@ -379,7 +372,7 @@ function FixesView({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'gr
     )
   return (
     <>
-      <Table head={[['#', 'left'], ['App', 'left'], ['Urgency', 'left'], ['CVEs', 'right'], ['Fix', 'left']]}>
+      <Table head={[['#', 'left'], ['App', 'left'], ['Urgency', 'left'], ['CVEs', 'right'], ['Remediation', 'left']]}>
         {v.fixes.map((f) => (
           <tr key={f.rank} className="hover:bg-well/60">
             <td className="tabular w-10 text-ink-3">{f.rank}</td>
@@ -389,14 +382,14 @@ function FixesView({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'gr
                 {f.devices} device{f.devices === 1 ? '' : 's'} · {f.installed_versions ?? 'security setting'}
               </div>
             </td>
-            <td><UrgencyTag kev={f.kev_cves} urgency={f.urgency} /></td>
+            <td><UrgencyTag urgency={f.urgency} /></td>
             <td className="tabular text-right">{num(f.cves)}</td>
             <td className="min-w-[180px]">
               <div className="flex flex-col items-start gap-1.5 text-ink-2">
                 <span className="leading-snug [text-wrap:pretty]">{f.fix_action}</span>
                 <div className="flex items-center gap-1">
                 {f.command && <CopyButton text={f.command} />}
-                <Link to={fixHref(f)} title="Open on the Fix page (you can let the portal fix it)" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Fix</Link>
+                <Link to={fixHref(f)} title="Open in Remediation" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Remediate</Link>
                 </div>
               </div>
             </td>
@@ -404,15 +397,15 @@ function FixesView({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'gr
         ))}
       </Table>
       {s.uc3.ai_fixes?.model && (
-        <p className="mt-3 text-xs text-ink-3">Fix advice written by the AI assistant, checked against Defender data. Check before acting.</p>
+        <p className="mt-3 text-xs text-ink-3">Remediation guidance generated by the agent and validated against Defender data. Review before acting.</p>
       )}
     </>
   )
 }
 
 function ThreatsView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
-  if (!v.threats.length) return <Empty text="No ranked threats affect this VM." />
-  const title = (t: string) => t.replace(/^Actively exploited: /, '')
+  if (!v.threats.length) return <Empty text="No applicable threats for this VM." />
+  const title = (t: string) => t.replace(/^(Actively exploited|CISA alert): /, '')
   if (layout === 'grid')
     return (
       <div className="grid gap-3 sm:grid-cols-2">
@@ -455,7 +448,7 @@ function ThreatsView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
 
 function DevicesView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
   const { includeTests } = useFilters()
-  if (!v.devices.length) return <Empty text="No devices for this filter." />
+  if (!v.devices.length) return <Empty text="No affected devices for this filter." />
   const seen = (d?: string) => (d ? dateTime(d.replace(' ', 'T') + 'Z') : '–')
   if (layout === 'grid')
     return (
@@ -474,7 +467,7 @@ function DevicesView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
       </div>
     )
   return (
-    <Table head={[['Device', 'left'], ['Findings', 'right'], ['Priority 1', 'right'], ['Threats exposed', 'right'], ['Hunt hits', 'right'], ['Last seen', 'left']]}>
+    <Table head={[['Device', 'left'], ['Findings', 'right'], ['Priority 1', 'right'], ['Threats exposed', 'right'], ['Hunt matches', 'right'], ['Last seen', 'left']]}>
       {v.devices.map((d) => (
         <tr key={d.name} className="hover:bg-well/60">
           <td className="font-medium">{d.name}</td>
@@ -519,14 +512,10 @@ function RankingPanel({ s, v }: { s: Summary; v: View }) {
                 <span className="flex items-center gap-2">
                   <span className="rank-bar h-2.5 rounded-full" style={{ width: `${Math.max(3, (a.findings / max) * 82)}%`, background: t.series[i % t.series.length], animationDelay: `${i * 40}ms` }} />
                   <span className="tabular font-medium">{num(a.findings)}</span>
-                  {a.kev > 0 && <AlertTriangle className="size-3" style={{ color: statusColor.critical }} aria-label={`${a.kev} known exploited`} />}
                 </span>
               </li>
             ))}
           </ul>
-          <p className="mt-5 flex items-center gap-1.5 text-xs text-ink-3">
-            <AlertTriangle className="size-3" style={{ color: statusColor.critical }} /> has known exploited vulnerabilities
-          </p>
         </>
       ) : (
         <>
@@ -539,7 +528,7 @@ function RankingPanel({ s, v }: { s: Summary; v: View }) {
                 <li key={o.opco} className={cn(v.opco !== 'all' && v.opco !== o.opco && 'opacity-40')}>
                   <div className="mb-2 flex items-baseline justify-between text-sm">
                     <span className="font-medium">{o.opco}</span>
-                    <span className="tabular text-ink-3">{num(o.findings)} · {o.kev} exploited</span>
+                    <span className="tabular text-ink-3">{num(o.findings)}</span>
                   </div>
                   <div className="flex h-2 gap-0.5" style={{ width: `${(o.findings / opcoMax) * 100}%` }}>
                     {SEVERITIES.map((sev) => {
@@ -613,21 +602,23 @@ function PipelineActions({ to, uc, open }: { to: string; uc: UcKey; open: string
 function RunButton({ uc }: { uc: UcKey }) {
   const { runs, start, openDrawer } = useRuns()
   const running = runs?.[uc]?.status === 'running'
+  // the last run is paused at its Fix step until every new fix has a decision: open it instead of starting another
+  const waiting = !running && !!runs?.[uc]?.waiting_for_you
   return (
     <button
-      onClick={() => (running ? openDrawer(uc) : start(uc))}
+      onClick={() => (running || waiting ? openDrawer(uc) : start(uc))}
       className="inline-flex items-center gap-2 rounded-lg border border-hairline px-4 py-2 text-sm font-medium hover:bg-well"
     >
-      {running ? <span className="size-2 animate-pulse rounded-full bg-sky" /> : <Play className="size-3.5" />}
-      {running ? 'Working… watch' : 'Run agent'}
+      {running ? <span className="size-2 animate-pulse rounded-full bg-sky" /> : waiting ? <Hand className="size-3.5" /> : <Play className="size-3.5" />}
+      {running ? 'Running… view progress' : waiting ? 'Awaiting approval' : 'Run agent'}
     </button>
   )
 }
 
 
 function FiltersButton({ s }: { s: Summary }) {
-  const { opco, setOpco, includeTests, setIncludeTests } = useFilters()
-  const active = (opco !== 'all' ? 1 : 0) + (includeTests ? 1 : 0)   // hiding lab tests is the normal state
+  const { opco, setOpco } = useFilters()
+  const active = opco !== 'all' ? 1 : 0
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -644,29 +635,20 @@ function FiltersButton({ s }: { s: Summary }) {
             <DropdownMenuRadioItem key={o.opco} value={o.opco}>{o.opco} · {num(o.findings)} findings</DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuCheckboxItem checked={includeTests} onCheckedChange={(v) => setIncludeTests(Boolean(v))}>
-          Show lab-test results
-        </DropdownMenuCheckboxItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
 }
 
 function ActiveFilters() {
-  const { opco, setOpco, includeTests, setIncludeTests } = useFilters()
-  if (opco === 'all' && !includeTests) return null
+  const { opco, setOpco } = useFilters()
+  if (opco === 'all') return null
   return (
     <div className="-mt-2 flex flex-wrap items-center gap-2 text-xs">
       <span className="text-ink-3">Filtered by</span>
       {opco !== 'all' && (
         <button onClick={() => setOpco('all')} className="flex items-center gap-1.5 rounded-full btn-blue px-3 py-1 text-white">
           {opco} <X className="size-3" />
-        </button>
-      )}
-      {includeTests && (
-        <button onClick={() => setIncludeTests(false)} className="flex items-center gap-1.5 rounded-full btn-blue px-3 py-1 text-white">
-          Lab-test results shown <X className="size-3" />
         </button>
       )}
     </div>
@@ -685,7 +667,7 @@ function Uc1Panel({ s }: { s: Summary }) {
       <div className="grid grid-cols-3 gap-4 border-y border-hairline py-4">
         <Stat value={num(u.new_threats)} label="threats collected (30 days)" />
         <Stat value={num(u.affecting)} label="affect our devices" />
-        <Stat value={num(u.urgent)} label="urgent, fix these first" />
+        <Stat value={num(u.urgent)} label="urgent, remediate first" />
       </div>
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -707,7 +689,7 @@ function Uc1Panel({ s }: { s: Summary }) {
           })}
         />
       </div>
-      <PipelineActions to="/uc1" uc="uc1" open="Open threat news" />
+      <PipelineActions to="/uc1" uc="uc1" open="Open threat intelligence" />
     </Panel>
   )
 }
@@ -724,7 +706,7 @@ function Uc3Panel({ s }: { s: Summary }) {
     <Panel className="flex flex-col gap-5 p-6">
       <PipelineHeader tag="Agent" tone="bg-sky" title="Vulnerability Agent" h={h} />
       <div className="grid grid-cols-3 gap-4 border-y border-hairline py-4">
-        <Stat value={num(h?.rows)} label={h?.rows === h?.defender_count ? "rows, same as Defender's count" : `rows · Defender says ${num(h?.defender_count)}`} />
+        <Stat value={num(h?.vulnerabilities ?? h?.rows)} label="vulnerabilities in Defender" />
         <Stat value={`${Math.round((h?.coverage ?? 0) * 100)}%`} label="coverage, nothing missing" />
         <Stat value={num(s.uc3.totals.cves)} label="different CVEs" />
       </div>
@@ -820,9 +802,9 @@ function AttackPanel() {
   const at = (t: string) => new Date(t.replace(/[+Z].*$/, '').replace(' ', 'T') + 'Z')
   const latest = [
     ...hits.map((h) => ({ key: `h${h.finding_id}`, to: '/uc1/hunts', what: attackType(h.kind, h.detail).label,
-      where: h.device_name, by: 'Our own check', when: at(h.first_hit) })),
+      where: h.device_name, by: '', when: at(h.first_hit) })),
     ...caught.map((r) => ({ key: `c${r.incident_id}`, to: `/respond/${encodeURIComponent(r.incident_id)}`, what: r.title,
-      where: r.devices[0] ?? r.accounts[0] ?? '', by: `Caught by ${sourceNames(r.sources) || 'Microsoft'}`,
+      where: r.devices[0] ?? r.accounts[0] ?? '', by: `Detected by ${sourceNames(r.sources) || 'Microsoft'}`,
       when: utc(r.created_at) ?? new Date(0) })),
   ].sort((a, b) => b.when.getTime() - a.when.getTime()).slice(0, 4)
   const tone = hits.length + caught.length ? statusColor.critical : statusColor.good
@@ -833,13 +815,13 @@ function AttackPanel() {
       <div className="grid grid-cols-3 gap-4 border-y border-hairline py-4">
         <div>
           <div className="tabular text-2xl leading-none tracking-tight" style={{ color: tone }}>{num(hits.length + caught.length)}</div>
-          <div className="mt-1.5 text-xs text-ink-3">signs of attack found</div>
+          <div className="mt-1.5 text-xs text-ink-3">detections</div>
         </div>
-        <Stat value={num(hits.length)} label={`from our own checks${computers ? `, on ${computers} computer${computers === 1 ? '' : 's'}` : ''}`} />
-        <Stat value={num(caught.length)} label="caught by Microsoft’s alarms" />
+        <Stat value={num(hits.length)} label={`found by agent hunts${computers ? `, on ${computers} computer${computers === 1 ? '' : 's'}` : ''}`} />
+        <Stat value={num(caught.length)} label="detected by Microsoft" />
       </div>
       <div>
-        <h4 className="text-sm font-medium">Latest signs of attack</h4>
+        <h4 className="text-sm font-medium">Latest detections</h4>
         {latest.length ? (
           <ul className="mt-2 flex flex-col divide-y divide-hairline">
             {latest.map((x) => (
@@ -847,12 +829,12 @@ function AttackPanel() {
                 <Link to={x.to} className="flex items-center gap-3 py-2 text-sm hover:underline">
                   <span className="size-2 shrink-0 rounded-full" style={{ background: statusColor.critical }} />
                   <span className="min-w-0 flex-1 truncate">{x.what}{x.where ? <span className="text-ink-3"> · {x.where}</span> : null}</span>
-                  <span className="shrink-0 text-xs text-ink-3">{x.by} · {ago(x.when.toISOString())}</span>
+                  <span className="shrink-0 text-xs text-ink-3">{x.by ? `${x.by} · ` : ''}{ago(x.when.toISOString())}</span>
                 </Link>
               </li>
             ))}
           </ul>
-        ) : <p className="mt-2 text-sm text-ink-3">{data ? 'No signs of attack found.' : 'Not checked yet.'}</p>}
+        ) : <p className="mt-2 text-sm text-ink-3">{data ? 'No detections found.' : 'Not checked yet.'}</p>}
       </div>
       <div className="mt-auto">
         <PipelineActions to="/uc1/hunts" uc="attack" open="Open attack detection" />

@@ -78,7 +78,7 @@ function BackLink() {
 function Thinks({ c }: { c: Uc4Case }) {
   const v = c.verdict
   return (
-    <Card title={<span className="flex items-center gap-2"><Bot className="size-4" /> What the agent thinks</span>} description={verdictMeta(v.verdict).help}>
+    <Card title={<span className="flex items-center gap-2"><Bot className="size-4" /> Agent assessment</span>} description={verdictMeta(v.verdict).help}>
       <p className="text-[15px] leading-relaxed">{v.summary}</p>
       {v.evidence.length > 0 && (
         <>
@@ -96,7 +96,7 @@ function Thinks({ c }: { c: Uc4Case }) {
       )}
       {v.would_change_verdict_if && (
         <div className="mt-4 rounded-xl border border-dashed border-hairline p-3 text-sm">
-          <span className="font-medium">It would change its mind if: </span><span className="text-ink-2">{v.would_change_verdict_if}</span>
+          <span className="font-medium">Verdict would change if: </span><span className="text-ink-2">{v.would_change_verdict_if}</span>
         </div>
       )}
       {v.mitre_techniques.length > 0 && (
@@ -110,7 +110,7 @@ function ToDo({ c }: { c: Uc4Case }) {
   const v = c.verdict
   if (!v.recommended_actions.length && !v.containment_options.length) return null
   return (
-    <Card title="What to do" description="Suggestions only. A person does them, in Defender.">
+    <Card title="What to do" description="Recommendations only. An analyst performs them in Defender.">
       {v.recommended_actions.length > 0 && (
         <ol className="flex flex-col gap-2 text-sm">
           {v.recommended_actions.map((a, i) => (
@@ -124,7 +124,7 @@ function ToDo({ c }: { c: Uc4Case }) {
           <ul className="mt-2 flex flex-col gap-1 text-sm text-ink-2">
             {v.containment_options.map((o) => <li key={o}>• {CONTAINMENT[o] ?? o}</li>)}
           </ul>
-          <p className="mt-2 text-xs text-ink-3">The portal never does this for you. Only options from the approved menu can appear here.</p>
+          <p className="mt-2 text-xs text-ink-3">The portal never performs containment. Only options from the approved list appear here.</p>
         </div>
       )}
     </Card>
@@ -232,16 +232,16 @@ function Basis({ c }: { c: Uc4Case }) {
         })}
       </ul>
 
-      <BasisHeading n={2} title="The evidence the AI used" note={v.ai_status === 'ai'
-        ? `The AI (Gemini) decided from ${v.evidence.length} evidence point${v.evidence.length === 1 ? '' : 's'}, listed under “What the agent thinks”, each from a search in these logs:`
-        : 'The AI was not used for this verdict (unavailable, or its answer was rejected). It comes from the rules below only.'} />
+      <BasisHeading n={2} title="Evidence used by the agent" note={v.ai_status === 'ai'
+        ? `The agent reached its verdict from ${v.evidence.length} evidence point${v.evidence.length === 1 ? '' : 's'}, listed under “Agent assessment”, each from a search in these logs:`
+        : 'The agent model was not used for this verdict (unavailable, or its output was rejected). It is based on the rules below only.'} />
       {tables.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {tables.map((t) => <Tag key={t}>{t} · {/^(Device|Alert|Email|Identity|CloudApp|UrlClick)/.test(t) ? 'Defender' : 'Sentinel'}</Tag>)}
         </div>
       )}
 
-      <BasisHeading n={3} title="Rules applied" note={v.guardrails.length ? 'These can only make the verdict more careful.' : 'No rule changed the AI’s answer.'} />
+      <BasisHeading n={3} title="Rules applied" note={v.guardrails.length ? 'These can only make the verdict more careful.' : 'No rule changed the agent’s verdict.'} />
       {v.guardrails.length > 0 && (
         <ul className="flex flex-col gap-2 text-sm">
           {v.guardrails.map((id, i) => {
@@ -260,11 +260,11 @@ function Basis({ c }: { c: Uc4Case }) {
         </ul>
       )}
 
-      <BasisHeading n={4} title="Checks on the AI’s answer" note="Every point the AI made must match a search result; points that did not were removed." />
+      <BasisHeading n={4} title="Validation of the agent’s verdict" note="Every point the agent made must match a search result; unsupported points were removed." />
       <ul className="flex flex-col gap-2 text-sm">
         {v.checker_notes.map((n, i) => <li key={i} className="flex items-start gap-2"><ScanSearch className="mt-0.5 size-4 shrink-0" style={{ color: statusColor.serious }} /><span className="text-ink-2">{n}</span></li>)}
-        {c.injection.length > 0 && <li className="flex items-start gap-2"><AlertTriangle className="mt-0.5 size-4 shrink-0" style={{ color: statusColor.critical }} /><span className="text-ink-2">Text that tries to instruct the AI was found in {c.injection.map((x) => x.where).join(', ')}. It was not obeyed.</span></li>}
-        {!v.checker_notes.length && !c.injection.length && <li className="flex items-start gap-2 text-ink-2"><CheckCircle2 className="mt-0.5 size-4 shrink-0" style={{ color: statusColor.good }} /> All points matched the evidence, and no attacker text tried to instruct the AI.</li>}
+        {c.injection.length > 0 && <li className="flex items-start gap-2"><AlertTriangle className="mt-0.5 size-4 shrink-0" style={{ color: statusColor.critical }} /><span className="text-ink-2">Text attempting to instruct the agent was found in {c.injection.map((x) => x.where).join(', ')}. It was not obeyed.</span></li>}
+        {!v.checker_notes.length && !c.injection.length && <li className="flex items-start gap-2 text-ink-2"><CheckCircle2 className="mt-0.5 size-4 shrink-0" style={{ color: statusColor.good }} /> All points matched the evidence, and no attacker text attempted to instruct the agent.</li>}
       </ul>
     </Card>
   )
@@ -298,8 +298,8 @@ function Decide({ c }: { c: Uc4Case }) {
       <Panel className="flex flex-col gap-2 p-6">
         <h3 className="flex items-center gap-2 font-semibold tracking-tight"><Zap className="size-4" style={{ color: statusColor.warning }} /> Handled by the agent</h3>
         <p className="text-sm text-ink-3">
-          {tp ? 'The AI says true positive, so it was escalated in Defender. No decision needed from you.'
-            : `The AI says ${verdictMeta(v.verdict).short.toLowerCase()}, so it was closed in Defender. No decision needed from you. If it is wrong, reopen it below.`}
+          {tp ? 'The agent classified this as a true positive, so it was escalated in Defender. No analyst decision required.'
+            : `The agent classified this as ${verdictMeta(v.verdict).short.toLowerCase()}, so it was closed in Defender. No analyst decision required. If this is incorrect, reopen it below.`}
         </p>
       </Panel>
     )
@@ -308,9 +308,9 @@ function Decide({ c }: { c: Uc4Case }) {
   return (
     <Panel className="flex flex-col gap-4 p-6">
       <div>
-        <h3 className="font-semibold tracking-tight">Your decision</h3>
+        <h3 className="font-semibold tracking-tight">Analyst decision</h3>
         <p className="mt-1 text-sm text-ink-3">
-          {reopened ? 'This incident was reopened, so it is back with a person.' : v.ai_status !== 'ai' ? 'The AI was not used for this verdict.' : 'The AI could not decide this one.'} What is it?
+          {reopened ? 'This incident was reopened and is awaiting analyst review.' : v.ai_status !== 'ai' ? 'The agent model was not used for this verdict.' : 'The agent could not classify this incident.'} Select a classification.
         </p>
       </div>
       {last && (
@@ -339,8 +339,8 @@ function Decide({ c }: { c: Uc4Case }) {
             </div>
           </fieldset>
           <label className="text-sm">
-            <span className="font-medium">Why? <span className="font-normal text-ink-3">(optional)</span></span>
-            <textarea value={reason} onChange={(e) => setReason(e.target.value.slice(0, 500))} rows={2} className="mt-1 w-full rounded-lg border border-hairline bg-field px-3 py-2 text-sm outline-none transition-[border-color,box-shadow] focus:border-blue/60 focus:ring-3 focus:ring-blue/15" placeholder="For example: this was our own admin tool" />
+            <span className="font-medium">Reason <span className="font-normal text-ink-3">(optional)</span></span>
+            <textarea value={reason} onChange={(e) => setReason(e.target.value.slice(0, 500))} rows={2} className="mt-1 w-full rounded-lg border border-hairline bg-field px-3 py-2 text-sm outline-none transition-[border-color,box-shadow] focus:border-blue/60 focus:ring-3 focus:ring-blue/15" placeholder="For example: authorised administrative activity" />
           </label>
           <button onClick={send} disabled={!right || fb.isPending} className="inline-flex items-center justify-center gap-2 rounded-lg btn-blue px-3 py-2 text-sm font-medium text-white disabled:opacity-40">
             {fb.isPending && <Loader2 className="size-4 animate-spin" />} Save my decision
@@ -359,7 +359,7 @@ const PART_WORDS: Record<string, string> = {
   verdict: 'the verdict', evidence: 'the evidence', alerts: 'the alerts', entities: 'things involved', searches: 'the searches',
   threat_intel: 'threat intelligence', history: 'history', context: 'background', defender: 'what Defender did', actions: 'actions taken',
 }
-const STARTERS = ['Explain this incident in simple words', 'Why this verdict?', 'What would make it a true positive?', 'What should I check in Defender?']
+const STARTERS = ['Summarise this incident', 'Why this verdict?', 'What would make it a true positive?', 'What should I check in Defender?']
 
 function Ask({ c }: { c: Uc4Case }) {
   const ask = useAsk()
@@ -376,7 +376,7 @@ function Ask({ c }: { c: Uc4Case }) {
   return (
     <Card
       title={<span className="flex items-center gap-2"><Bot className="size-4" /> Ask about this incident</span>}
-      description="The AI answers from this incident's evidence only. It can't change anything; you decide."
+      description="The agent answers from this incident's evidence only. It cannot make changes; the decision is yours."
     >
       {turns.length > 0 && (
         <ul className="mb-4 flex flex-col gap-3">
@@ -415,7 +415,7 @@ function Ask({ c }: { c: Uc4Case }) {
             <button onClick={() => send()} disabled={!question.trim() || ask.isPending} className="inline-flex items-center gap-2 rounded-lg btn-blue px-3 py-2 text-sm font-medium text-white disabled:opacity-40">
               {ask.isPending && <Loader2 className="size-4 animate-spin" />} Ask
             </button>
-            {ask.isPending && <span className="text-xs text-ink-3">Thinking… about 5 seconds</span>}
+            {ask.isPending && <span className="text-xs text-ink-3">Analysing…</span>}
           </div>
           {ask.isError && <p className="text-xs" style={{ color: statusColor.critical }}>{(ask.error as Error).message}</p>}
         </div>
@@ -433,7 +433,7 @@ function DidByItself({ c }: { c: Uc4Case }) {
   const [sure, setSure] = useState(false)
   return (
     <Card
-      title={<span className="flex items-center gap-2"><Zap className="size-4" style={{ color: statusColor.warning }} /> What the assistant did by itself</span>}
+      title={<span className="flex items-center gap-2"><Zap className="size-4" style={{ color: statusColor.warning }} /> Automated actions taken</span>}
       description={c.automation.auto_resolve ? 'Automatic handling is on.' : 'Automatic handling is off now; earlier actions stay listed.'}
     >
       {acts.length ? (
@@ -448,11 +448,11 @@ function DidByItself({ c }: { c: Uc4Case }) {
             </li>
           ))}
         </ul>
-      ) : <p className="text-sm text-ink-3">Nothing yet: this incident did not meet the rules for automatic handling.</p>}
+      ) : <p className="text-sm text-ink-3">None: this incident did not meet the criteria for automated handling.</p>}
       {acts.some((a) => a.action === 'auto_resolve') && (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
           {reopen.isSuccess ? (
-            <span className="text-ink-2"><CheckCircle2 className="mr-1 inline size-4" style={{ color: statusColor.good }} />Reopened in Defender. It is waiting for a person again.</span>
+            <span className="text-ink-2"><CheckCircle2 className="mr-1 inline size-4" style={{ color: statusColor.good }} />Reopened in Defender and awaiting analyst review.</span>
           ) : !sure ? (
             <button onClick={() => setSure(true)} className="inline-flex items-center gap-2 rounded-lg border border-hairline px-3 py-1.5 font-medium hover:bg-well">
               <Undo2 className="size-3.5" /> Undo: reopen it
@@ -507,12 +507,12 @@ function EvidenceTabs({ c }: { c: Uc4Case }) {
     <Panel className="flex min-w-0 flex-col gap-4 p-6">
       <div>
         <h3 className="font-semibold tracking-tight">The evidence</h3>
-        <p className="mt-1 text-sm text-ink-3">Everything the agent collected, exactly as Defender returned it.</p>
+        <p className="mt-1 text-sm text-ink-3">All evidence collected by the agent, exactly as returned by Defender.</p>
       </div>
       {/* the tab row scrolls sideways on a phone instead of widening the page */}
       <div className="overflow-x-auto pb-px">
         <Tabs<ETab>
-          tabs={[['alerts', `Alerts · ${c.packet.alerts.length}`], ['things', `Things involved · ${things.reduce((n, [, l]) => n + l.length, 0)}`], ['searches', `Searches run · ${c.queries.length}`], ['background', 'Background']]}
+          tabs={[['alerts', `Alerts · ${c.packet.alerts.length}`], ['things', `Entities · ${things.reduce((n, [, l]) => n + l.length, 0)}`], ['searches', `Searches run · ${c.queries.length}`], ['background', 'Background']]}
           value={tab}
           onChange={setTab}
         />
@@ -533,7 +533,7 @@ function EvidenceTabs({ c }: { c: Uc4Case }) {
               <div className="mt-2 text-xs text-ink-3">First activity {dateTime(iso(a.first_activity))} · raised {dateTime(iso(a.created))}</div>
               {a.untrusted?.description && (
                 <details className="mt-3 rounded-lg bg-well p-3 text-xs">
-                  <summary className="cursor-pointer font-medium text-ink-2">Text from the alert (not trusted: an attacker can influence it)</summary>
+                  <summary className="cursor-pointer font-medium text-ink-2">Alert description (untrusted input)</summary>
                   <p className="mt-2 whitespace-pre-line leading-relaxed text-ink-3">{a.untrusted.description}</p>
                 </details>
               )}
@@ -607,7 +607,7 @@ function QueryBlock({ q }: { q: Uc4Case['queries'][number] }) {
               </tbody>
             </table>
           </div>
-        ) : <p className="text-sm text-ink-3">{q.error ?? 'Nothing found. That is evidence too.'}</p>}
+        ) : <p className="text-sm text-ink-3">{q.error ?? 'No results returned.'}</p>}
         {q.rows_total < q.row_count && <p className="mt-2 text-xs text-ink-3">Showing the {q.rows_total} rows the agent kept of {q.row_count}.</p>}
         {q.query && <details className="mt-2 text-xs"><summary className="cursor-pointer text-ink-3">The search (KQL)</summary><pre className="mt-1 overflow-auto rounded-lg bg-well p-3 text-[11px] leading-relaxed">{q.query}</pre></details>}
       </div>

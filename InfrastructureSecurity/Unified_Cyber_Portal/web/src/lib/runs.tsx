@@ -21,6 +21,12 @@ export interface RunStep {
 
 export interface RunFact { label: string; value: string; hint: string }
 
+/** One thing a Threat Intel / Attack Detection run found, by name (src/portal/runs.py run_findings) */
+export interface RunFinding {
+  kind: 'threat' | 'attack' | 'alert'; id: string; title: string; rating: string | null
+  why: string; where: string; action: string; test: boolean; to: string
+}
+
 /** The Vulnerability Agent's Fix stage: the fixes this run proposed (fix engine ids), waiting for a person */
 export interface RunFix {
   new: number; new_ids: string[]; waiting: number; saved: number; fixable?: number; urgent?: number; verified?: number
@@ -40,6 +46,8 @@ export interface RunState {
   exit_code: number | null
   steps: RunStep[]
   facts: RunFact[]
+  /** what the run found, by name (Threat Intel and Attack Detection runs) */
+  findings?: RunFinding[]
   report_file: string | null
   report_files?: string[]
   files_from?: 'uc1' | 'uc3' | 'uc4'
@@ -56,31 +64,31 @@ export type Runs = Record<UcKey, RunState | null>
 // What each run will do, shown before the first run (mirrors src/portal/runs.py).
 export const PLANNED_STEPS: Record<UcKey, { label: string; description: string }[]> = {
   uc3: [
-    { label: 'Extract', description: 'Collect every weakness from Microsoft Defender' },
-    { label: 'Validate', description: "Save today's copy and check nothing is missing" },
-    { label: 'Score and report', description: 'Rate each problem and prepare the report numbers' },
-    { label: 'Remediation agent', description: "AI writes the steps to fix every problem" },
-    { label: 'Fix', description: 'Propose the fixes that are new in this run; you approve each one below' },
+    { label: 'Extract', description: 'Ingest every vulnerability from Microsoft Defender' },
+    { label: 'Validate', description: "Store today's snapshot and verify completeness" },
+    { label: 'Score and report', description: 'Score each finding and compute report metrics' },
+    { label: 'Remediation agent', description: "The agent writes remediation steps for every finding" },
+    { label: 'Remediation', description: 'Propose new remediations from this run for your approval below' },
   ],
   uc1: [
-    { label: 'Gather threat news and understand it', description: 'New threats from 10 public feeds; AI reads each one and how likely it is to be used' },
-    { label: 'Check if it affects us', description: 'Is the software these threats target on our computers?' },
-    { label: 'Write fix steps', description: "AI writes how to fix each threat that affects us, checked against Defender's data" },
-    { label: 'Write the report', description: 'The new threats that affect us and how to fix them, alerts and the report' },
-    { label: 'Fix', description: 'Propose the fixes that are new in this run; you approve each one below' },
+    { label: 'Collect and analyse threat intelligence', description: 'New threats from 10 public feeds; the agent analyses each one and its likelihood of exploitation' },
+    { label: 'Assess exposure', description: 'Check whether the targeted software is present on managed devices' },
+    { label: 'Write remediation steps', description: "The agent writes remediation steps for each applicable threat, validated against Defender data" },
+    { label: 'Publish the report', description: 'Applicable threats, remediation guidance, alerts and the report' },
+    { label: 'Remediation', description: 'Propose new remediations from this run for your approval below' },
   ],
   attack: [
-    { label: 'Search our computers', description: 'Look in Microsoft Defender (last 30 days) for the warning signs from threat news and known attacker tricks' },
-    { label: 'Connect the evidence', description: 'Who was logged in and what Defender said; earlier signs are kept, new ones added' },
-    { label: 'Write resolution steps', description: 'AI writes how to resolve each new sign of attack, checked against the evidence' },
+    { label: 'Hunt across managed devices', description: 'Search Microsoft Defender (last 30 days) for indicators from threat intelligence and known attacker techniques' },
+    { label: 'Correlate the evidence', description: 'Signed-in users and Defender context; earlier detections are kept, new ones added' },
+    { label: 'Write resolution steps', description: 'The agent writes resolution steps for each new detection, validated against the evidence' },
     { label: 'Publish', description: 'Update the Attack detection page and raise alerts' },
-    { label: 'Fix', description: 'Propose a Defender scan-and-clean for every new sign of attack; you approve each one below' },
+    { label: 'Remediation', description: 'Propose a Defender scan-and-clean for every new detection, for your approval below' },
   ],
   uc4: [
-    { label: 'Read new alerts', description: 'New or changed incidents from Microsoft Defender and Sentinel' },
-    { label: 'Check each alert', description: 'AI looks at the evidence and decides: real threat, false alarm, or needs a person' },
-    { label: 'Take action', description: 'Close false alarms, escalate real threats, ask Defender to scan or clean up (lab only, when switched on)' },
-    { label: 'Update the queue', description: 'Results ready to review on the Alert triage page' },
+    { label: 'Ingest new incidents', description: 'New or changed incidents from Microsoft Defender and Sentinel' },
+    { label: 'Classify each incident', description: 'The agent reviews the evidence and classifies it: true positive, false positive or needs review' },
+    { label: 'Respond', description: 'Close false positives, escalate true positives, request Defender scans and clean-up' },
+    { label: 'Publish the triage queue', description: 'Results available for review on the Alert triage page' },
   ],
 }
 

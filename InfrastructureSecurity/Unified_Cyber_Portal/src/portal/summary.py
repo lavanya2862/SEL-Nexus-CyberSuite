@@ -49,7 +49,8 @@ def _uc3_part(uc3: UC3, now: datetime) -> dict:
     health = _health("uc3", "Vulnerabilities", str(status.get("status", "")).upper() in ("OK", "WARN"),
                      run_at, run_at, status.get("message") or "No run recorded yet", now,
                      {"quality": run.get("quality"), "coverage": run.get("coverage"),
-                      "rows": run.get("vulnerability_rows"), "defender_count": run.get("defender_count")})
+                      "rows": run.get("vulnerability_rows"), "defender_count": run.get("defender_count"),
+                      "vulnerabilities": run.get("vulnerabilities")})
 
     latest = "(select max(snapshot_date) from {fact_daily_summary})"
     totals = uc3.query(f"""select sum(vulnerabilities) total,

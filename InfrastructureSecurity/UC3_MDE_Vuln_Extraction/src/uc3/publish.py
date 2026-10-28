@@ -116,16 +116,21 @@ def _run_history_table(settings: Settings) -> pa.Table:
         quality_path = manifest_path.with_name("quality.json")
         quality = json.loads(quality_path.read_text())["overall"] if quality_path.is_file() else None
         rows_exported, source = m["counts"]["vulnerability_rows"], m.get("source_count")
+        # Defender lists some findings twice; the load step keeps one copy (no load.json = before that step existed)
+        load_path = manifest_path.with_name("load.json")
+        repeats = json.loads(load_path.read_text()).get("duplicates_dropped", 0) if load_path.is_file() else 0
         rows.append({
             "run_date": m["run_date"], "started_at": m.get("started_at"), "duration_seconds": m.get("duration_seconds"),
             "export_generated_time": m.get("export_generated_time"), "machines": m["counts"]["machines"],
-            "vulnerability_rows": rows_exported, "defender_count": source,
+            "vulnerability_rows": rows_exported, "repeats": repeats, "vulnerabilities": rows_exported - repeats,
+            "defender_count": source,
             "coverage": (rows_exported / source) if source else None, "change_rows": m["counts"]["change_rows"],
             "retries": m.get("retries"), "export_attempts": m.get("export_attempts"), "quality": quality,
         })
     schema = pa.schema([("run_date", pa.string()), ("started_at", pa.string()), ("duration_seconds", pa.float64()),
                         ("export_generated_time", pa.string()), ("machines", pa.int64()),
-                        ("vulnerability_rows", pa.int64()), ("defender_count", pa.int64()), ("coverage", pa.float64()),
+                        ("vulnerability_rows", pa.int64()), ("repeats", pa.int64()), ("vulnerabilities", pa.int64()),
+                        ("defender_count", pa.int64()), ("coverage", pa.float64()),
                         ("change_rows", pa.int64()), ("retries", pa.int64()), ("export_attempts", pa.int64()),
                         ("quality", pa.string())])
     return pa.Table.from_pylist(rows, schema=schema)

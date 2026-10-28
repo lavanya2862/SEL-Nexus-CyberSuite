@@ -52,7 +52,7 @@ def notes(store: Store, settings: Settings) -> str:
     if contrast:
         c = contrast[0]
         lines.append(f"- Contrast: {c['title']} is {c['rating']} ({c['score']}/100) because we don't have it: monitor, not act now")
-    lines += [f"- {m['proactive_threats_identified']} threats affect our devices; {m['exposed_actively_exploited']} are actively exploited", "",
+    lines += [f"- {m['proactive_threats_identified']} threats affect our devices; {m['exposed_actively_exploited']} are on the CISA KEV list", "",
               "## 4. It hunts",
               f"- Last run: " + ", ".join(f"{h['n']} {h['origin']} hunts ({h['r'] or 0} rows)" for h in hunts),
               f"- About {m['hunts_per_month_projected']} hunts per month at 6 runs a day"]

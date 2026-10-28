@@ -99,6 +99,8 @@ def run_lock(settings: Settings):
 
 def load_and_check(settings: Settings, run_date: date | None = None) -> tuple[dict, dict]:
     loaded = run_load(settings, run_date)
+    c = loaded["counts"]
+    log.info("Load finished: %s", {"vulnerabilities": c["vulnerability_rows"], "repeats": c["duplicates_dropped"]})
     refresh_views(settings)
     quality = run_checks(settings, date.fromisoformat(loaded["run_date"]))
     return loaded, quality
@@ -107,7 +109,6 @@ def load_and_check(settings: Settings, run_date: date | None = None) -> tuple[di
 def publish_all(settings: Settings) -> dict:
     from uc3.dashboard.build import build_dashboard
     from uc3.excel import build_excel
-    from uc3.metrics import build_metrics
     from uc3.publish import run_publish
     from uc3.report import build_report, gather
 
@@ -122,7 +123,6 @@ def publish_all(settings: Settings) -> dict:
     published["excel"] = str(build_excel(settings, report_data))
     published["report"] = build_report(settings, report_data)
     log.info("Report files: %s", {"xlsx": published["excel"], **published["report"]})   # the portal links these
-    published["metrics"] = str(build_metrics(settings)["path"])
     log.info("Remediation agent finished: %s", published["ai_fixes"])
     return published
 
