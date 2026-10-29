@@ -5,8 +5,8 @@ All files are plain text (CSV or `.kql`); edit them with Notepad or LibreOffice.
 | File | What it controls | Change it when… |
 |---|---|---|
 | `..\..\..\.env` (suite root) | The one settings file for the whole suite (template: `.env.example` there): Defender login, Gemini key/model/speed, feed keys, optional Teams webhook, tuning values. **Only you type the keys there.** | Setting up a new machine |
-| `feeds.csv` | Which feeds run (`enabled` yes/no): `attack`, `kev`, `nvd`, `ncsc_nl`, `cert_eu`, `msrc`, `abusech`, `otx`, `lab_test` | A feed is broken or unwanted, or you add OTX |
-| `risk_policy.csv` | The **risk rules**: points per signal (CISA KEV 35, ransomware 15, EPSS, CVSS, public exploit 10, NCSC-NL [H/H] 15, exposed 15, possible match 8, fresh IOCs 20), rating thresholds (Critical ≥ 70, High ≥ 50, Medium ≥ 30), caps (49 when not on our devices, 69 for a possible product match) and the hunt-hit score (95). | The security team wants different priorities. Every threat's "why" line shows which rules applied. |
+| `feeds.csv` | Which feeds run (`enabled` yes/no): `attack`, `nvd`, `ncsc_nl`, `cert_eu`, `msrc`, `abusech`, `otx`, `lab_test` | A feed is broken or unwanted, or you add OTX |
+| `risk_policy.csv` | The **risk rules**: points per signal (EPSS, CVSS, public exploit 10, NCSC-NL [H/H] 15, exposed 15, possible match 8, fresh IOCs 20), rating thresholds (Critical ≥ 70, High ≥ 50, Medium ≥ 30), caps (49 when not on our devices, 69 for a possible product match) and the hunt-hit score (95). | The security team wants different priorities. Every threat's "why" line shows which rules applied. |
 | `opco_mapping.csv` | Which business unit (OpCo) each Defender device belongs to. `match_type` = `rbac_group` (Defender device group), `tag` (device tag, e.g. `OpCo A`) or `name_pattern` (e.g. `opcc-*`). Tried in that order; unmatched = "Unassigned". Copied from UC3. | New devices or OpCos |
 | `ioc_allowlist.csv` | Big legitimate shared sites (GitHub, Google, Dropbox, OneDrive, Microsoft, AWS, Discord CDN, Cloudflare Workers…) that are **never treated as bad domains as a whole**. A bad file hosted there is still hunted by its exact URL. Added after the GitHub false alarm of 30 Sep. | A hit turns out to be a well-known legitimate site |
 | `lab_test_iocs.csv` | Harmless **TEST** indicators: the `example.com` domain and the EICAR test-file fingerprint. Always shown as [TEST]. | Never needed; remove the rows to stop TEST hunting |
@@ -36,6 +36,6 @@ Every query, template or AI-drafted, passes the validator (`src\uc1\hunting\vali
 One row per app name as Defender reports it (`software_name`). `action` is `upgrade` (winget update), `remove` (uninstall every
 entry matching `match`, e.g. end-of-life Python; `{ver2}` = the first two parts of the vulnerable version), `replace` (remove the
 old version, then install `winget_id`) or `none` (nothing to run). `choco_id` is the Chocolatey fallback, `processes` are closed
-first (`;`-separated), and `stage` sets urgency (1 urgent, 2 end-of-life, 3 other; anything on CISA KEV is always stage 1).
+first (`;`-separated), and `stage` sets urgency (1 urgent, 2 end-of-life, 3 other).
 Only letters, digits and `. + _ - ( ) * { }` are accepted, and a row with anything else stops the plan, so no command can be injected.
 Apps not listed show as "No action" in the Fix Centre.

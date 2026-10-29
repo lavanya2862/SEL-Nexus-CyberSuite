@@ -12,7 +12,7 @@ Threat feeds ─► Gemini analysis (checked by code) ─► Defender inventory 
 
 Both runs (`run` and `attack-check`) end with a **Fix** step that rebuilds the fix plan and lists the fixes that are new in that run: app updates and security settings, and for every sign of attack a Defender scan-and-clean of that computer (signature update, quick scan, remove active threats). Nothing runs until a person presses **Fix** (or **Save for later**) on the portal's run page and then **Run fixes**; the portal shows the Fix step as waiting until every new fix has a decision. Isolating a computer is not offered: it needs `Machine.Isolate`, so it stays a job for Defender itself.
 
-Feeds: CISA KEV, NVD, EPSS, MITRE ATT&CK, NCSC-NL, CERT-EU, Microsoft MSRC, ThreatFox, URLhaus, MalwareBazaar (+ AlienVault OTX, optional).
+Feeds: NVD, EPSS, MITRE ATT&CK, NCSC-NL, CERT-EU, Microsoft MSRC, ThreatFox, URLhaus, MalwareBazaar (+ AlienVault OTX, optional).
 
 ## Setup
 

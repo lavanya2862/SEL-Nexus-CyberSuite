@@ -110,7 +110,7 @@ export function typicalLabel(uc: UcKey, seconds?: number | null) {
 
 async function fetchRuns(): Promise<Runs> {
   const res = await fetch('/api/runs')
-  if (!res.ok) throw new Error(`Portal API answered ${res.status}`)
+  if (!res.ok) throw new Error(`CyberSuite could not complete the request (error ${res.status})`)
   return res.json()
 }
 

@@ -48,7 +48,6 @@ from uc1.pipeline import Pipeline, RunLocked, lock_active, make_ai, make_defende
 from uc1.store import Store, utcnow
 
 FEED_HOSTS = {
-    "CISA KEV": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
     "NVD": "https://services.nvd.nist.gov/rest/json/cves/2.0?resultsPerPage=1",
     "EPSS": "https://api.first.org/data/v1/epss?cve=CVE-2021-44228",
     "MITRE ATT&CK": "https://github.com/mitre-attack/attack-stix-data",
@@ -118,14 +117,13 @@ def cmd_fix(settings: Settings, args) -> int:
     from uc1.fix.runner import FixRunner
     if args.command == "fix-status":
         v = fix_plan.view(settings)
-        print(f"Fix plan from inventory {v['inventory_at']} · default method {v['default_method']}")
+        print(f"Remediation plan from inventory {v['inventory_at']} · default method {v['default_method']}")
         print("  " + " · ".join(f"{k} {n}" for k, n in v["totals"].items() if n))
         imp = v["impact"]
-        print(f"  findings open {imp['findings_open']} · cleared {imp['findings_cleared']} · "
-              f"KEV open {imp['kev_open']} · KEV cleared {imp['kev_cleared']}\n")
+        print(f"  findings open {imp['findings_open']} · remediated {imp['findings_cleared']}\n")
         for r in v["rows"]:
             print(f"  {r['fix_id']}  {r['status']:11s} S{r['stage']} {r['device_name']:12s} {r['action']:8s} "
-                  f"{(r['app'] + ' ' + r['version'])[:40]:40s} {r['findings']:5d} findings  KEV {r['kev']}"
+                  f"{(r['app'] + ' ' + r['version'])[:40]:40s} {r['findings']:5d} findings"
                   + (f"  · {r['message'][:90]}" if r.get("message") else ""))
         return 0
     if args.command == "fix-approve":

@@ -21,12 +21,12 @@ log = logging.getLogger("uc1.analyse")
 
 
 def pending(store: Store, limit: int) -> list[dict]:
-    """Threats needing analysis, most important first (exposed, on the CISA KEV list, newest)."""
+    """Threats needing analysis, most important first (exposed, newest)."""
     return store.query("""
         SELECT t.* FROM threats t LEFT JOIN analysis a ON a.threat_id = t.threat_id
         WHERE a.threat_id IS NULL OR a.content_hash IS DISTINCT FROM t.content_hash
               OR a.ai_status IN ('pending', 'failed')
-        ORDER BY (t.threat_id IN (SELECT threat_id FROM exposure)) DESC, (t.kind = 'kev') DESC,
+        ORDER BY (t.threat_id IN (SELECT threat_id FROM exposure)) DESC,
                  t.first_seen_at DESC, t.published_at DESC NULLS LAST
         LIMIT ?""", [limit])
 

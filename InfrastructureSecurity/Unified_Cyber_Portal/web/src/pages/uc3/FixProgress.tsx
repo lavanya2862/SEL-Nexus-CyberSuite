@@ -9,7 +9,7 @@ import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
 // The four stops every fix passes, left to right
-const STOPS = ['Waiting', 'Remediating', 'Remediated', 'Confirmed by Defender'] as const
+const STOPS = ['Waiting', 'Remediating', 'Remediated', 'Verified by Defender'] as const
 type StopState = 'todo' | 'now' | 'done' | 'failed'
 
 function stops(r: FixRow): StopState[] {
@@ -98,7 +98,7 @@ function Body({ v }: { v: FixView }) {
         <div className="card-row gap-4 [--card-min:170px]">
           {[
             { icon: Wrench, label: 'Remediated', value: count((r) => r.status === 'done' || r.status === 'verified'), color: 'var(--sky)' },
-            { icon: ShieldCheck, label: 'Confirmed by Defender', value: count((r) => r.status === 'verified'), color: statusColor.good },
+            { icon: ShieldCheck, label: 'Verified by Defender', value: count((r) => r.status === 'verified'), color: statusColor.good },
             { icon: XCircle, label: 'Failed', value: count((r) => r.status === 'failed' || r.status === 'still_there'), color: statusColor.critical },
             { icon: Clock, label: 'Still to do', value: count((r) => r.status === 'queued' || r.status === 'running'), color: 'var(--ink-3)' },
           ].map((t) => (
@@ -127,7 +127,7 @@ function Body({ v }: { v: FixView }) {
       {!live && rows.some((r) => r.status === 'done') && (
         <Panel className="flex items-start gap-3 px-5 py-4 text-sm text-ink-2">
           <ShieldCheck className="mt-0.5 size-5 shrink-0" style={{ color: statusColor.good }} />
-          <p><span className="font-medium text-ink">What happens next:</span> Defender rescans the device and the Vulnerability Agent records the result, usually within a few hours. Each remediation then shows “Confirmed by Defender”. Keep powered-on devices running until then.</p>
+          <p><span className="font-medium text-ink">What happens next:</span> Defender rescans the device and the Vulnerability Agent records the result, usually within a few hours. Each remediation then shows “Verified by Defender”. Keep powered-on devices running until then.</p>
         </Panel>
       )}
 

@@ -28,8 +28,8 @@ export default function App() {
         {/* Preview: "Ember Glass" design at its own address; the classic design below is unchanged */}
         <Route path="glass" element={<RequireAuth><GlassShell /></RequireAuth>}>
           <Route index element={<GlassHome />} />
-          <Route path="uc1/*" element={<GlassSoon title="Threats & hunting" />} />
-          <Route path="uc3/*" element={<GlassSoon title="Vulnerability management" />} />
+          <Route path="uc1/*" element={<GlassSoon title="Threats" />} />
+          <Route path="uc3/*" element={<GlassSoon title="Vulnerabilities" />} />
           <Route path="fixes" element={<GlassSoon title="Remediation" />} />
           <Route path="reports" element={<GlassSoon title="Reports" />} />
           <Route path="*" element={<GlassSoon title="Page not found" />} />

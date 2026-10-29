@@ -60,12 +60,12 @@ function Loop({ v }: { v: FixView }) {
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Automated remediation</h2>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-2">
-            You approve; the assistant updates or removes the old app on the computer (winget, through {METHOD_LABEL[v.default_method]}),
+            You approve; the agent updates or removes the old app on the device (winget, through {METHOD_LABEL[v.default_method]}),
             checks the installed version before and after, and the next threat check asks Defender to confirm the vulnerability is gone.
             Commands come only from the approved remediation catalogue. Nothing runs without your approval.
           </p>
           <ol className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-            {['1 · Plan', '2 · You approve', '3 · Remediate', '4 · Defender confirms'].map((s) => (
+            {['1 · Plan', '2 · You approve', '3 · Remediate', '4 · Defender verifies'].map((s) => (
               <li key={s} className="rounded-lg bg-well px-3 py-2 font-medium text-ink-2">{s}</li>
             ))}
           </ol>
@@ -73,7 +73,7 @@ function Loop({ v }: { v: FixView }) {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {([
             [v.totals.approved, 'approved, waiting to run'],
-            [(v.totals.done ?? 0) + (v.totals.running ?? 0) + (v.totals.queued ?? 0), 'fixed or in progress'],
+            [(v.totals.done ?? 0) + (v.totals.running ?? 0) + (v.totals.queued ?? 0), 'remediated or in progress'],
             [v.totals.verified, 'verified by Defender'],
             [v.totals.failed, 'failed'],
             [v.impact.findings_cleared, 'findings cleared'],
@@ -96,7 +96,7 @@ function Loop({ v }: { v: FixView }) {
         <div className="flex items-center gap-2 text-sm text-ink-2">
           How
           <Choice label="Remediation method" value={method} onChange={(v) => setMethod(v as FixMethod)} className="w-auto py-1.5"
-            options={[{ value: 'runcommand', label: 'Azure Run Command (Azure VMs)' }, { value: 'liveresponse', label: 'Defender Live Response (any Defender PC)' }]} />
+            options={[{ value: 'runcommand', label: 'Azure Run Command (Azure VMs)' }, { value: 'liveresponse', label: 'Defender Live Response (any Defender device)' }]} />
         </div>
         <span className="mx-1 h-6 w-px bg-hairline" />
         <Btn onClick={() => run('approve', selected.filter(canApprove).map((r) => r.fix_id))} disabled={!selected.some(canApprove) || act.isPending}>
@@ -111,7 +111,7 @@ function Loop({ v }: { v: FixView }) {
         </Btn>
         <span className="flex-1" />
         <Btn onClick={() => run('probe')} disabled={busy || act.isPending}>
-          <RefreshCw className="size-4" /> Check computers (read-only)
+          <RefreshCw className="size-4" /> Check devices (read-only)
         </Btn>
         <button
           onClick={() => setConfirm('run')}
@@ -153,7 +153,7 @@ function Loop({ v }: { v: FixView }) {
         title={confirm === 'run' ? `Execute ${approved.length} approved remediations?` : `Approve all ${fixable.filter(canApprove).length} remediations?`}
         body={confirm === 'run'
           ? `On ${[...new Set(approved.map((r) => r.device_name))].join(' and ')}, the agent will power on each device if needed, close the applications and update or remove them. This changes the devices and the vulnerability figures on every page. Keep powered-on VMs running for about 6 hours so Defender can verify the changes.`
-          : 'Every application on every device in the plan is approved, including removal of end-of-life applications. Nothing runs until execution is started.'}
+          : 'Every application on every device in the plan is approved, including removal of end-of-support applications. Nothing runs until execution is started.'}
         confirmLabel={confirm === 'run' ? 'Execute remediation' : 'Approve everything'}
         onConfirm={() => {
           if (confirm === 'run') run('run')

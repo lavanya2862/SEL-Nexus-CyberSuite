@@ -6,15 +6,15 @@ import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
 const AREAS = [
-  { icon: Radar, label: 'Threats & hunting', hint: 'New threats checked against our devices' },
-  { icon: ScanSearch, label: 'Vulnerability management', hint: 'Software flaws, weak settings and unsupported software across every OpCo' },
+  { icon: Radar, label: 'Threats', hint: 'New threats checked against our devices' },
+  { icon: ScanSearch, label: 'Vulnerabilities', hint: 'Software vulnerabilities, misconfigurations and unsupported software across every OpCo' },
   { icon: Wrench, label: 'Remediation', hint: 'What to patch, upgrade or harden first, and progress' },
-  { icon: Siren, label: 'Alert response', hint: 'Defender alerts triaged by the agent' },
+  { icon: Siren, label: 'Alert triage', hint: 'Defender alerts triaged by the agent' },
 ]
 
 export function AuthLayout({ children }: { children: ReactNode }) {
   const { config } = useAuth()
-  const via = config?.mode === 'cognito' ? 'Amazon Cognito' : 'this portal'
+  const via = config?.mode === 'cognito' ? 'Amazon Cognito' : 'CyberSuite'
   return (
     <div className="relative flex min-h-svh flex-col text-ink">
       <header className="relative z-10 px-5 pt-6 sm:px-10 lg:px-16 lg:pt-10">

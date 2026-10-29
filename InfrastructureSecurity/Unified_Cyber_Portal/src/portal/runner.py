@@ -58,7 +58,7 @@ def main() -> int:
                 log.flush()
             code = proc.wait()
         except Exception as exc:  # noqa: BLE001 - always leave a result behind
-            log.write(f"Run FAILED: the portal could not start the pipeline: {exc}\n")
+            log.write(f"Run failed: CyberSuite could not start the pipeline: {exc}\n")
     _write_json(run_dir / "result.json", {"exit_code": code, "finished_at": _now()})
     if args.audit_dir:
         from portal.audit import AuditLog

@@ -24,7 +24,7 @@ VERDICT_WORDS = {"likely_true_positive": "true positive", "likely_false_positive
                  "benign_positive": "false positive", "needs_investigation": "needs review"}
 ACTION_WORDS = {"auto_resolve": "Closed", "auto_escalate": "Escalated",
                 "auto_tag": "Marked for review", "av_scan": "Antivirus scan started", "stop_quarantine": "File stopped and quarantined",
-                "isolate_device": "Computer isolated", "release_device": "Computer released", "reopen": "Reopened",
+                "isolate_device": "Device isolated", "release_device": "Device released", "reopen": "Reopened",
                 "close_incident": "Closed by a person", "escalate_incident": "Escalated by a person", "comment": "Note added in Defender",
                 "remove_inbox_rule": "Inbox rule removed"}
 LEVEL = {"critical": "critical", "high": "high", "medium": "medium", "low": "low", "informational": "info", "info": "info"}

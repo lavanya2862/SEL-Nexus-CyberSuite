@@ -30,23 +30,23 @@ export function screenFor(pathname: string): ScreenKey {
 export const SCREENS: Record<ScreenKey, Screen> = {
   home: {
     name: 'Summary',
-    placeholder: 'For example: which computer is most at risk?',
-    questions: ['How many vulnerabilities do we have right now?', 'How many vulnerabilities are attackers known to use?'],
+    placeholder: 'For example: which app has the most vulnerabilities?',
+    questions: ['How many vulnerabilities do we have right now?', 'Which device is most at risk?'],
   },
   threats: {
     name: 'Threats',
     placeholder: 'For example: are all news sources working?',
-    questions: ['How many threats affect us?', 'What is the most dangerous threat right now?'],
+    questions: ['How many threats apply to our devices?', 'What is the most serious threat right now?'],
   },
   threat: {
     name: 'Threat detail',
     placeholder: 'For example: what exactly should I do?',
-    questions: ['Which of our computers have this?', 'Are attackers using it right now?'],
+    questions: ['Which of our devices have this?', 'How serious is it?'],
   },
   hunts: {
     name: 'Attack detection',
     placeholder: 'For example: when did we last check?',
-    questions: ['Did we find any signs of an attacker?', 'Which computer had signs of attack?'],
+    questions: ['Did we find any signs of an attacker?', 'Which device had hunt matches?'],
   },
   weak: {
     name: 'Vulnerabilities',
@@ -65,7 +65,7 @@ export const SCREENS: Record<ScreenKey, Screen> = {
   },
   progress: {
     name: 'Remediation progress',
-    placeholder: 'For example: which computer has the most pending remediations?',
+    placeholder: 'For example: which device has the most pending remediations?',
     questions: ['How many remediations are complete?', 'Did any remediation fail?'],
   },
   respond: {
@@ -75,8 +75,8 @@ export const SCREENS: Record<ScreenKey, Screen> = {
   },
   case: {
     name: 'Incident',
-    placeholder: 'For example: how sure is the assistant?',
-    questions: ['What happened, in one line?', 'Which computer and account were involved?'],
+    placeholder: 'For example: how confident is the Alert Triage Agent?',
+    questions: ['What happened, in one line?', 'Which device and account were involved?'],
   },
   reports: {
     name: 'Reports',

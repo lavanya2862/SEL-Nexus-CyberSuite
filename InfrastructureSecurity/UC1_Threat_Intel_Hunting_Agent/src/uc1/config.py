@@ -89,7 +89,7 @@ class Settings:
     abusech_auth_key: str | None = field(default=None, repr=False)
     otx_api_key: str | None = field(default=None, repr=False)
     teams_webhook_url: str | None = field(default=None, repr=False)
-    kev_backfill_days: int = 30
+    cve_window_days: int = 30
     nvd_backfill_days: int = 3
     feed_backfill_days: int = 7
     hunt_lookback_days: int = 30
@@ -211,7 +211,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         abusech_auth_key=_env("ABUSECH_AUTH_KEY"),
         otx_api_key=_env("OTX_API_KEY"),
         teams_webhook_url=_env("TEAMS_WEBHOOK_URL"),
-        kev_backfill_days=_int("KEV_BACKFILL_DAYS", 30),
+        cve_window_days=_int("CVE_WINDOW_DAYS", 30),
         nvd_backfill_days=_int("NVD_BACKFILL_DAYS", 3),
         feed_backfill_days=_int("FEED_BACKFILL_DAYS", 7),
         hunt_lookback_days=min(30, _int("HUNT_LOOKBACK_DAYS", 30)),

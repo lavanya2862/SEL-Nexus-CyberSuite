@@ -7,7 +7,7 @@ interface ReportFile { name: string; size: number; modified: string | null }
 
 async function fetchReports(): Promise<{ uc1: ReportFile[]; uc3: ReportFile[]; uc4?: ReportFile[] }> {
   const res = await fetch('/api/reports')
-  if (!res.ok) throw new Error(`Portal API answered ${res.status}`)
+  if (!res.ok) throw new Error(`CyberSuite could not complete the request (error ${res.status})`)
   return res.json()
 }
 
@@ -26,7 +26,7 @@ function describe(name: string) {
   if (name.startsWith('Threat_Intel_Report')) return 'New threats from this run, applicable threats and agent remediation steps'
   if (name.startsWith('Attack_Detection_Report')) return 'Detections, evidence and agent resolution steps'
   if (name.startsWith('Alert_Triage_Report')) return 'Incidents triaged in this run, verdicts, evidence and actions'
-  if (name.startsWith('UC1_AI_Spotcheck')) return 'Worksheet for manual review of agent output'
+  if (name.startsWith('Threat_Intel_AI_Spotcheck') || name.startsWith('UC1_AI_Spotcheck')) return 'Worksheet for manual review of agent output'
   return 'Report file'
 }
 

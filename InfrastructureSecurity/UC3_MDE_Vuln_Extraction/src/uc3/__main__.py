@@ -73,11 +73,11 @@ def cmd_check(_args: argparse.Namespace) -> int:
     if settings is not None:
         keys = len(settings.gemini_keys)
         if settings.ai_provider == "azure":
-            record("OK", "AI (optional)", f"Azure AI Foundry deployment {settings.azure_deployment} - AI fix guide on")
+            record("OK", "AI (optional)", f"Azure AI Foundry deployment {settings.azure_deployment} - AI remediation guide on")
         else:
             record("OK" if keys else "WARN", "Gemini key (optional)",
-                   (f"{keys} keys set - AI fix guide on, the next key takes over when one runs out" if keys > 1
-                    else "set - AI fix guide on") if keys
+                   (f"{keys} keys set - AI remediation guide on, the next key takes over when one runs out" if keys > 1
+                    else "set - AI remediation guide on") if keys
                    else "no AI set (AZURE_FOUNDRY_* or GEMINI_API_KEY) - fix cards without AI text")
 
     from uc3.docstyle import pdf_converter
@@ -211,8 +211,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         removed = {k: v for k, v in result["retention"].items() if v}
         print(f"  Old files removed: {removed or 'none'}")
         fix = result.get("fix")
-        print(f"  Fix stage: {fix['new']} new fixes proposed, waiting for a person to approve them on the run page"
-              if fix else "  Fix stage: skipped (see the log)")
+        print(f"  Remediation stage: {fix['new']} new remediations proposed, awaiting approval on the run page"
+              if fix else "  Remediation stage: skipped (see the log)")
     else:
         print("Publishing SKIPPED because a quality check failed; the dashboard shows the last good data with a red alert.")
         log.error("Publishing skipped: quality FAIL")
@@ -221,15 +221,13 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def _print_publish(published: dict) -> None:
-    kev = published["kev"]
-    print(f"Published {len(published['tables'])} reporting tables to data/reporting/ "
-          f"(CISA KEV: {kev['entries']:,} entries, {kev['status']})")
-    print(f"  Portal data   : {published['dashboard']}")
+    print(f"Published {len(published['tables'])} reporting tables to data/reporting/")
+    print(f"  CyberSuite data: {published['dashboard']}")
     print(f"  Excel report  : {published['excel']}")
     print(f"  Word report   : {published['report']['docx']}")
     print(f"  PDF report    : {published['report']['pdf'] or 'not made (Microsoft Word not installed)'}")
     fixes = published.get("ai_fixes")
-    print(f"  AI fix guide  : " + (f"{fixes['apps']} apps, {fixes['ai']} explained by AI ({fixes['asked']} asked now)"
+    print(f"  AI remediation guide: " + (f"{fixes['apps']} apps, {fixes['ai']} explained by AI ({fixes['asked']} asked now)"
                                    if fixes else "not updated (see log)"))
 
 
@@ -252,8 +250,8 @@ def cmd_ai_fixes(args: argparse.Namespace) -> int:
     _logging(settings)
     result = build_fixes(settings, use_ai=not args.no_ai, force=args.force)
     c = result["counts"]
-    print(f"\nAI fix guide for snapshot {result['snapshot']}: {c['apps']} apps + {c.get('settings', 0)} security settings")
-    print("  Fix types    : " + ", ".join(f"{t} {n}" for t, n in c.get("by_fix_type", {}).items()))
+    print(f"\nAI remediation guide for snapshot {result['snapshot']}: {c['apps']} apps + {c.get('settings', 0)} security settings")
+    print("  Remediation types: " + ", ".join(f"{t} {n}" for t, n in c.get("by_fix_type", {}).items()))
     print(f"  AI explained : {c['ai']}  (asked now {c['asked']}, unchanged from cache {c['reused']})")
     print(f"  Data only    : {c['rules']}" + (f"  - {result['ai_message']}" if result["ai_message"] else ""))
     print(f"  Fact check   : {c['corrections']} AI sentence(s) removed because they were not backed by the data")
@@ -261,7 +259,7 @@ def cmd_ai_fixes(args: argparse.Namespace) -> int:
     for i, a in enumerate(result["apps"], 1):
         print(f"  {i:>2}. [{a['urgency']['label']}] {a['app']} ({', '.join(v['version'] for v in a['versions'])}): "
               f"{a['cves']} CVEs, {len(a['devices'])} device(s) - {a['source']}")
-    print(f"\n  Portal data   : {build_dashboard(settings)}  (the portal's Fix page)")
+    print(f"\n  CyberSuite data: {build_dashboard(settings)}  (CyberSuite's Remediation page)")
     print(f"  Excel summary : {build_excel(settings)}  (sheet 'Remediation plan (AI)')")
     return 0
 
@@ -332,10 +330,10 @@ def main(argv: list[str] | None = None) -> int:
                              help="run date YYYY-MM-DD (default: today for extract/run, latest download otherwise)")
         command.set_defaults(func=func)
     sub.add_parser("summary", help="short overview of the latest data").set_defaults(func=cmd_summary)
-    sub.add_parser("publish", help="reporting tables + portal data + Excel summary + report").set_defaults(func=cmd_publish)
+    sub.add_parser("publish", help="reporting tables + CyberSuite data + Excel summary + report").set_defaults(func=cmd_publish)
     sub.add_parser("demo-limit", help="measure the KQL 100,000-row limit on the real API").set_defaults(func=cmd_demo_limit)
     sub.add_parser("metrics", help="before/after table for the client's six metrics").set_defaults(func=cmd_metrics)
-    fixes = sub.add_parser("ai-fixes", help="AI fix guide for every vulnerable app, then rebuild the portal data + Excel")
+    fixes = sub.add_parser("ai-fixes", help="AI remediation guide for every vulnerable app, then rebuild the CyberSuite data + Excel")
     fixes.add_argument("--force", action="store_true", help="ask the AI again for every app (ignore the cache)")
     fixes.add_argument("--no-ai", action="store_true", help="data-based cards only, no AI calls")
     fixes.set_defaults(func=cmd_ai_fixes)

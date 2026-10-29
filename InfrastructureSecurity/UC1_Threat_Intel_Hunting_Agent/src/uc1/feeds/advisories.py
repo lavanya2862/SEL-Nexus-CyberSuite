@@ -58,7 +58,7 @@ def _threat_value(vuln: dict, kind: int) -> str:
 
 
 def parse_msrc(doc: dict) -> dict:
-    """Summarise one monthly CVRF document: exploited / publicly disclosed / critical CVEs."""
+    """Summarise one monthly CVRF document: publicly disclosed / critical CVEs."""
     title = doc.get("DocumentTitle", {}).get("Value", "Microsoft security updates")
     rows = []
     for v in doc.get("Vulnerability", []):
@@ -69,20 +69,20 @@ def parse_msrc(doc: dict) -> dict:
         severity = _threat_value(v, 3)
         scores = [s.get("BaseScore") for s in v.get("CVSSScoreSets", []) if s.get("BaseScore")]
         rows.append({"cve": cve, "title": v.get("Title", {}).get("Value", ""), "severity": severity,
-                     "exploited": "Exploited:Yes" in status, "disclosed": "Publicly Disclosed:Yes" in status,
+                     "disclosed": "Publicly Disclosed:Yes" in status,
                      "cvss": max(scores) if scores else None})
     return {"title": title, "rows": rows}
 
 
 def msrc_threats(month_id: str, url: str, summary: dict, released) -> list[dict]:
     rows = summary["rows"]
-    important = [r for r in rows if r["exploited"] or r["disclosed"] or r["severity"] == "Critical"]
+    important = [r for r in rows if r["disclosed"] or r["severity"] == "Critical"]
     threats = []
     for r in rows:
-        if r["exploited"] or r["disclosed"]:
-            state = "exploited in the wild" if r["exploited"] else "publicly disclosed before a fix"
+        if r["disclosed"]:
+            state = "publicly disclosed before a security update"
             text = (f"Microsoft {summary['title']}: {r['cve']} {r['title']}. Severity {r['severity'] or 'n/a'}, "
-                    f"CVSS {r['cvss'] or 'n/a'}. Microsoft marks this vulnerability as {state}. "
+                    f"CVSS {r['cvss'] or 'n/a'}. This vulnerability is {state}. "
                     f"Install the {month_id} security updates.")
             threats.append({"threat_id": f"msrc:{r['cve']}", "source": "Microsoft MSRC", "kind": "advisory",
                             "title": f"Microsoft {month_id}: {r['cve']} {state}", "text": text,
@@ -90,7 +90,7 @@ def msrc_threats(month_id: str, url: str, summary: dict, released) -> list[dict]
                             "published_at": released, "content_hash": content_hash(text), "cves": [r["cve"]]})
     crit = [r for r in rows if r["severity"] == "Critical"]
     text = (f"{summary['title']}: {len(rows)} vulnerabilities fixed, {len(crit)} rated Critical, "
-            f"{sum(r['exploited'] for r in rows)} exploited in the wild, {sum(r['disclosed'] for r in rows)} publicly "
+            f"{sum(r['disclosed'] for r in rows)} publicly "
             f"disclosed. Critical: " + "; ".join(f"{r['cve']} {r['title']}" for r in crit[:40]))
     threats.append({"threat_id": f"msrc:{month_id}", "source": "Microsoft MSRC", "kind": "advisory",
                     "title": summary["title"], "text": text[:20000], "url": url, "published_at": released,

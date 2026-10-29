@@ -9,6 +9,7 @@ import ReactECharts from 'echarts-for-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { fetchSummary, type Health, type Summary } from '@/lib/api'
 import { PRIORITY } from '@/lib/uc3'
+import { qualityWord } from '@/lib/format'
 import { useFilters, type WorkTab } from '@/lib/filters'
 import { ago, dateTime, num, shortDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -27,8 +28,8 @@ export function GlassHome() {
   if (error || !data)
     return (
       <div className="glass-panel p-6">
-        <h2 className="font-semibold">The portal API is not answering</h2>
-        <p className="mt-1 text-sm text-[var(--g-ink-3)]">{String(error ?? 'No data')}. Start it with `python -m portal serve`, then reload.</p>
+        <h2 className="font-semibold">CyberSuite is not available</h2>
+        <p className="mt-1 text-sm text-[var(--g-ink-3)]">{String(error ?? 'No data')}. Reload the page; if this continues, contact your administrator.</p>
       </div>
     )
   return <GlassView s={data} />
@@ -40,7 +41,7 @@ function GlassView({ s }: { s: Summary }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-4 px-1 pt-2">
         <div>
-          <h1 className="text-[26px] font-semibold tracking-tight">Security overview</h1>
+          <h1 className="text-[26px] font-semibold tracking-tight">Summary</h1>
           <p className="mt-1 text-sm text-[var(--g-ink-3)]">
             {v.opco === 'all' ? 'All VMs' : v.opco} · Defender vulnerabilities  and threat intelligence 
           </p>
@@ -112,7 +113,7 @@ function HealthPill({ h }: { h: Health }) {
           <span className="text-[var(--g-ink-3)]">{st.label} · {ago(h.data_as_of)}</span>
         </span>
       </TooltipTrigger>
-      <TooltipContent className={glassTip}>{h.name}: data as of {dateTime(h.data_as_of)}{h.quality ? ` · quality ${h.quality}` : ''}</TooltipContent>
+      <TooltipContent className={glassTip}>{h.name}: data as of {dateTime(h.data_as_of)}{h.quality ? ` · quality ${qualityWord(h.quality)}` : ''}</TooltipContent>
     </Tooltip>
   )
 }
@@ -233,7 +234,7 @@ function Radar() {
 
 function EmberCta({ v }: { v: View }) {
   const { setWorkTab } = useFilters()
-  const kevFixes = v.fixes.filter((f) => f.urgency_level === 1)
+  const topFixes = v.fixes.filter((f) => f.urgency_level === 1)
   const go = () => {
     setWorkTab('fixes')
     document.getElementById('work')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -243,19 +244,19 @@ function EmberCta({ v }: { v: View }) {
       <Radar />
       <div className="relative flex h-full flex-col">
         <h3 className="text-[22px] font-semibold leading-tight tracking-tight">
-          {kevFixes.length} updates remediate every high-priority vulnerability
+          {topFixes.length} updates remediate every high-priority vulnerability
         </h3>
         <p className="mt-2 max-w-[24ch] text-sm text-[#2b1309]/80">
-          These apps are marked High priority. Updating them takes the list to zero.
+          These apps are High priority. Updating them remediates every high-priority vulnerability.
         </p>
         <div className="mt-4 flex -space-x-2">
-          {kevFixes.slice(0, 4).map((f) => (
+          {topFixes.slice(0, 4).map((f) => (
             <span key={f.rank} title={f.app} className="grid size-8 place-items-center rounded-full border-2 border-[#f07a32] bg-[#2a120a] text-[11px] font-semibold text-[#ffd9c2]">
               {shortApp(f.app).slice(0, 2)}
             </span>
           ))}
-          {kevFixes.length > 4 && (
-            <span className="grid size-8 place-items-center rounded-full border-2 border-[#f07a32] bg-[#ffe9dc] text-[11px] font-semibold">+{kevFixes.length - 4}</span>
+          {topFixes.length > 4 && (
+            <span className="grid size-8 place-items-center rounded-full border-2 border-[#f07a32] bg-[#ffe9dc] text-[11px] font-semibold">+{topFixes.length - 4}</span>
           )}
         </div>
         <div className="flex-1" />
@@ -331,7 +332,7 @@ function ExposureColumn({ v }: { v: View }) {
           <ArrowDownRight className="size-4" /> Remediation plan
         </button>
         <Link to="/glass/uc3" className="glass-btn-ember flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold">
-          <ArrowUpRight className="size-4" /> Open the assistant
+          <ArrowUpRight className="size-4" /> Open Vulnerabilities
         </Link>
       </div>
 
@@ -443,7 +444,7 @@ function Fixes({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'grid' 
     )
   return (
     <>
-      <GTable head={[['#', 'left'], ['App', 'left'], ['Priority', 'left'], ['CVEs', 'right'], ['Devices', 'right'], ['Remediation', 'left']]}>
+      <GTable head={[['#', 'left'], ['App', 'left'], ['Remediation priority', 'left'], ['CVEs', 'right'], ['Devices', 'right'], ['Remediation', 'left']]}>
         {v.fixes.map((f) => (
           <tr key={f.rank} className="glass-row">
             <td className="tabular w-10 text-[var(--g-ink-3)]">{f.rank}</td>
@@ -455,31 +456,30 @@ function Fixes({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'grid' 
           </tr>
         ))}
       </GTable>
-      {s.uc3.ai_fixes?.model && <p className="mt-3 text-xs text-[var(--g-ink-3)]">Remediation guidance generated by AI and checked against Defender data. Review before acting.</p>}
+      {s.uc3.ai_fixes?.model && <p className="mt-3 text-xs text-[var(--g-ink-3)]">Agent-generated remediation guidance, validated against Defender data. Review before acting.</p>}
     </>
   )
 }
 
 function Threats({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
-  const title = (t: string) => t.replace(/^(Actively exploited|CISA alert): /, '')
   if (layout === 'grid')
     return (
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {v.threats.map((t) => (
           <Tile key={t.id}>
-            <div className="flex items-start justify-between gap-3"><div className="text-sm font-medium leading-snug">{title(t.title)}</div><span className="tabular font-semibold text-[var(--g-ember-hi)]">{t.score}</span></div>
+            <div className="flex items-start justify-between gap-3"><div className="text-sm font-medium leading-snug">{t.title}</div><span className="tabular font-semibold text-[var(--g-ember-hi)]">{t.score}</span></div>
             <p className="mt-2 line-clamp-3 text-xs text-[var(--g-ink-3)]">{t.summary}</p>
           </Tile>
         ))}
       </div>
     )
   return (
-    <GTable head={[['Score', 'left'], ['Threat', 'left'], ['Source', 'left'], ['Devices exposed', 'left'], ['Action', 'left']]}>
+    <GTable head={[['Score', 'left'], ['Threat', 'left'], ['Source', 'left'], ['Exposed devices', 'left'], ['Action', 'left']]}>
       {v.threats.map((t) => (
         <tr key={t.id} className="glass-row">
           <td className="tabular w-16 font-semibold" style={{ color: t.score >= 90 ? 'var(--g-ember-hi)' : '#e9b44c' }}>{t.score}</td>
           <td className="max-w-[320px]">
-            <div className="font-medium leading-snug">{title(t.title)}</div>
+            <div className="font-medium leading-snug">{t.title}</div>
             <div className="mt-1.5 flex flex-wrap gap-1">{(t.chips ?? []).slice(1, 4).map((c) => <span key={c} className="rounded-full border border-[var(--g-line)] px-2 py-0.5 text-[11px] text-[var(--g-ink-2)]">{c}</span>)}</div>
           </td>
           <td className="whitespace-nowrap text-[var(--g-ink-2)]">
@@ -503,7 +503,7 @@ function Devices({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
             <div className="font-medium">{d.name}</div>
             <div className="text-xs text-[var(--g-ink-3)]">last seen {seen(d.last_seen)}</div>
             <div className="mt-3 grid grid-cols-3 text-sm">
-              {([[d.findings, 'findings'], [d.p1, 'priority 1'], [d.threats_exposed, 'threats']] as const).map(([n, l]) => (
+              {([[d.findings, 'findings'], [d.p1, 'P1'], [d.threats_exposed, 'threats']] as const).map(([n, l]) => (
                 <div key={l}><div className="tabular font-medium">{num(n)}</div><div className="text-xs text-[var(--g-ink-3)]">{l}</div></div>
               ))}
             </div>
@@ -512,7 +512,7 @@ function Devices({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
       </div>
     )
   return (
-    <GTable head={[['Device', 'left'], ['Findings', 'right'], ['Priority 1', 'right'], ['Threats exposed', 'right'], ['Hunt hits', 'right'], ['Last seen', 'left']]}>
+    <GTable head={[['Device', 'left'], ['Findings', 'right'], ['P1', 'right'], ['Applicable threats', 'right'], ['Hunt matches', 'right'], ['Last seen', 'left']]}>
       {v.devices.map((d) => (
         <tr key={d.name} className="glass-row">
           <td className="font-medium">{d.name}</td>
@@ -581,10 +581,10 @@ function Uc1Panel({ s }: { s: Summary }) {
   const names = Object.keys(series)
   return (
     <Card className="flex flex-col gap-5">
-      <PipeHead tag="the assistant" tone="#9085e9" title="Threat Intel & Hunting" h={s.health.find((h) => h.key === 'uc1')} />
+      <PipeHead tag="Agent" tone="#9085e9" title="Threat Intel Agent" h={s.health.find((h) => h.key === 'uc1')} />
       <div className="grid grid-cols-3 gap-3">
         <Stat value={num(u.new_threats)} label="threats (30 days)" />
-        <Stat value={num(u.affecting)} label="affect our devices" />
+        <Stat value={num(u.affecting)} label="applicable to managed devices" />
         <Stat value={num(u.urgent)} label="high priority, remediate first" />
       </div>
       <div>
@@ -604,7 +604,7 @@ function Uc1Panel({ s }: { s: Summary }) {
           }}
         />
       </div>
-      <PipeActions to="/glass/uc1" tag="the assistant" />
+      <PipeActions to="/glass/uc1" tag="Threat Intel Agent" />
     </Card>
   )
 }
@@ -619,16 +619,16 @@ function Uc3Panel({ s }: { s: Summary }) {
   }
   return (
     <Card className="flex flex-col gap-5">
-      <PipeHead tag="the assistant" tone="#3d8fe8" title="Vulnerability Extraction" h={h} />
+      <PipeHead tag="Agent" tone="#3d8fe8" title="Vulnerability Agent" h={h} />
       <div className="grid grid-cols-3 gap-3">
-        <Stat value={num(h?.vulnerabilities ?? h?.rows)} label="vulnerabilities in Defender" />
+        <Stat value={num(h?.vulnerabilities ?? h?.rows)} label="findings in Defender" />
         <Stat value={`${Math.round((h?.coverage ?? 0) * 100)}%`} label="coverage" />
-        <Stat value={num(s.uc3.totals.cves)} label="different CVEs" />
+        <Stat value={num(s.uc3.totals.cves)} label="unique CVEs" />
       </div>
       <div>
         <div className="flex items-center justify-between text-xs text-[var(--g-ink-3)]">
           <span className="text-sm font-medium text-[var(--g-ink)]">Data quality</span>
-          <span>{passed} of {q.length} passed · {h?.quality ?? '–'}</span>
+          <span>{passed} of {q.length} passed · {qualityWord(h?.quality)}</span>
         </div>
         <ul className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
           {q.slice(0, 8).map((c) => {
@@ -646,7 +646,7 @@ function Uc3Panel({ s }: { s: Summary }) {
           })}
         </ul>
       </div>
-      <div className="mt-auto"><PipeActions to="/glass/uc3" tag="the assistant" /></div>
+      <div className="mt-auto"><PipeActions to="/glass/uc3" tag="Vulnerability Agent" /></div>
     </Card>
   )
 }

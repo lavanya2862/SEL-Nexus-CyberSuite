@@ -137,7 +137,7 @@ def setting_items(store: Store, settings: Settings, catalog: dict[str, dict] | N
                 "app": (cat or {}).get("name") or r["name"] or r["config_id"], "category": r["category"],
                 "subcategory": r["subcategory"], "impact": r["impact"],
                 "fix_id": fix_id(r["device_name"], f"setting:{r['config_id']}", ""),
-                "findings": 0, "cves": 0, "kev": 0, "ransomware": 0, "max_epss": 0, "max_cvss": 0, "kev_cves": [],
+                "findings": 0, "cves": 0, "max_epss": 0, "max_cvss": 0,
                 "winget_id": "", "choco_id": "", "match": "", "processes": [], "stage": SETTING_STAGE,
                 "snapshot_at": r["snapshot_at"].isoformat() if isinstance(r["snapshot_at"], datetime) else r["snapshot_at"]}
         if cat:
@@ -146,7 +146,7 @@ def setting_items(store: Store, settings: Settings, catalog: dict[str, dict] | N
         else:
             # not in config/setting_fix_catalog.csv (add a row there to make it fixable)
             item.update(action="none", stage=4, note="Needs an IT person: changing it on one computer could lock "
-                                                     "people out, so the portal leaves it alone")
+                                                     "people out, so CyberSuite leaves it alone")
         items.append(item)
     return items
 
@@ -176,7 +176,7 @@ def response_items(store: Store, settings: Settings, limit_devices: bool = True)
             "device_id": r["device_id"], "device_name": r["device_name"], "opco": r["opco"], "kind": "response",
             "software_name": f"response:{r['finding_id']}", "finding_id": r["finding_id"], "vendor": "", "version": "",
             "app": r["detail"] or sign, "fix_id": fix_id(r["device_name"], f"response:{r['finding_id']}", ""),
-            "findings": 0, "cves": 0, "kev": 0, "ransomware": 0, "max_epss": 0, "max_cvss": 0, "kev_cves": [],
+            "findings": 0, "cves": 0, "max_epss": 0, "max_cvss": 0,
             "winget_id": "", "choco_id": "", "match": "", "processes": [], "stage": RESPONSE_STAGE, "action": "respond",
             "category": sign + (" (test)" if r["is_test"] else ""), "note": evidence,
             "snapshot_at": r["created_at"].isoformat() if isinstance(r["created_at"], datetime) else r["created_at"]})
@@ -206,10 +206,7 @@ def compute(store: Store, settings: Settings, catalog: dict[str, dict] | None = 
     rows = store.query("""
         SELECT v.device_id, v.device_name, COALESCE(d.opco, 'Unassigned') AS opco, v.name AS software_name,
                v.vendor, v.version, COUNT(*) AS findings, COUNT(DISTINCT v.cve_id) AS cves,
-               COUNT(DISTINCT CASE WHEN c.kev_added IS NOT NULL THEN v.cve_id END) AS kev,
-               COUNT(DISTINCT CASE WHEN c.kev_ransomware = 'Known' THEN v.cve_id END) AS ransomware,
                MAX(COALESCE(c.epss, 0)) AS max_epss, MAX(COALESCE(v.cvss, c.cvss, 0)) AS max_cvss,
-               LIST(DISTINCT CASE WHEN c.kev_added IS NOT NULL THEN v.cve_id END) AS kev_cves,
                MAX(v.snapshot_at) AS snapshot_at
         FROM device_vulns v LEFT JOIN cves c ON c.cve_id = v.cve_id LEFT JOIN devices d ON d.device_id = v.device_id
         GROUP BY ALL""")
@@ -219,7 +216,7 @@ def compute(store: Store, settings: Settings, catalog: dict[str, dict] | None = 
             continue
         cat = catalog.get(r["software_name"].lower())
         item = {**r, "fix_id": fix_id(r["device_name"], r["software_name"], r["version"]),
-                "kev_cves": sorted(c for c in (r["kev_cves"] or []) if c), "max_epss": round(r["max_epss"] or 0, 3),
+                "max_epss": round(r["max_epss"] or 0, 3),
                 "snapshot_at": r["snapshot_at"].isoformat() if isinstance(r["snapshot_at"], datetime) else r["snapshot_at"]}
         if cat:
             item.update(app=cat.get("app") or r["software_name"], action=cat["action"], winget_id=cat.get("winget_id", ""),
@@ -228,15 +225,13 @@ def compute(store: Store, settings: Settings, catalog: dict[str, dict] | None = 
         else:
             item.update(app=r["software_name"], action="none", winget_id="", choco_id="", match="", processes=[],
                         stage=4, note="No remediation defined yet: add a row to config/fix_catalog.csv to enable automated remediation")
-        if item["action"] != "none" and item["kev"] and item["stage"] > 1:
-            item["stage"] = 1                                     # anything on the CISA KEV list is urgent
         items.append(item)
     threats = threats_by_fix(store)
     for item in items:
         item["threats"] = threats.get((item["device_id"], item["software_name"], item["version"]), [])
     items += setting_items(store, settings, setting_catalog, limit_devices)
     items += response_items(store, settings, limit_devices)
-    items.sort(key=lambda i: (i["stage"], -i["ransomware"], -i["kev"], -i["findings"], i["device_name"]))
+    items.sort(key=lambda i: (i["stage"], -i["findings"], i["device_name"]))
     return items
 
 
@@ -378,7 +373,7 @@ def refresh(store: Store, settings: Settings, source: str | None = None) -> dict
     (settings.fix_dir / "plan.json").write_text(json.dumps(plan, default=str, ensure_ascii=False), encoding="utf-8")
     waiting = sum(1 for i in fixable if i["fix_id"] not in decided and i["fix_id"] not in new_ids)
     saved = sum(1 for f in decided.values() if f.get("status") == "saved")
-    return {"items": len(items), "fixable": len(fixable), "urgent": sum(1 for i in fixable if i["stage"] == 1),
+    return {"items": len(items), "fixable": len(fixable), "high_priority": sum(1 for i in fixable if i["stage"] == 1),
             "new": len(new_ids), "new_ids": new_ids[:200], "waiting": waiting, "saved": saved,
             # earlier fixes with new vulnerabilities from this run, most added first
             "grew": dict(sorted(grew.items(), key=lambda kv: -kv[1])[:200]), "grew_vulns": sum(grew.values()),
@@ -413,16 +408,14 @@ def view(settings: Settings) -> dict:
             "rows": rows, "totals": total, "events": data["events"][-60:][::-1], "probes": data.get("probes", {}),
             "default_method": settings.fix_method,
             "impact": {"findings_open": sum(r["findings"] for r in rows if r["status"] not in ("verified", "gone")),
-                       "findings_cleared": sum(r["findings"] for r in fixed),
-                       "kev_cleared": sum(r["kev"] for r in fixed),
-                       "kev_open": sum(r["kev"] for r in rows if r["status"] not in ("verified", "gone"))}}
+                       "findings_cleared": sum(r["findings"] for r in fixed)}}
 
 
 def _row(item: dict, f: dict) -> dict:
     status = f.get("status") or ("info" if item.get("action") == "none" else "proposed")
     return {**{k: item.get(k) for k in ("fix_id", "device_name", "opco", "app", "software_name", "version", "action",
-                                        "winget_id", "stage", "findings", "cves", "kev", "ransomware", "max_epss",
-                                        "kev_cves", "note", "kind", "config_id", "category", "subcategory", "impact",
+                                        "winget_id", "stage", "findings", "cves", "max_epss",
+                                        "note", "kind", "config_id", "category", "subcategory", "impact",
                                         "found_by", "threats",
                                         "setting_kind", "setting_target", "setting_value")},
             "status": status, **{k: f.get(k) for k in ("method", "approved_by", "approved_at", "saved_by", "saved_at",

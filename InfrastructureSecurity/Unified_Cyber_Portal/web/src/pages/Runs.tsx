@@ -73,8 +73,8 @@ export function Runs() {
         <div className="flex items-start gap-3 rounded-xl border px-4 py-3 text-sm animate-in fade-in" style={{ borderColor: statusColor.warning }}>
           <WifiOff className="mt-0.5 size-4 shrink-0" style={{ color: statusColor.warning }} />
           <span>
-            <b>Connection to the portal service was lost.</b> A run keeps going in the background and is recorded; this page catches up as soon as the
-            portal answers again. The timer is paused until then.
+            <b>Connection to CyberSuite was lost.</b> A run keeps going in the background and is recorded; this page catches up as soon as the
+            connection returns. The timer is paused until then.
           </span>
         </div>
       )}
@@ -144,7 +144,7 @@ function StatusHeadline({ run, uc, elapsed, running, current, total, offline, wa
   if (running && run) {
     icon = <span className="relative grid size-5 place-items-center"><span className="absolute size-5 animate-ping rounded-full bg-sky/40" /><span className="size-2.5 rounded-full bg-sky" /></span>
     title = current >= 0 ? `Step ${current + 1} of ${total}: ${run.steps[current].label}` : 'Starting…'
-    sub = `Started ${dateTime(run.started_at)} · ${fmtSeconds(elapsed)} so far${offline ? ' (paused: portal service unavailable)' : ''} · ${typical}`
+    sub = `Started ${dateTime(run.started_at)} · ${fmtSeconds(elapsed)} so far${offline ? ' (paused: CyberSuite unavailable)' : ''} · ${typical}`
   } else if (running) {
     title = 'Starting…'
   } else if (run) {
@@ -288,7 +288,7 @@ function ResultPanel({ run, uc, seconds }: { run: RunState; uc: UcKey; seconds: 
               {good ? 'What this run found' : run.status === 'skipped' ? 'Nothing was run' : 'Why it stopped'}
             </h2>
             <p className="mt-1 text-sm text-ink-3">
-              {good ? `${UC_NAME[uc]} finished in ${fmtSeconds(seconds)}. Every page in the portal now shows these results.` : run.message}
+              {good ? `${UC_NAME[uc]} finished in ${fmtSeconds(seconds)}. Every page in CyberSuite now shows these results.` : run.message}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -297,7 +297,7 @@ function ResultPanel({ run, uc, seconds }: { run: RunState; uc: UcKey; seconds: 
                 {target.label} <ArrowRight className="size-4" />
               </Link>
             )}
-            <Link to="/" className="inline-flex items-center gap-2 rounded-xl border border-hairline px-4 py-2.5 text-sm font-medium hover:bg-well">Open the Dashboard</Link>
+            <Link to="/" className="inline-flex items-center gap-2 rounded-xl border border-hairline px-4 py-2.5 text-sm font-medium hover:bg-well">Open the Summary</Link>
             <ReportButton run={run} />
           </div>
         </div>
@@ -355,7 +355,7 @@ function ReportButton({ run }: { run: RunState }) {
 }
 
 const FINDING_KIND = {
-  threat: { label: 'Threat affecting us', icon: ShieldAlert },
+  threat: { label: 'Applicable threat', icon: ShieldAlert },
   attack: { label: 'Detection', icon: Radar },
   alert: { label: 'Alert sent', icon: BellRing },
 } as const
@@ -405,6 +405,21 @@ function Findings({ items }: { items: RunFinding[] }) {
 type LogFilter = 'all' | 'steps' | 'problems'
 const STEP_RE = /Step \w+ (ok|failed|skipped)|uc3\.pipeline:|Daily run finished|Run started/
 const PROBLEM_RE = /WARNING|ERROR|FAILED|Traceback|failed|Error/
+/** The pipelines' internal step names, as people read them in the live log */
+const STEP_LABEL: Record<string, string> = {
+  collect: 'Collect threat intelligence', inventory: 'Defender inventory', derive: 'Match new CVEs', nvd_details: 'CVE details (NVD)',
+  epss: 'Exploit probability (EPSS)', products: 'Product matching', analyse: 'Threat analysis', exposure: 'Exposure assessment',
+  score: 'Risk scoring', rescore: 'Risk scoring', correlate: 'Evidence correlation', fix_advice: 'Remediation steps',
+  resolve: 'Resolution steps', alerts: 'Alerts', report: 'Report', dashboard: 'CyberSuite data', metrics: 'Metrics',
+  fix_plan: 'Remediation plan', hunt: 'Threat hunts', feedback: 'Analyst feedback', ingest: 'Incident ingestion',
+  triage: 'Triage', auto_resolve: 'Automated handling', respond: 'Response actions', defender_view: 'Defender view',
+  writeback: 'Defender comments', actions: 'Actions', ledger: 'Lab ledger', accuracy: 'Accuracy', export: 'Export',
+}
+/** One log line in plain words: step names spelled out, local folders reduced to the file name */
+const readable = (s: string) => s
+  .replace(/[A-Z]:(?:\\{1,2}[^\\'",}\s]+)+/g, (p) => p.split(/\\+/).pop() ?? p)
+  .replace(/\bStep (\w+) (ok|failed|skipped)\b/, (_, k: string, st: string) => `${STEP_LABEL[k] ?? k}: ${st === 'ok' ? 'completed' : st}`)
+  .replace(/^(\s+)(\w+)(\s+)(ok|failed|skipped)(\s)/, (all, a: string, k: string, b: string, st: string, c: string) => (STEP_LABEL[k] ? `${a}${STEP_LABEL[k]}${b}${st}${c}` : all))
 
 function LogPanel({ uc, run, live }: { uc: UcKey; run: RunState | null; live: boolean }) {
   const [lines, setLines] = useState<string[]>([])
@@ -469,7 +484,7 @@ function LogPanel({ uc, run, live }: { uc: UcKey; run: RunState | null; live: bo
 
 function LogLine({ line }: { line: string }) {
   const m = line.match(/^(\d{4}-\d{2}-\d{2} )?(\d{2}:\d{2}:\d{2})(?:[,.]\d+)? (\w+) ([\w.]+): (.*)$/)
-  if (!m) return <div className="whitespace-pre-wrap break-words text-[#8b949e]">{line}</div>
+  if (!m) return <div className="whitespace-pre-wrap break-words text-[#8b949e]">{readable(line)}</div>
   const [, , time, level, source, msg] = m
   const step = /Step \w+ ok/.test(msg)
   const color = level === 'ERROR' || /failed/.test(msg) ? '#ff7b72' : level === 'WARNING' ? '#e3b341' : step ? '#7ee787' : '#c9ced6'
@@ -477,7 +492,7 @@ function LogLine({ line }: { line: string }) {
     <div className="whitespace-pre-wrap break-words">
       <span className="text-[#6e7681]">{time}</span>{' '}
       <span className="text-[#79c0ff]">{source.replace(/^uc\d\./, '')}</span>{' '}
-      <span style={{ color }}>{step ? '✓ ' : ''}{msg}</span>
+      <span style={{ color }}>{step ? '✓ ' : ''}{readable(msg)}</span>
     </div>
   )
 }
@@ -495,7 +510,7 @@ function History({ uc }: { uc: UcKey }) {
   const color = { ok: statusColor.good, partial: statusColor.warning, skipped: statusColor.warning, failed: statusColor.critical, running: 'var(--sky)' } as const
   return (
     <Panel className="flex flex-col p-5 xl:col-span-4">
-      <h3 className="font-semibold tracking-tight">Recent runs from the portal</h3>
+      <h3 className="font-semibold tracking-tight">Recent runs from CyberSuite</h3>
       <p className="mt-1 text-xs text-ink-3">Scheduled runs are listed in each agent’s own log.</p>
       <ul className="mt-4 flex flex-col divide-y divide-hairline">
         {rows.length ? rows.map((r) => {
@@ -508,7 +523,7 @@ function History({ uc }: { uc: UcKey }) {
               <span className="tabular text-xs text-ink-3">{secs != null ? fmtSeconds(secs) : r.status === 'running' ? 'running' : '–'}</span>
             </li>
           )
-        }) : <li className="py-3 text-sm text-ink-3">No runs started from the portal yet.</li>}
+        }) : <li className="py-3 text-sm text-ink-3">No runs started from CyberSuite yet.</li>}
       </ul>
     </Panel>
   )

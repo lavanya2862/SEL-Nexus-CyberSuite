@@ -264,7 +264,7 @@ class _Handler(BaseHTTPRequestHandler):
 def serve(settings: Settings, port: int = DEFAULT_PORT) -> None:
     settings.ensure_dirs()
     server = Site(("127.0.0.1", port), settings)
-    print(f"Alert Triage Agent service on http://127.0.0.1:{server.server_address[1]}/api (this computer only). "
+    print(f"Alert Triage Agent service on http://127.0.0.1:{server.server_address[1]}/api (local access only). "
           "Keep this window open; Ctrl+C stops it.", flush=True)
     try:
         server.serve_forever()

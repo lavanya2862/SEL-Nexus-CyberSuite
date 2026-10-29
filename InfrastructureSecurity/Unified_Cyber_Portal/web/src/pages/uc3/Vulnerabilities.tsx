@@ -15,7 +15,7 @@ import { DataQuality } from './DataQuality'
 
 type Tab = 'overview' | 'all' | 'age' | 'trends' | 'computers' | 'quality'
 const TABS: [Tab, string][] = [
-  ['overview', 'Overview'], ['all', 'All vulnerabilities'], ['age', 'Age & SLA'], ['trends', 'Trends'], ['computers', 'Computers'], ['quality', 'Data quality'],
+  ['overview', 'Overview'], ['all', 'All vulnerabilities'], ['age', 'Age & SLA'], ['trends', 'Trends'], ['computers', 'Devices'], ['quality', 'Data quality'],
 ]
 const OLD_TABS: Record<string, Tab> = { opco: 'computers', devices: 'computers', risks: 'all' }   // old addresses still land somewhere
 
@@ -103,7 +103,7 @@ function Overview({ data, v }: { data: Uc3Data; v: Uc3View }) {
       <div className="card-row gap-4 [--card-min:150px]">
         <Kpi hue="blue" label="Open findings" value={rows.length} hint="device × app × CVE" />
         <Kpi label="Critical" value={crit} hint={`${rows.length ? Math.round((crit / rows.length) * 100) : 0}% of findings`} hue="red" />
-        <Kpi label="Priority 1 · remediate first" value={rows.filter((f) => f.pr === 'P1').length} hint="Critical, or High with an exploit" hue="orange" />
+        <Kpi label="P1 · Remediate first" value={rows.filter((f) => f.pr === 'P1').length} hint="Critical, or High with an exploit" hue="orange" />
         <Kpi label="Devices affected" value={new Set(rows.map((f) => f.d)).size} hint={`of ${onboarded} onboarded`} hue="green" />
         <Kpi label="Apps to update" value={new Set(rows.map((f) => f.u)).size} hint="app versions with findings" hue="violet" />
       </div>
@@ -192,7 +192,7 @@ function DefenderChanges({ data, fallback, fallbackDay }: { data: Uc3Data; fallb
         {stale ? <><b className="text-ink-2">No changes:</b> Defender has not refreshed its data since the last run. </>
           : known && !count('New') && !count('Fixed') && !count('Updated') ? <><b className="text-ink-2">No changes</b> in Defender since the last run. </> : null}
         {c.export_reused && <>Full list not downloaded again: Defender has not rebuilt it since the last run, so that copy was reused. </>}
-        {known && 'Counts are for all computers and severities.'} The Trends tab shows every day.
+        {known && 'Counts are for all devices and severities.'} The Trends tab shows every day.
       </p>
     </Card>
   )
@@ -214,13 +214,13 @@ function RunFound({ data, v }: { data: Uc3Data; v: Uc3View }) {
       extra: noPatch ? `${num(noPatch)} have no security update available` : null,
     },
     {
-      icon: SlidersHorizontal, to: '/fixes/settings', value: settings.length, label: 'Weak security settings',
+      icon: SlidersHorizontal, to: '/fixes/settings', value: settings.length, label: 'Misconfigurations',
       text: 'Windows and Defender settings below Microsoft’s recommended baseline. Remediated by changing the setting.',
       extra: null,
     },
     {
       icon: CalendarX2, to: '/fixes?type=upgrade', value: ended + ending, label: 'Unsupported software',
-      text: `${num(ended)} past end of support${ending ? `, ${num(ending)} ending soon` : ''}. Updates stop coming, so upgrade or remove.`,
+      text: `${num(ended)} past end of support${ending ? `, ${num(ending)} ending soon` : ''}. No further security updates: upgrade or uninstall.`,
       extra: null,
     },
   ]
@@ -267,7 +267,7 @@ function AllVulns({ v, top: topAtStart, snap }: { v: Uc3View; top: boolean; snap
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const sorted = useMemo(
-    () => [...v.rows].sort((a, b) => (PRIO_ORDER[a.pr] ?? 9) - (PRIO_ORDER[b.pr] ?? 9) || b.kev - a.kev || (b.cvss ?? 0) - (a.cvss ?? 0) || b.age - a.age),
+    () => [...v.rows].sort((a, b) => (PRIO_ORDER[a.pr] ?? 9) - (PRIO_ORDER[b.pr] ?? 9) || (b.cvss ?? 0) - (a.cvss ?? 0) || b.age - a.age),
     [v.rows],
   )
   const firstDay = useMemo(() => v.all.map((f) => f.fs).filter(Boolean).sort()[0] ?? '', [v.all])
@@ -282,8 +282,8 @@ function AllVulns({ v, top: topAtStart, snap }: { v: Uc3View; top: boolean; snap
     <Card
       title={top ? 'Top risks' : 'All vulnerabilities'}
       description={top
-        ? 'Priority 1 findings. Sorted by priority. Select a row for details.'
-        : 'Every vulnerability Defender found: one row per vulnerability, app version and computer. Sorted by priority. Select a row for details.'}
+        ? 'P1 findings. Sorted by priority. Select a row for details.'
+        : 'Every vulnerability Defender found: one row per vulnerability, app version and device. Sorted by priority. Select a row for details.'}
       action={
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-xs">
@@ -296,7 +296,7 @@ function AllVulns({ v, top: topAtStart, snap }: { v: Uc3View; top: boolean; snap
           </div>
           <label className="flex items-center gap-2 rounded-lg border border-hairline-strong bg-field px-3 py-1.5 text-sm transition-[border-color,box-shadow] focus-within:border-blue/60 focus-within:ring-3 focus-within:ring-blue/15">
             <Search className="size-3.5 text-ink-3" />
-            <input value={q} onChange={(e) => { setQ(e.target.value); setLimit(100) }} placeholder="CVE, app or computer" className="w-44 bg-transparent outline-none placeholder:text-ink-3" />
+            <input value={q} onChange={(e) => { setQ(e.target.value); setLimit(100) }} placeholder="CVE, app or device" className="w-44 bg-transparent outline-none placeholder:text-ink-3" />
           </label>
         </div>
       }
@@ -322,7 +322,7 @@ function AllVulns({ v, top: topAtStart, snap }: { v: Uc3View; top: boolean; snap
       </div>
       {shown.length ? (
         <>
-          <DTable head={[['Vulnerability'], ['App'], ['Computer'], ['Severity'], ['Priority'], ['Added'], ['Days open', 'right'], ['Deadline']]} minWidth={980} maxHeight={640}>
+          <DTable head={[['Vulnerability'], ['App'], ['Device'], ['Severity'], ['Priority'], ['Added'], ['Days open', 'right'], ['Deadline']]} minWidth={980} maxHeight={640}>
             {shown.slice(0, limit).map((f) => (
               <tr key={findingKey(f)} onClick={() => navigate(findingHref(f))} className="cursor-pointer hover:bg-well/60">
                 <td className="tabular whitespace-nowrap font-medium">{f.cve}</td>
@@ -389,7 +389,7 @@ function AgeSla({ data, v }: { data: Uc3Data; v: Uc3View }) {
           })}
         />
       </Card>
-      <Card className="xl:col-span-6" title="SLA by severity" description="Remediation SLA in days (config/sla_policy.csv) and what is due next">
+      <Card className="xl:col-span-6" title="SLA by severity" description="Remediation SLA in days (set by the SLA policy) and what is due next">
         <DTable head={[['Severity'], ['Remediation SLA (days)', 'right'], ['Open', 'right'], ['Breached', 'right'], ['Next due']]} minWidth={480}>
           {v.activeSevs.map((s) => {
             const fs = rows.filter((f) => f.sev === s)
@@ -512,7 +512,7 @@ function Computers({ data, v }: { data: Uc3Data; v: Uc3View }) {
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
       <Card
         className="xl:col-span-12"
-        title="Computers"
+        title="Devices"
         description="Select a device to view its vulnerabilities and required updates"
         action={
           <label className="flex items-center gap-2 rounded-lg border border-hairline-strong bg-field px-3 py-1.5 text-sm transition-[border-color,box-shadow] focus-within:border-blue/60 focus-within:ring-3 focus-within:ring-blue/15">
@@ -522,7 +522,7 @@ function Computers({ data, v }: { data: Uc3Data; v: Uc3View }) {
         }
       >
         {devs.length ? (
-          <DTable head={[['Computer'], ['Operating system'], ['Vulnerabilities', 'right'], ['Critical', 'right'], ['Priority 1', 'right'], ['Overdue', 'right'], ['Last seen']]} minWidth={900}>
+          <DTable head={[['Device'], ['Operating system'], ['Vulnerabilities', 'right'], ['Critical', 'right'], ['P1', 'right'], ['Overdue', 'right'], ['Last seen']]} minWidth={900}>
             {devs.map(({ d, i }) => {
               const x = v.rows.filter((f) => f.d === i)
               return (

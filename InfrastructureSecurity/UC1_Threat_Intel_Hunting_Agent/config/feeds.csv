@@ -1,6 +1,5 @@
 feed,enabled,notes
 attack,yes,MITRE ATT&CK catalogue (refreshed weekly)
-kev,yes,CISA Known Exploited Vulnerabilities
 nvd,yes,NVD CVE details (faster with NVD_API_KEY)
 ncsc_nl,yes,NCSC-NL security advisories (RSS)
 cert_eu,yes,CERT-EU security advisories (RSS)

@@ -40,8 +40,6 @@ def compute(store: Store, settings: Settings | None = None, days: int = 30) -> d
     per_run = store.scalar("SELECT COUNT(*) FROM hunts WHERE run_id = ? AND status = 'ok'", [last_run]) or 0
     proactive = store.scalar("""SELECT COUNT(DISTINCT f.threat_id) FROM findings f JOIN threats t ON t.threat_id = f.threat_id
                                 WHERE NOT f.is_test""") or 0
-    exposed_kev = store.scalar("""SELECT COUNT(DISTINCT f.threat_id) FROM findings f WHERE f.kind = 'exposure'
-                                  AND f.threat_id LIKE 'kev:%'""") or 0
     ai = store.query("SELECT COALESCE(SUM(calls),0) calls, COALESCE(SUM(failures),0) failures FROM ai_usage")[0]
     dropped = store.scalar("""SELECT COUNT(*) FROM analysis WHERE ai_status = 'done'
                               AND dropped IS NOT NULL AND dropped::VARCHAR NOT IN ('{}', 'null')""") or 0
@@ -62,7 +60,6 @@ def compute(store: Store, settings: Settings | None = None, days: int = 30) -> d
         "hunts_per_run": per_run,
         "hunts_per_month_projected": per_run * 6 * 30,     # schedule: every 4 hours
         "proactive_threats_identified": proactive,
-        "exposed_actively_exploited": exposed_kev,
         "reports_published": len(reports),
         "manual_hours_equivalent (assumption)": round(manual_hours, 1),
         "mean_minutes_to_assess": round(agent_minutes, 1) if agent_minutes is not None else None,

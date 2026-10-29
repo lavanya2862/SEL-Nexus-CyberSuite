@@ -138,9 +138,9 @@ class Site(ThreadingHTTPServer):
                     msg = f"Check finished: {len(out) - len(bad)} ok" + (f", problem on {', '.join(bad)}" if bad else "")
                 else:
                     r = runner.run_approved(ids or None)
-                    msg = f"Fix run finished: {r['done']} fixed, {r['failed']} failed"
+                    msg = f"Remediation run finished: {r['done']} remediated, {r['failed']} failed"
             except Exception as exc:  # noqa: BLE001 - shown on the page; details in the log
-                log.exception("Fix task failed")
+                log.exception("Remediation task failed")
                 msg = str(exc).splitlines()[0][:200]
             with self.lock:
                 self.fix_running, self.fix_step, self.fix_message = False, "", msg
@@ -238,7 +238,7 @@ class _Handler(BaseHTTPRequestHandler):
 
 def serve(settings: Settings, port: int = DEFAULT_PORT) -> None:
     server = Site(("127.0.0.1", port), settings)
-    print(f"Threat Intel Agent service on http://127.0.0.1:{server.server_address[1]}/api  (this computer only). "
+    print(f"Threat Intel Agent service on http://127.0.0.1:{server.server_address[1]}/api  (local access only). "
           "Keep this window open; press Ctrl+C to stop.", flush=True)
     try:
         server.serve_forever()

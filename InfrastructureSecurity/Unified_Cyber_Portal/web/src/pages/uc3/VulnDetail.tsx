@@ -1,22 +1,20 @@
 import type { ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ExternalLink, Zap } from 'lucide-react'
-import { Card, DTable, Empty, HopLink, Panel, SevTag, Tag } from '@/components/kit'
+import { Card, DTable, Empty, Panel, SevTag, Tag } from '@/components/kit'
 import { num, shortDate } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
-import { useKevThreatHref } from '@/lib/uc1'
-import { EXPL, addDays, daysBetween, findingHref, findingKey, pretty, useGroupAfter, useUc3Data, useUc3View, type Finding } from '@/lib/uc3'
+import { addDays, daysBetween, findingHref, findingKey, pretty, useGroupAfter, useUc3Data, useUc3View, type Finding } from '@/lib/uc3'
 import { Uc3Loading } from './common'
 
 const PRIORITY: Record<string, string> = {
-  P1: 'Priority 1: Critical, or High with a known exploit', P2: 'Priority 2: remediate soon', P3: 'Standard patch cycle', P4: 'Low',
+  P1: 'Priority 1: remediate first', P2: 'Priority 2: remediate soon', P3: 'Standard patch cycle', P4: 'Low',
 }
 
 /** Weak spots › one vulnerability: one CVE in one app version on one computer, with everything we know about it. */
 export function VulnDetail() {
   const { key = '' } = useParams()
   const navigate = useNavigate()
-  const kevHref = useKevThreatHref()
   const { data, error, isLoading } = useUc3Data()
   const view = useUc3View(data)
   const groupAfter = useGroupAfter()
@@ -68,7 +66,7 @@ export function VulnDetail() {
       <Panel className="flex items-start gap-3 p-5 text-sm leading-relaxed text-ink-2">
         <p>
           This weakness is in <b className="text-ink">{app}</b>. Remediation: <b className="text-ink">{action}</b>.{' '}
-          {sameApp.length > 1 && <>This also remediates the other {num(sameApp.length - 1)} vulnerabilities in this app on this computer.</>}
+          {sameApp.length > 1 && <>This also remediates the other {num(sameApp.length - 1)} vulnerabilities in this app on this device.</>}
         </p>
       </Panel>
 
@@ -77,13 +75,12 @@ export function VulnDetail() {
           <Facts rows={[
             ['Severity', <SevTag sev={f.sev} />],
             ['Severity score (CVSS)', f.cvss != null ? `${f.cvss.toFixed(1)} of 10` : 'Not rated yet'],
-            ['Known attack code', EXPL[f.ex] ?? f.ex],
             ['Priority', `${f.pr} · ${PRIORITY[f.pr] ?? ''}`],
           ]} />
         </Card>
         <Card title="Location and remediation deadline">
           <Facts rows={[
-            ['Computer', <>{f.dev?.name}<span className="text-ink-3">{groupAfter(f)}</span></>],
+            ['Device', <>{f.dev?.name}<span className="text-ink-3">{groupAfter(f)}</span></>],
             ['Operating system', [f.dev?.os, f.dev?.osv].filter(Boolean).join(' ') || '–'],
             ['App and version', app],
             ['First seen', f.fs ? `${shortDate(f.fs)} (${num(f.age)} days ago)` : '–'],
@@ -96,19 +93,14 @@ export function VulnDetail() {
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <Card title="Same vulnerability on other computers" description={elsewhere.length ? `${num(elsewhere.length)} more` : undefined}>
-          {elsewhere.length ? <FindingTable rows={elsewhere} show="computer" onOpen={(x) => navigate(findingHref(x))} /> : <Empty text="Only on this computer." />}
+        <Card title="Same vulnerability on other devices" description={elsewhere.length ? `${num(elsewhere.length)} more` : undefined}>
+          {elsewhere.length ? <FindingTable rows={elsewhere} show="computer" onOpen={(x) => navigate(findingHref(x))} /> : <Empty text="Only on this device." />}
         </Card>
         <Card title={`Everything ${app} has on ${f.dev?.name}`} description={`${num(sameApp.length)} vulnerabilities · one update remediates them all`}>
           <FindingTable rows={sameApp} show="cve" current={key} onOpen={(x) => navigate(findingHref(x))} />
         </Card>
       </div>
 
-      {kevHref(f.cve) && (
-        <div className="flex items-center gap-2 text-sm text-ink-3">
-          External threat intelligence and related activity in your environment: <HopLink to={kevHref(f.cve)!}>Threats</HopLink>
-        </div>
-      )}
     </div>
   )
 }
@@ -129,7 +121,7 @@ function Facts({ rows }: { rows: [string, ReactNode][] }) {
 function FindingTable({ rows, show, current, onOpen }: { rows: Finding[]; show: 'computer' | 'cve'; current?: string; onOpen: (f: Finding) => void }) {
   const groupAfter = useGroupAfter()
   return (
-    <DTable head={[[show === 'computer' ? 'Computer' : 'Vulnerability'], ['Severity'], ['Days open', 'right'], ['Deadline']]} minWidth={420} maxHeight={320}>
+    <DTable head={[[show === 'computer' ? 'Device' : 'Vulnerability'], ['Severity'], ['Days open', 'right'], ['Deadline']]} minWidth={420} maxHeight={320}>
       {rows.map((x) => {
         const here = findingKey(x) === current
         return (

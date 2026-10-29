@@ -19,10 +19,10 @@ from uc1.config import Settings
 from uc1.report import defang
 from uc1.store import Store, utcnow
 
-SOURCE_GROUPS = {"CISA KEV": "Vulnerability lists", "NVD": "Vulnerability lists",
+SOURCE_GROUPS = {"NVD": "Vulnerability lists",
                  "NCSC-NL": "Advisories", "CERT-EU": "Advisories", "Microsoft MSRC": "Advisories",
                  "ThreatFox": "IOC feeds", "URLhaus": "IOC feeds", "MalwareBazaar": "IOC feeds",
-                 "AlienVault OTX": "IOC feeds", "Proactive hunt": "Hunt hits", "LAB TEST": "Lab tests"}
+                 "AlienVault OTX": "IOC feeds", "Proactive hunt": "Hunt matches", "LAB TEST": "Lab tests"}
 KILL_CHAIN = ["reconnaissance", "resource-development", "initial-access", "execution", "persistence",
               "privilege-escalation", "defense-evasion", "credential-access", "discovery", "lateral-movement",
               "collection", "command-and-control", "exfiltration", "impact"]
@@ -44,9 +44,7 @@ def factor_chips(factors: list[str]) -> list[str]:
         elif low.startswith("cvss"):
             m = re.search(r"CVSS ([\d.]+)", f)
             chips.append(f"CVSS {m.group(1)}" if m else "CVSS")
-        elif "public exploit" in low:
-            chips.append("Public exploit")
-        elif "of our devices exposed" in low:
+        elif "of our devices exposed" in low:              # (no chip says a hole is exploited: "public exploit" is left out)
             m = re.match(r"(\d+) of our devices", f)
             chips.append(f"{m.group(1)} device(s) exposed" if m else "Exposed")
         elif "not in defender yet" in low:
@@ -149,13 +147,11 @@ def gather(store: Store, settings: Settings | None = None) -> dict:
                      WHERE NOT t.is_test AND t.threat_id IN (SELECT threat_id FROM findings)""")
     worst = min((r["rating"] for r in affecting), key=lambda r: RATING_ORDER.get(r, 9), default=None)
     urgent = [r for r in affecting if r["rating"] in ("Critical", "High")]
-    posture = {"rating": worst or "Clear", "urgent": len(urgent),
-               "kev": sum(1 for r in affecting if r["kind"] == "kev"), "affecting": len(affecting)}
+    posture = {"rating": worst or "Clear", "urgent": len(urgent), "affecting": len(affecting)}
 
     # ---- exposure heatmap: device x app (Defender's full picture)
-    matrix = q("""SELECT v.device_name, v.name AS app, COUNT(DISTINCT v.cve_id) AS cves,
-                         COUNT(DISTINCT CASE WHEN c.kev_added IS NOT NULL THEN v.cve_id END) AS kev
-                  FROM device_vulns v LEFT JOIN cves c USING (cve_id) GROUP BY ALL""")
+    matrix = q("""SELECT v.device_name, v.name AS app, COUNT(DISTINCT v.cve_id) AS cves
+                  FROM device_vulns v GROUP BY ALL""")
     app_totals: dict[str, int] = {}
     for r in matrix:
         app_totals[r["app"]] = app_totals.get(r["app"], 0) + r["cves"]
@@ -165,15 +161,13 @@ def gather(store: Store, settings: Settings | None = None) -> dict:
     # ---- fix these first: one update per app clears all its known flaws
     fixes = q("""SELECT v.name AS app, string_agg(DISTINCT v.version, ', ') AS versions,
                         COUNT(DISTINCT v.cve_id) AS cves, COUNT(DISTINCT v.device_name) AS devices,
-                        COUNT(DISTINCT CASE WHEN c.kev_added IS NOT NULL THEN v.cve_id END) AS kev,
                         MAX(v.cvss) AS max_cvss
-                 FROM device_vulns v LEFT JOIN cves c USING (cve_id)
-                 GROUP BY 1 ORDER BY kev DESC, cves DESC LIMIT 10""")
+                 FROM device_vulns v
+                 GROUP BY 1 ORDER BY cves DESC LIMIT 10""")
 
     # ---- priority quadrant: every flaw on our devices, CVSS x EPSS
-    scatter = [[r["cvss"], r["epss"], r["cve_id"], r["apps"], bool(r["kev"])] for r in q("""
-        SELECT v.cve_id, MAX(v.cvss) AS cvss, MAX(c.epss) AS epss, string_agg(DISTINCT v.name, ', ') AS apps,
-               MAX(CASE WHEN c.kev_added IS NOT NULL THEN 1 ELSE 0 END) AS kev
+    scatter = [[r["cvss"], r["epss"], r["cve_id"], r["apps"]] for r in q("""
+        SELECT v.cve_id, MAX(v.cvss) AS cvss, MAX(c.epss) AS epss, string_agg(DISTINCT v.name, ', ') AS apps
         FROM device_vulns v JOIN cves c USING (cve_id)
         WHERE c.epss IS NOT NULL AND v.cvss IS NOT NULL GROUP BY 1""")]
 
@@ -293,7 +287,7 @@ def export_site_data(store: Store, settings: Settings) -> Path:
     cves = {}
     for i in range(0, len(cve_ids), 500):
         chunk = cve_ids[i:i + 500]
-        for c in q(f"""SELECT cve_id, cvss, severity, epss, epss_percentile, kev_added, kev_due, kev_ransomware, description
+        for c in q(f"""SELECT cve_id, cvss, severity, epss, epss_percentile, description
                        FROM cves WHERE cve_id IN ({",".join("?" for _ in chunk)})""", chunk):
             cves[c["cve_id"]] = c
     techniques = {t["technique_id"]: t for t in q("SELECT * FROM attack_techniques")}
@@ -335,7 +329,7 @@ def export_site_data(store: Store, settings: Settings) -> Path:
             "analysed_at": t["analysed_at"],
             "actions": list(dict.fromkeys(fixes + _j(t["actions"]))),
             "cves": [{"id": v, "origin": o, **{k: cves.get(v, {}).get(k) for k in (
-                "cvss", "severity", "epss", "epss_percentile", "kev_added", "kev_due", "kev_ransomware")},
+                "cvss", "severity", "epss", "epss_percentile")},
                 "description": (cves.get(v, {}).get("description") or "")[:400]} for v, o in lk.get("cve", [])][:80],
             "techniques": [{"id": v, "origin": o, "name": techniques.get(v, {}).get("name", ""),
                             "tactics": techniques.get(v, {}).get("tactics", ""), "url": techniques.get(v, {}).get("url", ""),

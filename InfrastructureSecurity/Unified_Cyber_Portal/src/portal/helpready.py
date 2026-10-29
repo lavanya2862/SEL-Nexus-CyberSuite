@@ -69,21 +69,30 @@ def _home(ctx) -> list[dict]:
     t = ctx.summary["uc3"]["totals"]
     return [
         qa("How many vulnerabilities do we have right now?",
-           f"{n(t.get('total'))} vulnerabilities ({n(t.get('cves'))} different CVEs) on {plural(t.get('devices'), 'computer')}. "
-           f"{n(t.get('p1'))} of them are Priority 1, the most urgent.", [("Vulnerabilities", "/uc3")]),
+           f"{n(t.get('total'))} findings ({n(t.get('cves'))} unique CVEs) on {plural(t.get('devices'), 'device')}. "
+           f"{n(t.get('p1'))} of them are P1, the highest priority.", [("Vulnerabilities", "/uc3")]),
+        qa("Which device is most at risk?", _riskiest(ctx)),
     ]
+
+
+def _riskiest(ctx) -> str:
+    devices = sorted(ctx.summary.get("devices") or [], key=lambda d: (-(d.get("p1") or 0), -(d.get("findings") or 0)))
+    if not devices:
+        return "No device data yet: run the Vulnerability Agent from Agents."
+    d = devices[0]
+    return f"{d['name']}: {n(d.get('findings'))} findings, {n(d.get('p1'))} of them P1."
 
 
 def _threats(ctx) -> list[dict]:
     t = ctx.summary["uc1"]["totals"]
     top = (ctx.summary["uc1"].get("top_threats") or [None])[0]
-    second = (f"{top['title']}. Rated {top.get('rating')}, found on {top.get('devices') or 'none of our computers'}."
+    second = (f"{top['title']}. Rated {top.get('rating')}, found on {top.get('devices') or 'none of our devices'}."
               if top else "There are no rated threats yet: run the Threat Intel Agent.")
     return [
-        qa("How many threats affect us?",
-           f"{n(t.get('affecting'))} of {n(t.get('new_threats'))} new threats touch software on our computers. "
-           f"{n(t.get('urgent'))} of them are urgent."),
-        qa("What is the most dangerous threat right now?", second,
+        qa("How many threats apply to our devices?",
+           f"{n(t.get('affecting'))} of {n(t.get('new_threats'))} new threats apply to software on our devices. "
+           f"{n(t.get('urgent'))} of them are rated Critical or High."),
+        qa("What is the most serious threat right now?", second,
            [("this threat", f"/uc1/threat/{quote(top['id'], safe='')}")] if top else None),
     ]
 
@@ -93,37 +102,37 @@ def _threat(ctx) -> list[dict]:
     th = UC1(ctx.settings.uc1_dir).threat(unquote(m.group(1))) if m else None
     if not isinstance(th, dict):
         msg = "I can't find this threat in today's data."
-        return [qa("Which of our computers have this?", msg), qa("How serious is it?", msg)]
+        return [qa("Which of our devices have this?", msg), qa("How serious is it?", msg)]
     exp = th.get("exposure") or []
     devices = sorted({e.get("device_name") for e in exp if e.get("device_name")})
-    first = (f"{plural(len(devices), 'computer')}: {listing(devices)}. "
+    first = (f"{plural(len(devices), 'device')}: {listing(devices)}. "
              + (f"Defender sees {exp[0].get('detail')}." if exp and exp[0].get("detail") else "")
-             if devices else "None of our computers have the software this threat targets, so no action is needed for now.")
+             if devices else "None of our devices have the software this threat targets, so no action is needed for now.")
     second = f"Rated {th.get('rating')} ({th.get('score')}/100)."
-    return [qa("Which of our computers have this?", first.strip()), qa("How serious is it?", second)]
+    return [qa("Which of our devices have this?", first.strip()), qa("How serious is it?", second)]
 
 
 def _hunts(ctx) -> list[dict]:
     t = ctx.summary["uc1"]["totals"]
     real, test = t.get("real_hits") or 0, t.get("test_hits") or 0
-    first = (f"Yes, {plural(real, 'real hit')} worth a closer look, plus {plural(test, 'hit')} from our own harmless lab tests."
-             if real else f"No real signs: 0 real hits. {plural(test, 'hit')} came from our own harmless lab tests.")
+    first = (f"Yes, {plural(real, 'real hunt match', 'real hunt matches')} worth a closer look, plus {plural(test, 'match', 'matches')} from our own harmless lab tests."
+             if real else f"No signs of an attacker: 0 real hunt matches. {plural(test, 'match', 'matches')} came from our own harmless lab tests.")
     devs = [d for d in ctx.summary.get("devices") or [] if d.get("hunt_hits") or d.get("test_hits")]
     second = ("; ".join(f"{d['name']}: {n(d.get('hunt_hits') or 0)} real, {n(d.get('test_hits') or 0)} test" for d in devs) + "."
-              if devs else "No computer had a hit on the last hunt.")
-    return [qa("Did we find any signs of an attacker?", first), qa("Which computer had hits?", second)]
+              if devs else "No device had a hunt match on the last hunt.")
+    return [qa("Did we find any signs of an attacker?", first), qa("Which device had hunt matches?", second)]
 
 
 def _weak(ctx) -> list[dict]:
     t = ctx.summary["uc3"]["totals"]
     ops = sorted(ctx.summary["uc3"].get("opco_totals") or [], key=lambda o: -(o.get("findings") or 0))
-    second = (f"{ops[0]['opco']} has the most: {n(ops[0].get('findings'))} ({n(ops[0].get('p1'))} Priority 1)."
-              + "".join(f" {o['opco']}: {n(o.get('findings'))} ({n(o.get('p1'))} Priority 1)." for o in ops[1:])
+    second = (f"{ops[0]['opco']} has the most: {n(ops[0].get('findings'))} ({n(ops[0].get('p1'))} P1)."
+              + "".join(f" {o['opco']}: {n(o.get('findings'))} ({n(o.get('p1'))} P1)." for o in ops[1:])
               if ops else "No VM data yet.")
     return [
         qa("How many vulnerabilities do we have?",
-           f"{n(t.get('total'))} on {plural(t.get('devices'), 'computer')} ({n(t.get('cves'))} different CVEs). "
-           f"{n(t.get('p1'))} are Priority 1."),
+           f"{n(t.get('total'))} findings on {plural(t.get('devices'), 'device')} ({n(t.get('cves'))} unique CVEs). "
+           f"{n(t.get('p1'))} are P1."),
         qa("Which VM has the most?", second),
     ]
 
@@ -159,7 +168,7 @@ def _fixes(ctx) -> list[dict]:
            f"{plural(len(apps), 'app')}. {n(len(now))} are marked High priority."),
         qa("Which app should I update first?",
            f"{top['app']}: {n(top.get('cves'))} CVEs"
-           + (f", fix by {day(top['fix_by'])}" if top.get("fix_by") else "") + f". It is on {devices}.",
+           + (f", due {day(top['fix_by'])}" if top.get("fix_by") else "") + f". It is on {devices}.",
            [(top["app"], f"/fixes?app={quote(top['app'])}")]),
     ]
 
@@ -168,19 +177,20 @@ def _progress(ctx) -> list[dict]:
     try:
         rows = fixproxy.get_fix(ctx.settings.uc1_site).get("rows") or []
     except fixproxy.Uc1Unavailable:
-        msg = "I can't see the fixes right now: the fix engine isn't running. Open the Fix page and switch it on."
-        return [qa("How many fixes are done?", msg, [("Fix", "/fixes")]), qa("Did any fix fail?", msg)]
+        msg = "Remediation status is not available: automated remediation is not running. Open Remediation and enable it."
+        return [qa("How many remediations are complete?", msg, [("Remediation", "/fixes")]),
+                qa("Did any remediation fail?", msg)]
     c = Counter(r.get("status") for r in rows)
-    first = (f"{plural(c['verified'], 'fix', 'fixes')} confirmed by Defender"
-             + (f", {n(c['done'])} done and waiting for Defender to confirm" if c["done"] else "")
+    first = (f"{plural(c['verified'], 'remediation')} verified by Defender"
+             + (f", {n(c['done'])} complete and pending verification" if c["done"] else "")
              + (f", {n(c['queued'] + c['running'])} running now" if c["queued"] + c["running"] else "")
-             + f". {n(c['proposed'] + c['approved'])} more are suggested or in the basket.")
+             + f". {n(c['proposed'] + c['approved'])} more are proposed or in the remediation queue.")
     failed = [r for r in rows if r.get("status") in ("failed", "still_there")]
     second = ("No, none failed." if not failed else
-              f"Yes, {plural(len(failed), 'fix', 'fixes')}: " + "; ".join(
+              f"Yes, {plural(len(failed), 'remediation')}: " + "; ".join(
                   f"{r.get('app')} on {r.get('device_name')}" + (f" ({r['message'][:80]})" if r.get("message") else "")
                   for r in failed[:3]) + ("…" if len(failed) > 3 else "."))
-    return [qa("How many fixes are done?", first), qa("Did any fix fail?", second)]
+    return [qa("How many remediations are complete?", first), qa("Did any remediation fail?", second)]
 
 
 def _respond(ctx) -> list[dict]:
@@ -207,16 +217,16 @@ def _case(ctx) -> list[dict]:
     case = UC4(ctx.settings.uc4_dir).case(unquote(m.group(1))) if m else None
     if not case:
         msg = "I can't find this incident in the saved data."
-        return [qa("What happened, in one line?", msg), qa("Which computer and account were involved?", msg)]
+        return [qa("What happened, in one line?", msg), qa("Which device and account were involved?", msg)]
     p, v, ent = case["packet"], case.get("verdict") or {}, case["packet"].get("entities") or {}
     first = (f"#{p.get('incident_id')} {p.get('title')}: rated {VERDICT_WORDS.get(v.get('verdict'), 'not rated yet')}"
              + (f", {v.get('confidence')} confidence" if v.get("confidence") else "") + f". Severity {p.get('severity')}.")
     devs = [d.get("name") for d in ent.get("devices") or []]
     accs = [a.get("upn") or a.get("name") for a in ent.get("accounts") or []]
     ips = [i.get("value") for i in ent.get("ips") or []][:3]
-    parts = [f"computer {listing(devs)}" if devs else "no computer", f"account {listing(accs)}" if accs else "no account"]
+    parts = [f"device {listing(devs)}" if devs else "no device", f"account {listing(accs)}" if accs else "no account"]
     second = listing(parts).capitalize() + (f". IP address {listing(ips)}." if ips else ".")
-    return [qa("What happened, in one line?", first), qa("Which computer and account were involved?", second)]
+    return [qa("What happened, in one line?", first), qa("Which device and account were involved?", second)]
 
 
 def _reports(ctx) -> list[dict]:

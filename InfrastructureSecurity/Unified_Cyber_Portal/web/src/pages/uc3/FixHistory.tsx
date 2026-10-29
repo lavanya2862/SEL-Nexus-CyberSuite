@@ -48,20 +48,20 @@ export function FixHistory() {
         </div>
         <div className="text-sm text-ink-2">
           <p>
-            <b>{num(byPortal)}</b> of them were remediated by Cyber Command ({num(runs.filter((r) => r.status === 'verified' && !isSetting(r)).length)} app updates), and Defender confirmed each one.
+            <b>{num(byPortal)}</b> of them were remediated by CyberSuite ({num(runs.filter((r) => r.status === 'verified' && !isSetting(r)).length)} app updates), and Defender confirmed each one.
             The other <b>{num(fixed.length - byPortal)}</b> were resolved outside the portal, for example through automatic application updates or manual patching.
           </p>
           <p className="mt-1.5 text-xs text-ink-3">
             {avgDays != null && <>On average a vulnerability was open {avgDays.toFixed(1)} days before it was remediated. </>}
-            Source: Microsoft Defender’s change feed. A vulnerability counts as remediated when Defender stops finding it on that computer.
+            Source: Microsoft Defender’s change feed. A vulnerability counts as remediated when Defender stops finding it on that device.
           </p>
         </div>
       </Panel>
 
-      <Card title="Remediations executed by the portal" description="Each remediation executed by the portal: approver, device response and Defender verification">
+      <Card title="Remediations executed by CyberSuite" description="Each remediation executed by CyberSuite: approver, device response and Defender verification">
         {fix.isLoading ? <div className="h-24 animate-pulse rounded-xl bg-well" />
           : runs.length ? <div className="flex flex-col gap-3">{runs.map((r) => <RunCard key={r.fix_id} r={r} cleared={byApp[keyOf(r.device_name, r.software_name, r.version)]?.length ?? 0} events={fix.data?.events ?? []} />)}</div>
-          : <Empty text={fix.error ? 'Automated remediation is disabled, so portal-executed remediations cannot be shown.' : 'No remediations have been executed by the portal yet.'} />}
+          : <Empty text={fix.error ? 'Automated remediation is disabled, so remediations executed by CyberSuite cannot be shown.' : 'No remediations have been executed by CyberSuite yet.'} />}
       </Card>
 
       <DefenderLog fixed={fixed} portalKeys={portalKeys} />
@@ -83,8 +83,8 @@ function RunCard({ r, cleared, events }: { r: FixRow; cleared: number; events: {
     ['Approved', r.approved_at, <>by {r.approved_by ?? 'someone'}{r.method ? ` · ${METHOD_LABEL[r.method]}` : ''}</>],
     ['Executed on device', r.started_at, <>{r.device_name}</>],
     ['Device response', r.finished_at, r.message ?? (r.status === 'failed' ? 'Remediation failed' : '')],
-    ['Defender confirmed', r.verified_at, r.verified_at
-      ? setting ? <>Defender no longer lists this setting as wrong</> : <>No longer listed as vulnerable{cleared ? <>: <b>{num(cleared)} vulnerabilities</b> cleared</> : ''}</>
+    ['Verified by Defender', r.verified_at, r.verified_at
+      ? setting ? <>Defender now reports this setting as compliant</> : <>No longer listed as vulnerable{cleared ? <>: <b>{num(cleared)} vulnerabilities</b> cleared</> : ''}</>
       : r.status === 'still_there' ? 'Defender still lists it' : setting ? 'Waiting for Defender’s next settings check (usually within a day)' : 'Waiting for Defender’s next scan (2–6 hours)'],
   ]
   return (
@@ -154,7 +154,7 @@ function DefenderLog({ fixed, portalKeys }: { fixed: FixedFinding[]; portalKeys:
       action={
         <label className="flex items-center gap-2 rounded-lg border border-hairline-strong bg-field px-3 py-1.5 text-sm transition-[border-color,box-shadow] focus-within:border-blue/60 focus-within:ring-3 focus-within:ring-blue/15">
           <Search className="size-3.5 text-ink-3" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="CVE, app or computer" className="w-44 bg-transparent outline-none placeholder:text-ink-3" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="CVE, app or device" className="w-44 bg-transparent outline-none placeholder:text-ink-3" />
         </label>
       }
     >
@@ -191,7 +191,7 @@ function FixedGroup({ rows, byPortal }: { rows: FixedFinding[]; byPortal: boolea
       <button onClick={() => setOpen(!open)} className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-left hover:bg-well/60" aria-expanded={open}>
         <span className="font-medium">{pretty(f.sw)} <span className="tabular font-normal text-ink-3">{f.ver}</span></span>
         <span className="text-sm text-ink-3">on {f.dev?.name}{groupAfter(f)}</span>
-        {byPortal && <Tag><ShieldCheck className="mr-1 inline size-3" />remediated by Cyber Command</Tag>}
+        {byPortal && <Tag><ShieldCheck className="mr-1 inline size-3" />remediated by CyberSuite</Tag>}
         <span className="ml-auto flex items-center gap-3 text-sm">
           {crit > 0 && <span className="text-xs text-ink-3">{num(crit)} critical</span>}
           <b className="tabular">{num(rows.length)}</b>

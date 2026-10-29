@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { dateTime, num } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
-import { attackType, cleanTitle, decoded, evidenceOf, isSign, useThreat, type ThreatDetail as T } from '@/lib/uc1'
+import { attackType, decoded, evidenceOf, isSign, useThreat, type ThreatDetail as T } from '@/lib/uc1'
 import { AiChip, Resolve, ScoreBar } from './common'
 
 const utc = (s: string | null | undefined) => (s ? dateTime(s.replace(' ', 'T') + (s.includes('+') || s.endsWith('Z') ? '' : 'Z')) : '–')
@@ -42,7 +42,7 @@ function SignDetail({ t }: { t: T }) {
         {type && <p className="mt-1 max-w-3xl text-sm text-ink-2">{type.what}</p>}
         <div className="mt-2 flex flex-wrap gap-2 text-xs text-ink-3">
           <span className="rounded-full bg-panel px-3 py-1 ring-1 ring-hairline">First found {utc(t.first_seen)}</span>
-          <span className="rounded-full bg-panel px-3 py-1 ring-1 ring-hairline">On {t.findings.length} computer{t.findings.length === 1 ? '' : 's'}</span>
+          <span className="rounded-full bg-panel px-3 py-1 ring-1 ring-hairline">On {t.findings.length} device{t.findings.length === 1 ? '' : 's'}</span>
         </div>
       </div>
 
@@ -57,7 +57,7 @@ function SignDetail({ t }: { t: T }) {
             </div>
           )}
         </Card>
-        <Card className="xl:col-span-5" title="Risk rating" description="Rule-based rating (config/risk_policy.csv)">
+        <Card className="xl:col-span-5" title="Risk rating" description="Rule-based rating (risk policy)">
           <div className="flex items-baseline gap-3">
             <span className="tabular text-[44px] font-medium leading-none tracking-tight">{t.score}</span>
             <span className="text-sm text-ink-3">/ 100 · {t.rating}</span>
@@ -115,7 +115,7 @@ function Detail({ t }: { t: T }) {
           <SevTag sev={t.rating} />
           <span className="text-xs text-ink-3">· {t.source}</span>
         </div>
-        <h1 className="mt-1.5 max-w-4xl text-2xl font-semibold leading-tight tracking-tight">{cleanTitle(t.title)}</h1>
+        <h1 className="mt-1.5 max-w-4xl text-2xl font-semibold leading-tight tracking-tight">{t.title}</h1>
         <div className="mt-2 flex flex-wrap gap-2 text-xs text-ink-3">
           {t.published && <span className="rounded-full bg-panel px-3 py-1 ring-1 ring-hairline">Published {t.published.slice(0, 10)}</span>}
           <span className="rounded-full bg-panel px-3 py-1 ring-1 ring-hairline">First seen by the agent {utc(t.first_seen)}</span>
@@ -144,7 +144,7 @@ function Detail({ t }: { t: T }) {
             </div>
           )}
         </Card>
-        <Card className="xl:col-span-5" title="Risk rating" description="Rule-based rating (config/risk_policy.csv)">
+        <Card className="xl:col-span-5" title="Risk rating" description="Rule-based rating (risk policy)">
           <div className="flex items-baseline gap-3">
             <span className="tabular text-[44px] font-medium leading-none tracking-tight">{t.score}</span>
             <span className="text-sm text-ink-3">/ 100 · {t.rating}</span>
@@ -160,7 +160,7 @@ function Detail({ t }: { t: T }) {
         <Card title="Affected devices" description="Where Microsoft Defender reports this, and the remediation"
           action={fixSw(t) ? <Link to={`/fixes?sw=${encodeURIComponent(fixSw(t)!)}`} title="Open in Remediation" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Remediate</Link> : undefined}>
           {t.exposure.length ? (
-            <DTable head={[['Computer'], ['Source'], ['Remediation']]} minWidth={440}>
+            <DTable head={[['Device'], ['Source'], ['Remediation']]} minWidth={440}>
               {t.exposure.map((e, i) => (
                 <tr key={i}>
                   <td className="whitespace-nowrap font-medium">{e.device_name}</td>

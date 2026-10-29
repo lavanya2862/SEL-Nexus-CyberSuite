@@ -14,7 +14,7 @@ export const fixTime = (s: string | null | undefined) => (s ? s.replace(' ', 'T'
 export interface FixRow {
   fix_id: string; device_name: string; opco: string; app: string; software_name: string; version: string
   action: 'upgrade' | 'remove' | 'replace' | 'setting' | 'respond' | 'none'; winget_id: string; stage: number; findings: number; cves: number
-  kev: number; ransomware: number; max_epss: number; kev_cves: string[]; note: string; status: FixStatus
+  max_epss: number; note: string; status: FixStatus
   method: FixMethod | null; approved_by: string | null; approved_at: string | null; started_at: string | null
   /** Save for later (on the run page's new-fix cards): reviewed, not fixed yet */
   saved_by?: string | null; saved_at?: string | null
@@ -38,7 +38,7 @@ export interface FixView {
   events: { at: string; fix_id: string | null; text: string }[]
   probes: Record<string, { error?: string; method?: string; checked_at?: string; winget?: string; apps?: string[]; reboot_pending?: boolean }>
   default_method: FixMethod
-  impact: { findings_open: number; findings_cleared: number; kev_cleared: number; kev_open: number }
+  impact: { findings_open: number; findings_cleared: number }
   worker: { running: boolean; elsewhere: boolean; task: string; step: string; message: string }
 }
 
@@ -48,7 +48,7 @@ async function fetchFix(): Promise<FixView> {
   const res = await fetch('/api/fix')
   const body = await res.json().catch(() => ({}))
   if (res.status === 503 && body.uc1_down) throw new FixDown(body.error)
-  if (!res.ok) throw new Error(body.error ?? `Portal API answered ${res.status}`)
+  if (!res.ok) throw new Error(body.error ?? `CyberSuite could not complete the request (error ${res.status})`)
   return body
 }
 
@@ -68,7 +68,7 @@ export function useFix() {
 async function post(action: string, body: object = {}) {
   const res = await fetch(`/api/fix/${action}`, { method: 'POST', headers: { 'X-Portal': 'fix', 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   const out = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(out.error ?? `the assistant answered ${res.status}`)
+  if (!res.ok) throw new Error(out.error ?? `CyberSuite could not complete the request (error ${res.status})`)
   return out
 }
 
@@ -91,8 +91,8 @@ export const STATUS: Record<FixStatus, { label: string; tone: 'muted' | 'sky' | 
   approved: { label: 'Approved', tone: 'sky' },
   queued: { label: 'Queued', tone: 'sky' },
   running: { label: 'Running…', tone: 'run' },
-  done: { label: 'Remediated · pending verification', tone: 'teal' },
-  verified: { label: 'Verified ✓', tone: 'good' },
+  done: { label: 'Pending verification', tone: 'teal' },
+  verified: { label: 'Verified by Defender', tone: 'good' },
   failed: { label: 'Failed', tone: 'bad' },
   still_there: { label: 'Still listed by Defender', tone: 'warn' },
   gone: { label: 'Resolved before remediation', tone: 'muted' },

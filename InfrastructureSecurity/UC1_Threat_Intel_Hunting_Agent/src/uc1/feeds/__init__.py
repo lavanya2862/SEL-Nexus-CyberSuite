@@ -5,14 +5,13 @@ from __future__ import annotations
 import logging
 
 from uc1.config import read_csv
-from uc1.feeds import advisories, attack, iocs, kev, nvd
+from uc1.feeds import advisories, attack, iocs, nvd
 from uc1.feeds.common import FeedContext, FeedSkipped
 
 log = logging.getLogger("uc1.feeds")
 
 FEEDS = {
     "attack": attack.collect,
-    "kev": kev.collect,
     "nvd": nvd.collect,
     "ncsc_nl": lambda ctx: advisories.collect_rss(ctx, "ncsc_nl"),
     "cert_eu": lambda ctx: advisories.collect_rss(ctx, "cert_eu"),

@@ -11,7 +11,7 @@ import type { FixRow, FixStatus } from '@/lib/fix'
 import { num } from '@/lib/format'
 import { UC_DOT, UC_NAME } from '@/lib/runs'
 import { statusColor } from '@/lib/theme'
-import { cleanTitle, threatHref, useThreatMatches, type ThreatMatches } from '@/lib/uc1'
+import { threatHref, useThreatMatches, type ThreatMatches } from '@/lib/uc1'
 import { SEVS, type Uc3Data, type Uc3FixApp } from '@/lib/uc3'
 import { cn } from '@/lib/utils'
 
@@ -23,7 +23,7 @@ const STATUS: Record<Status, { label: string; color: string }> = {
   approved: { label: 'Remediation approved', color: 'var(--blue)' },
   running: { label: 'Remediation running', color: 'var(--blue)' },
   failed: { label: 'Remediation failed', color: statusColor.critical },
-  checking: { label: 'Remediated · pending verification', color: 'var(--teal)' },
+  checking: { label: 'Pending verification', color: 'var(--teal)' },
   fixed: { label: 'Remediated', color: statusColor.good },
 }
 /** The fix engine's status of the computer's fix → what the row says (a fix covers every CVE of that app version) */
@@ -31,12 +31,12 @@ const FROM_ENGINE: Partial<Record<FixStatus, Status>> = {
   proposed: 'waiting', saved: 'waiting', gone: 'waiting', approved: 'approved', queued: 'approved', running: 'running',
   failed: 'failed', still_there: 'failed', done: 'checking', verified: 'checking', info: 'nofix',
 }
-const STEPS = ['Found', 'Remediation proposed', 'Approved', 'Remediated', 'Confirmed by Defender']
+const STEPS = ['Found', 'Remediation proposed', 'Approved', 'Remediated', 'Verified by Defender']
 const REACHED: Record<Status, number> = { open: 0, nofix: 0, waiting: 1, approved: 2, running: 2, failed: 2, checking: 3, fixed: 4 }
 
 interface News { id: string; title: string; found: string | null; published: string | null; score: number }
 interface VRow {
-  key: string; cve: string; device: string; versions: string[]; sev: string; cvss: number | null; kev: boolean
+  key: string; cve: string; device: string; versions: string[]; sev: string; cvss: number | null
   open: boolean; status: Status; vulnFound: string | null; fixedOn: string | null; advisory: string | null
   news: News[]; newsFound: string | null
   /** fixed for another version on this computer, while this version still has it */
@@ -48,15 +48,12 @@ const ORDER: Status[] = ['open', 'waiting', 'failed', 'nofix', 'approved', 'runn
 const day = (s: unknown) => (s ? String(s).slice(0, 10) : null)
 const longDate = (d: string | null) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '')
 const minDate = (a: string | null, b: string | null) => (!a ? b : !b ? a : a < b ? a : b)
-const isKevNews = (n: News) => n.id.startsWith('kev:')
-/** The table's short label: "CISA alert", or the headline without this CVE and the product list
+/** The table's short label: the headline without this CVE and the product list
  *  ("New CRITICAL vulnerability CVE-… in mozilla firefox, …" → "New critical vulnerability") */
-const newsLabel = (n: News, cve: string) => isKevNews(n) ? 'CISA alert'
-  : cleanTitle(n.title).replace(cve, '').replace(/ in [a-z].*$/, '').replace(/\b[A-Z]{4,}\b/g, (w) => w.toLowerCase()).replace(/\s+/g, ' ').trim()
+const newsLabel = (n: News, cve: string) => n.title.replace(cve, '').replace(/ in [a-z].*$/, '').replace(/\b[A-Z]{4,}\b/g, (w) => w.toLowerCase()).replace(/\s+/g, ' ').trim()
 
 function buildRows(data: Uc3Data, software: string, fixRows: FixRow[], engine: boolean, matches: ThreatMatches | undefined): VRow[] {
   const col = (cols: string[]) => (name: string) => cols.indexOf(name)
-  const kevSet = new Set(data.kev.map((k) => k.cve))
   const news = new Map<string, News[]>()                     // computer|CVE → the threats in the news that name it
   for (const m of matches?.rows ?? []) {
     const t = matches!.threats[m.threat]
@@ -81,7 +78,7 @@ function buildRows(data: Uc3Data, software: string, fixRows: FixRow[], engine: b
     const status: Status = r[F('ua')] === 0 ? 'nofix' : engine && fix ? FROM_ENGINE[fix.status] ?? 'open' : 'open'
     const row: VRow = {
       key: `${device}|${ver}|${cve}`, cve, device, versions: [ver], sev: String(r[F('sev')]), cvss: (r[F('cvss')] as number) ?? null,
-      kev: !!r[F('kev')], open: true, status, vulnFound: day(r[F('fs')]), fixedOn: null, advisory: (r[F('upd')] as string) || null,
+      open: true, status, vulnFound: day(r[F('fs')]), fixedOn: null, advisory: (r[F('upd')] as string) || null,
       ...newsOf(pair), fixedElsewhere: [],
     }
     out.push(row)
@@ -107,7 +104,7 @@ function buildRows(data: Uc3Data, software: string, fixRows: FixRow[], engine: b
         continue
       }
       fixedOnly.set(pair, {
-        key: pair, cve, device, versions: [ver], sev: String(r[X('sev')]), cvss: null, kev: kevSet.has(cve), open: false,
+        key: pair, cve, device, versions: [ver], sev: String(r[X('sev')]), cvss: null, open: false,
         status: 'fixed', vulnFound: day(r[X('fs')]), fixedOn: on, advisory: null, ...newsOf(pair), fixedElsewhere: [],
       })
     }
@@ -119,7 +116,7 @@ function buildRows(data: Uc3Data, software: string, fixRows: FixRow[], engine: b
 /** Default order: in the news first, then still open, then worst first */
 const byDefault = (a: VRow, b: VRow) =>
   Number(!a.news.length) - Number(!b.news.length) || Number(!a.open) - Number(!b.open) || SEV_RANK(a.sev) - SEV_RANK(b.sev)
-  || (b.cvss ?? 0) - (a.cvss ?? 0) || Number(b.kev) - Number(a.kev) || a.cve.localeCompare(b.cve) || a.device.localeCompare(b.device)
+  || (b.cvss ?? 0) - (a.cvss ?? 0) || a.cve.localeCompare(b.cve) || a.device.localeCompare(b.device)
 
 type SortKey = 'cve' | 'device' | 'sev' | 'vuln' | 'news' | 'status'
 const SORTERS: Record<SortKey, (a: VRow, b: VRow) => number> = {
@@ -191,7 +188,7 @@ export function VulnList({ app, software, data, fixRows, engine, startAgent, sta
           <div className="w-full min-w-0 sm:w-auto sm:flex-1">
             <DialogTitle className="text-lg font-semibold">{app.app}: every vulnerability</DialogTitle>
             <DialogDescription className="text-sm text-ink-3">
-              {computers} computer{computers === 1 ? '' : 's'} · {num(fixedTotal)} of {num(rows.length)} remediated · {app.fix.action}
+              {computers} device{computers === 1 ? '' : 's'} · {num(fixedTotal)} of {num(rows.length)} remediated · {app.fix.action}
             </DialogDescription>
           </div>
           <div className="flex items-center gap-1.5">
@@ -227,7 +224,7 @@ export function VulnList({ app, software, data, fixRows, engine, startAgent, sta
             </span>
           )}
           <Select value={status} onChange={setStatus} label="Status" options={[['', 'All statuses'], ...statuses.map((s) => [s, STATUS[s].label] as [string, string])]} />
-          <Select value={device} onChange={setDevice} label="Computer" options={[['', 'All computers'], ...devices.map((d) => [d, shown(d)] as [string, string])]} />
+          <Select value={device} onChange={setDevice} label="Device" options={[['', 'All devices'], ...devices.map((d) => [d, shown(d)] as [string, string])]} />
           {filtered && <button onClick={clear} className="rounded-lg px-2.5 py-1.5 text-ink-2 hover:bg-well">Clear</button>}
           <button onClick={() => downloadCsv(list, app.app, shown)} className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-hairline-strong px-3 py-1.5 hover:bg-well"
             title="Download the rows that match the filters (opens in Excel)">
@@ -245,7 +242,7 @@ export function VulnList({ app, software, data, fixRows, engine, startAgent, sta
               <tr>
                 <th rowSpan={2} className="w-12 px-3 py-2 font-medium">#</th>
                 <Th rowSpan={2} k="cve" sort={sort} onSort={sortBy}>CVE</Th>
-                <Th rowSpan={2} k="device" sort={sort} onSort={sortBy}>Computer</Th>
+                <Th rowSpan={2} k="device" sort={sort} onSort={sortBy}>Device</Th>
                 <Th rowSpan={2} k="sev" sort={sort} onSort={sortBy}>Severity</Th>
                 <th colSpan={2} className="border-b border-hairline px-3 pt-2 pb-1 text-center font-medium">Found by</th>
                 <Th rowSpan={2} k="status" sort={sort} onSort={sortBy}>Status</Th>
@@ -254,7 +251,7 @@ export function VulnList({ app, software, data, fixRows, engine, startAgent, sta
               <tr>
                 <Th k="vuln" sort={sort} onSort={sortBy}>
                   <span className="flex items-center gap-1.5"><span className={cn('size-2 rounded-full', UC_DOT.uc3)} />{UC_NAME.uc3}</span>
-                  <span className="block font-normal">on the computer</span>
+                  <span className="block font-normal">on the device</span>
                 </Th>
                 <Th k="news" sort={sort} onSort={sortBy}>
                   <span className="flex items-center gap-1.5"><span className={cn('size-2 rounded-full', UC_DOT.uc1)} />{UC_NAME.uc1}</span>
@@ -322,7 +319,7 @@ function Row({ r, n, app, shown, open, onToggle, newsLoading }: {
             style={{ color: s.color, background: `color-mix(in oklab, ${s.color} 14%, transparent)` }}>
             {r.status === 'fixed' && r.fixedOn ? `Remediated ${longDate(r.fixedOn)}` : s.label}
           </span>
-          {r.status === 'fixed' && <div className="mt-0.5 text-[11px] text-ink-3">confirmed by Defender</div>}
+          {r.status === 'fixed' && <div className="mt-0.5 text-[11px] text-ink-3">verified by Defender</div>}
         </td>
         <td className="px-2 py-2.5 text-ink-3"><ChevronDown className={cn('size-4 transition-transform', open && 'rotate-180')} /></td>
       </tr>
@@ -342,7 +339,7 @@ function Row({ r, n, app, shown, open, onToggle, newsLoading }: {
                   <p key={t.id} className="mt-2 flex gap-2">
                     <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', UC_DOT.uc1)} />
                     <span>
-                      <b className="font-semibold">{t.found ? longDate(t.found) : 'Date not recorded'}</b>: the {UC_NAME.uc1} reported it in threat intelligence: “{cleanTitle(t.title)}”
+                      <b className="font-semibold">{t.found ? longDate(t.found) : 'Date not recorded'}</b>: the {UC_NAME.uc1} reported it in threat intelligence: “{t.title}”
                       {t.published && <> (published {longDate(t.published)})</>}.
                       {' '}
                       <Link to={threatHref(t.id)} className="inline-flex items-center gap-1 text-blue hover:underline">Open the threat <ExternalLink className="size-3" /></Link>
@@ -357,7 +354,7 @@ function Row({ r, n, app, shown, open, onToggle, newsLoading }: {
                 <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-3">Remediation</h4>
                 <p>{app.fix.action}{r.advisory && <span className="text-ink-3"> (vendor advisory {r.advisory})</span>}.</p>
                 {r.fixedElsewhere.map((f) => (
-                  <p key={f.version} className="mt-1.5 text-xs text-ink-3">Already remediated for {app.app} {f.version} on this computer on {longDate(f.on)}; {app.app} {r.versions.join(', ')} still has it.</p>
+                  <p key={f.version} className="mt-1.5 text-xs text-ink-3">Already remediated for {app.app} {f.version} on this device on {longDate(f.on)}; {app.app} {r.versions.join(', ')} still has it.</p>
                 ))}
               </div>
               <div>
@@ -427,10 +424,10 @@ function NavButton({ disabled, onClick, title, children }: { disabled?: boolean;
 
 function downloadCsv(rows: VRow[], app: string, shown: (d: string) => string) {
   const esc = (v: unknown) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
-  const head = ['#', 'CVE', 'Computer', 'Version', 'Severity', 'CVSS', `${UC_NAME.uc3}: found`,
+  const head = ['#', 'CVE', 'Device', 'Version', 'Severity', 'CVSS', `${UC_NAME.uc3}: found`,
     `${UC_NAME.uc1}: found in threat intelligence`, 'Threat intelligence reports', 'Status', 'Remediated on']
   const lines = rows.map((r, i) => [i + 1, r.cve, shown(r.device), r.versions.join(' / '), r.sev, r.cvss ?? '',
-    r.vulnFound ?? '', r.newsFound ?? '', r.news.map((n) => cleanTitle(n.title)).join(' | '), STATUS[r.status].label, r.fixedOn ?? ''].map(esc).join(','))
+    r.vulnFound ?? '', r.newsFound ?? '', r.news.map((n) => n.title).join(' | '), STATUS[r.status].label, r.fixedOn ?? ''].map(esc).join(','))
   const blob = new Blob(['﻿' + [head.map(esc).join(','), ...lines].join('\r\n')], { type: 'text/csv;charset=utf-8' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)

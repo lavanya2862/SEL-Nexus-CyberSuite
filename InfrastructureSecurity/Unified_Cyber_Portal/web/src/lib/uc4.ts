@@ -16,12 +16,12 @@ export const VERDICT_ORDER: Verdict[] = ['likely_true_positive', 'likely_false_p
 export const verdictMeta = (v: string) => VERDICT[v as Verdict] ?? { label: v || '–', short: v || '–', color: 'var(--ink-3)', help: '' }
 
 export const CONTAINMENT: Record<string, string> = {
-  isolate_device: 'Isolate the computer from the network',
-  release_device: 'Release the computer from isolation',
+  isolate_device: 'Isolate the device from the network',
+  release_device: 'Release the device from isolation',
   disable_user: 'Disable the user account',
   revoke_sessions: "Sign the user out everywhere (revoke sessions)",
   block_indicator: 'Block the bad file, web address or IP',
-  collect_investigation_package: 'Collect an investigation package from the computer',
+  collect_investigation_package: 'Collect an investigation package from the device',
   remove_inbox_rule: 'Remove the suspicious mailbox rule',
 }
 
@@ -85,7 +85,7 @@ export function needsPerson(r: { verdict: string; ai_status: string; is_lab: boo
 export const ACTION_WORDS: Record<string, string> = {
   auto_resolve: 'Closed', auto_escalate: 'Escalated', auto_needs_human: 'Tagged for review',
   close_incident: 'Closed by a person',
-  escalate_incident: 'Escalated by a person', reopen: 'Reopened', isolate_device: 'Computer isolated', release_device: 'Computer released',
+  escalate_incident: 'Escalated by a person', reopen: 'Reopened', isolate_device: 'Device isolated', release_device: 'Device released',
   av_scan: 'Antivirus scan requested', quarantine_file: 'File quarantine requested',
 }
 
@@ -175,7 +175,7 @@ export interface Uc4Quality { metrics: { metrics: Metric[] } | null; backtest: {
 async function get<T>(url: string): Promise<T> {
   const res = await fetch(url)
   if (res.status === 404) throw new NotFound((await res.json().catch(() => ({}))).error ?? 'not found')
-  if (!res.ok) throw new Error(`Portal API answered ${res.status}`)
+  if (!res.ok) throw new Error(`CyberSuite could not complete the request (error ${res.status})`)
   return res.json()
 }
 
@@ -195,7 +195,7 @@ export function useFeedback() {
     mutationFn: async (body: FeedbackInput) => {
       const res = await fetch('/api/uc4/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portal': 'feedback' }, body: JSON.stringify(body) })
       const out = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(out.error ?? `the assistant answered ${res.status}`)
+      if (!res.ok) throw new Error(out.error ?? `CyberSuite could not complete the request (error ${res.status})`)
       return out
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['uc4'] }),
@@ -213,7 +213,7 @@ export function useAsk() {
     mutationFn: async (body: { incident_id: string; question: string }) => {
       const res = await fetch('/api/uc4/ask', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portal': 'ask' }, body: JSON.stringify(body) })
       const out = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(out.error ?? `the assistant answered ${res.status}`)
+      if (!res.ok) throw new Error(out.error ?? `CyberSuite could not complete the request (error ${res.status})`)
       return out.saved as Question
     },
     onSettled: (_d, _e, body) => qc.invalidateQueries({ queryKey: ['uc4', 'case', body.incident_id] }),
@@ -227,10 +227,10 @@ export function useReopen() {
     mutationFn: async (incident_id: string) => {
       const res = await fetch('/api/uc4/reopen', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portal': 'reopen' },
-        body: JSON.stringify({ incident_id, confirm: true, reason: 'Reopened from the portal' }),
+        body: JSON.stringify({ incident_id, confirm: true, reason: 'Reopened from CyberSuite' }),
       })
       const out = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(out.error ?? `the assistant answered ${res.status}`)
+      if (!res.ok) throw new Error(out.error ?? `CyberSuite could not complete the request (error ${res.status})`)
       return out
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['uc4'] }),

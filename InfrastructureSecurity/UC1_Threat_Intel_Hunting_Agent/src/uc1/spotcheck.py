@@ -1,7 +1,7 @@
 """AI spot-check: a person checks a random sample of Gemini's answers against the source, which gives an
 honest 'AI accuracy' figure for the demo.
 
-  python -m uc1 spotcheck                    -> data/reports/UC1_AI_Spotcheck_<date>.xlsx (20 random AI answers)
+  python -m uc1 spotcheck                    -> data/reports/Threat_Intel_AI_Spotcheck_<date>.xlsx (20 random AI answers)
   python -m uc1 spotcheck --score <file>     -> reads your Y/N marks, writes data/ai_spotcheck_result.json
 """
 
@@ -82,7 +82,7 @@ def export(store: Store, settings: Settings, n: int = 20, seed: int | None = Non
         info.append([line])
     info.column_dimensions["A"].width = 120
     settings.reports_dir.mkdir(parents=True, exist_ok=True)
-    path = settings.reports_dir / f"UC1_AI_Spotcheck_{datetime.now():%Y%m%d_%H%M}.xlsx"
+    path = settings.reports_dir / f"Threat_Intel_AI_Spotcheck_{datetime.now():%Y%m%d_%H%M}.xlsx"
     wb.save(path)
     return path
 

@@ -1,6 +1,5 @@
 // UC1's own data: GET /api/uc1/dashboard (= dashboard.gather(), the bundle its dashboard is drawn from)
 // and GET /api/uc1/threats/<id> (one entry of its site_data.json, the detail page data).
-import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 
@@ -40,11 +39,11 @@ export interface Uc1Data {
   days: string[]
   series: Record<string, number[]>
   ratings: Record<Rating, number>
-  posture: { rating: Rating; urgent: number; kev: number; affecting: number }
+  posture: { rating: Rating; urgent: number; affecting: number }
   funnel: { stage: string; value: number; note: string }[]
-  matrix: { device_name: string; app: string; cves: number; kev: number }[]
+  matrix: { device_name: string; app: string; cves: number }[]
   apps: string[]
-  scatter: [number, number, string, string, boolean][]   // cvss, epss, cve, app, kev
+  scatter: [number, number, string, string][]   // cvss, epss, cve, app
   tactics: { tactic: string; threats: number }[]
   ioc_types: Record<string, number>
   ioc_hits: number
@@ -93,7 +92,7 @@ export interface ThreatDetail {
   text: string; score: number; rating: Rating; factors: string[]; why: string; summary: string | null; threat_type: string | null
   confidence: string | null; ai_status: string; ai_model: string | null; dropped: Record<string, unknown>; analysed_at: string | null
   actions: string[]
-  cves: { id: string; origin: string; cvss: number | null; severity: string | null; epss: number | null; epss_percentile: number | null; kev_added: string | null; kev_due: string | null; kev_ransomware: string | null; description: string | null }[]
+  cves: { id: string; origin: string; cvss: number | null; severity: string | null; epss: number | null; epss_percentile: number | null; description: string | null }[]
   techniques: { id: string; origin: string; name: string; tactics: string; url: string; reason?: string }[]
   products: { value: string; origin: string }[]
   ioc_count: number
@@ -113,7 +112,7 @@ export interface ThreatDetail {
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url)
-  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `Portal API answered ${res.status}`)
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `CyberSuite could not complete the request (error ${res.status})`)
   return res.json()
 }
 
@@ -141,30 +140,24 @@ export interface ThreatMatches {
 }
 export const useThreatMatches = (software: string) =>
   useQuery({ queryKey: ['uc1', 'matches', software], queryFn: () => getJson<ThreatMatches>(`/api/uc1/matches/${encodeURIComponent(software)}`), enabled: !!software, staleTime: 60_000, retry: false })
-/** Per app (Defender's software name): how many of its vulnerabilities are in the news; split = [still open, fixed] */
+/** Per app (Defender's software name): how many of its vulnerabilities are in the news; split = [still open, fixed];
+ *  vm_cves = per computer + app + version (vmKey), the CVEs a threat in the news names */
 export const useThreatMatchCounts = () =>
-  useQuery({ queryKey: ['uc1', 'matches'], queryFn: () => getJson<{ built_at: string | null; counts: Record<string, number>; split?: Record<string, [number, number]> }>('/api/uc1/matches'), staleTime: 60_000, retry: false })
+  useQuery({ queryKey: ['uc1', 'matches'], queryFn: () => getJson<{ built_at: string | null; counts: Record<string, number>; split?: Record<string, [number, number]>; vm_cves?: Record<string, string[]> }>('/api/uc1/matches'), staleTime: 60_000, retry: false })
 
 export const RATINGS: Rating[] = ['Critical', 'High', 'Medium', 'Low']
 export const FEED_NAME: Record<string, string> = {
-  attack: 'MITRE ATT&CK', kev: 'CISA', nvd: 'NVD', epss: 'FIRST EPSS', ncsc_nl: 'NCSC-NL', cert_eu: 'CERT-EU', msrc: 'Microsoft MSRC',
+  attack: 'MITRE ATT&CK', nvd: 'NVD', epss: 'FIRST EPSS', ncsc_nl: 'NCSC-NL', cert_eu: 'CERT-EU', msrc: 'Microsoft MSRC',
   threatfox: 'ThreatFox', urlhaus: 'URLhaus', malwarebazaar: 'MalwareBazaar', otx: 'AlienVault OTX', abusech: 'abuse.ch', lab_test: 'Validation',
 }
 export const IOC_NAME: Record<string, string> = {
   ip: 'IP addresses', domain: 'Domains', url: 'Web links', sha256: 'Files (SHA-256)', sha1: 'Files (SHA-1)', md5: 'Files (MD5)',
 }
-export const cleanTitle = (t: string) => t.replace(/^(Actively exploited|CISA alert): /, '')
 /** A hidden PowerShell command that UC1 decoded, if this timeline event has one. */
 export const decoded = (what: string) => String(what).split(' | decoded command: ')[1] ?? null
 export const threatHref = (id: string) => `/uc1/threat/${encodeURIComponent(id)}`
 /** A "threat" UC1 made from activity found on our computers (a sign of attack), not from the news */
 export const isSign = (kind: string) => kind === 'hunt'
-/** Link maker for UC1's page on a CISA KEV hole ("kev:CVE-…"): null while UC1's data loads or when UC1 has no such page. */
-export function useKevThreatHref() {
-  const { data } = useUc1Data()
-  const ids = useMemo(() => new Set(data?.explorer.map((e) => e.id)), [data])
-  return (cve: string) => (ids.has(`kev:${cve}`) ? threatHref(`kev:${cve}`) : null)
-}
 
 // ---- signs of attack in plain words (Attack detection page and the detail page)
 export interface AttackType { label: string; category: string; what: string }
@@ -178,12 +171,12 @@ export function attackType(kind: string, detail: string): AttackType {
       return { label: 'Connection to a known malicious domain', category: 'Malicious domain', what: `The device connected to ${value}, a domain on a known-malicious list.` }
     if (type === 'ip')
       return { label: 'Connection to a known malicious IP address', category: 'Malicious IP', what: `The device connected to ${value}, an address on a known-malicious list.` }
-    return { label: 'Known malicious file found', category: 'Malware', what: 'A file on the computer matches a known malicious file.' }
+    return { label: 'Known malicious file found', category: 'Malware', what: 'A file on the device matches a known malicious file.' }
   }
   if (d.includes('powershell') && (d.includes('encoded') || d.includes('hidden')))
     return { label: 'Encoded PowerShell command', category: 'Obfuscated script', what: 'A PowerShell command was run in encoded form, a technique used to conceal what a script does.' }
   if (d.includes('antivirus'))
-    return { label: 'Malware caught by antivirus', category: 'Malware', what: 'Microsoft Defender antivirus found a harmful file on the computer.' }
+    return { label: 'Malware caught by antivirus', category: 'Malware', what: 'Microsoft Defender antivirus found a harmful file on the device.' }
   if (/\bt1204\b/.test(d) || d.includes('user execution'))
     return { label: 'Program started from a document', category: 'Malicious document', what: 'A document application (such as a PDF reader) launched another program, a common technique of malicious documents.' }
   const name = detail.replace(/^AI-drafted:\s*/, '').replace(/^T\d{4}(\.\d{3})?\s+/, '')

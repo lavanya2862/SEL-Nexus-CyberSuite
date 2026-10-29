@@ -53,7 +53,7 @@ export function Signup() {
   if (ready && config?.signup_open === false) {
     return (
       <AuthLayout>
-        <AuthHeading title="New accounts are closed">Ask the portal owner to add you, then sign in with the email they used.</AuthHeading>
+        <AuthHeading title="New accounts are closed">Contact your administrator to be added, then sign in with the email they used.</AuthHeading>
         <Link to="/login" className="flex h-14 w-full items-center justify-center rounded-[10px] border border-hairline-strong bg-field text-[15px] font-medium hover:bg-well">
           Back to sign in
         </Link>

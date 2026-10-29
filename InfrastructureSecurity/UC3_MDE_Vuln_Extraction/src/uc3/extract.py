@@ -180,7 +180,7 @@ def run_extract(settings: Settings, run_date: date | None = None, client: Defend
     by_kind = _count_changes(work_dir / "changes.json.gz")
     rows = sum(f["rows"] for f in export["files"])
     refreshed = not export["generated_time"] or export["generated_time"] != state.get("last_generated_time")
-    log.info("Defender changes since the last run: %d new, %d fixed, %d updated%s", by_kind["new"], by_kind["fixed"],
+    log.info("Defender changes since the last run: %d new, %d remediated, %d updated%s", by_kind["new"], by_kind["fixed"],
              by_kind["updated"], "" if refreshed else " (Defender has not made a new export since the last run)")
 
     manifest = {

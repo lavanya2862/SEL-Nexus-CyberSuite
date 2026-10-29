@@ -19,10 +19,10 @@ def notes(store: Store, settings: Settings) -> str:
                       (SELECT string_agg(DISTINCT e.device_name, ', ') FROM exposure e WHERE e.threat_id = t.threat_id) AS devices,
                       (SELECT max(e.recommended_update) FROM exposure e WHERE e.threat_id = t.threat_id) AS fix
                FROM threats t JOIN scores s USING (threat_id)
-               WHERE t.kind = 'kev' AND t.threat_id IN (SELECT threat_id FROM exposure)
+               WHERE t.threat_id IN (SELECT threat_id FROM exposure)
                ORDER BY s.score DESC LIMIT 1""")
     contrast = q("""SELECT t.title, s.score, s.rating FROM threats t JOIN scores s USING (threat_id)
-                    WHERE t.kind = 'kev' AND t.threat_id NOT IN (SELECT threat_id FROM exposure)
+                    WHERE t.threat_id NOT IN (SELECT threat_id FROM exposure)
                     ORDER BY s.score DESC, t.published_at DESC LIMIT 1""")
     dutch = q("""SELECT t.title, a.summary FROM threats t JOIN analysis a USING (threat_id)
                  WHERE t.source = 'NCSC-NL' AND a.ai_status = 'done' ORDER BY t.published_at DESC LIMIT 1""")
@@ -52,7 +52,7 @@ def notes(store: Store, settings: Settings) -> str:
     if contrast:
         c = contrast[0]
         lines.append(f"- Contrast: {c['title']} is {c['rating']} ({c['score']}/100) because we don't have it: monitor, not act now")
-    lines += [f"- {m['proactive_threats_identified']} threats affect our devices; {m['exposed_actively_exploited']} are on the CISA KEV list", "",
+    lines += [f"- {m['proactive_threats_identified']} threats affect our devices", "",
               "## 4. It hunts",
               f"- Last run: " + ", ".join(f"{h['n']} {h['origin']} hunts ({h['r'] or 0} rows)" for h in hunts),
               f"- About {m['hunts_per_month_projected']} hunts per month at 6 runs a day"]
@@ -63,7 +63,7 @@ def notes(store: Store, settings: Settings) -> str:
     else:
         lines.append("- No hits: real indicators were not found on our devices (a real 'we're clean' result). "
                      "Run the 3 lab tests first if you want to show a positive find.")
-    lines += ["", "## 5. Report and alert", f"- Latest report: {report}", "- Dashboard: the Threats page of the Unified Cyber Portal", "",
+    lines += ["", "## 5. Report and alert", f"- Latest report: {report}", "- Dashboard: the Threats page of CyberSuite", "",
               "## 6. Metrics",
               f"- Median time to assess: {m['median_minutes_to_assess']} min · to report: {m['median_minutes_to_report']} min",
               f"- Manual effort equivalent (assumption): {m['manual_hours_equivalent (assumption)']} h", "",

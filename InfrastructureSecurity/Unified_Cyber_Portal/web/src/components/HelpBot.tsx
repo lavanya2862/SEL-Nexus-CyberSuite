@@ -51,7 +51,7 @@ export function HelpBot() {
         body: JSON.stringify({ question, screen, path: pathname, history }),
       })
       const out = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(out.error ?? `the portal answered ${res.status}`)
+      if (!res.ok) throw new Error(out.error ?? `CyberSuite could not complete the request (error ${res.status})`)
       return out.saved as Saved
     },
     onSuccess: (s) => add({ from: 'bot', kind: 'ai', text: s.answer, links: s.links }),
@@ -91,7 +91,7 @@ export function HelpBot() {
         queryFn: async () => {
           const res = await fetch(`/api/help/ready?screen=${screen}&path=${encodeURIComponent(pathname)}`)
           const out = await res.json().catch(() => ({}))
-          if (!res.ok) throw new Error(out.error ?? `the portal answered ${res.status}`)
+          if (!res.ok) throw new Error(out.error ?? `CyberSuite could not complete the request (error ${res.status})`)
           return out.items as Ready[]
         },
       })
@@ -153,7 +153,7 @@ export function HelpBot() {
 
           <div ref={listRef} className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
             <Bubble from="bot">
-              Hi! I’m here to help. Ask me anything about this screen.
+              Ask a question about this page.
             </Bubble>
             {msgs.map((m) =>
               m.from === 'you' ? (
@@ -173,12 +173,12 @@ export function HelpBot() {
                     </div>
                   )}
                   {m.kind === 'ready' && <p className="mt-1.5 text-[10px] text-ink-3">From today’s data</p>}
-                  {m.kind === 'ai' && <p className="mt-1.5 flex items-center gap-1 text-[10px] text-ink-3"><Sparkles className="size-3" /> Agent answer from the portal’s data · verify key figures on the page</p>}
+                  {m.kind === 'ai' && <p className="mt-1.5 flex items-center gap-1 text-[10px] text-ink-3"><Sparkles className="size-3" /> Agent answer from CyberSuite data · verify key figures on the page</p>}
                 </Bubble>
               ),
             )}
             {(ask.isPending || readyBusy) && (
-              <Bubble from="bot"><span className="flex items-center gap-2 text-ink-3"><Loader2 className="size-3.5 animate-spin" /> Looking at the portal’s data…</span></Bubble>
+              <Bubble from="bot"><span className="flex items-center gap-2 text-ink-3"><Loader2 className="size-3.5 animate-spin" /> Looking at CyberSuite data…</span></Bubble>
             )}
           </div>
 
@@ -197,7 +197,7 @@ export function HelpBot() {
             </div>
             {aiOff || used ? (
               <p className="rounded-xl bg-well px-3 py-2 text-xs text-ink-2">
-                {aiOff ? 'Open questions require the help agent, which is not yet configured for the portal. The two questions above are still available.' : `Today’s limit of ${status.data?.cap} open questions has been reached. The two questions above are still available.`}
+                {aiOff ? 'Open questions require the help agent, which is not yet configured for CyberSuite. The two questions above are still available.' : `Today’s limit of ${status.data?.cap} open questions has been reached. The two questions above are still available.`}
               </p>
             ) : (
               <div className="flex items-end gap-2 rounded-xl border border-hairline bg-field px-3 py-2 transition-[border-color,box-shadow] focus-within:border-blue/60 focus-within:ring-3 focus-within:ring-blue/15">

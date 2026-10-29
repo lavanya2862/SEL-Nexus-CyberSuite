@@ -53,7 +53,6 @@ def check(analysis: ThreatAnalysis, source_text: str, known_cves: set[str], tech
     result = {
         "summary": summary,
         "threat_type": analysis.threat_type if analysis.threat_type in ALLOWED_TYPES else "other",
-        "exploited_in_wild": analysis.exploited_in_wild if analysis.exploited_in_wild in ("yes", "no", "unknown") else "unknown",
         "cves": list(dict.fromkeys(cves)),
         "products": [p.model_dump() for p in analysis.products[:10] if p.product.strip()],
         "techniques": techs,

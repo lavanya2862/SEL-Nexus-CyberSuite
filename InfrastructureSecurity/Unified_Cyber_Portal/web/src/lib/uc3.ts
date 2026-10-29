@@ -7,9 +7,6 @@ import { useFilters } from '@/lib/filters'
 
 export const SEVS = ['Critical', 'High', 'Medium', 'Low', 'Unrated'] as const
 export type Sev = (typeof SEVS)[number]
-export const EXPL: Record<string, string> = {
-  NoExploit: 'No known exploit', ExploitIsPublic: 'Public exploit', ExploitIsVerified: 'Verified exploit', ExploitIsInKit: 'In attack kits',
-}
 const EXPL_RANK: Record<string, number> = { ExploitIsInKit: 3, ExploitIsVerified: 2, ExploitIsPublic: 1, NoExploit: 0 }
 const PRIO_RANK: Record<string, number> = { P1: 1, P2: 2, P3: 3, P4: 4 }
 export const BUCKETS = ['0-30', '31-60', '61-90', '90+'] as const
@@ -57,7 +54,7 @@ export interface Uc3FixApp {
   no_patch?: string[]
   versions: { version: string; cves: number; devices: string[]; folders: string[]; eos?: { status: string; date: string | null } | null }[]
   devices: { name: string; opco: string }[]; opcos: string[]; findings: number; cves: number; p1: number; critical: number; high: number
-  kev_cves: { cve: string; name: string }[]; overdue: number; fix_by: string | null; oldest_days: number
+  overdue: number; fix_by: string | null; oldest_days: number
   urgency: { level: 1 | 2 | 3; label: string }
   fix: { action: string; command: string | null; url: string | null; note: string | null }
   ai: { what_is_wrong?: string; worst_case?: string; why_now?: string; verify?: string; side_effects?: string; steps?: string[] } | null
@@ -73,7 +70,7 @@ export interface Uc3FixSetting {
   ai: Uc3FixApp['ai']; source: string; model: string | null
 }
 export interface Uc3Data {
-  meta: { snapshot: string; built_at: string; source: string; kev: { entries: number; version: string | null }; sla: Record<string, number> }
+  meta: { snapshot: string; built_at: string; source: string; sla: Record<string, number> }
   run: Uc3Run | null
   runs: Uc3Run[]
   kql: { rows_exist: number; rows_returned: number; coverage: number; measured_at: string } | null
@@ -87,7 +84,6 @@ export interface Uc3Data {
   } | null
   /** Vulnerabilities Defender reported as fixed (newest first); absent in data built before 13 Oct */
   fixed?: { cols: string[]; rows: unknown[][] }
-  kev: { cve: string; name: string; added: string; rw: boolean }[]
   daily: [string, string, string, string, number, number, number][]
   changes: [string, string, string, string, number][]
   remed: [string, string, string, number][]
@@ -123,7 +119,7 @@ export function useFixedFindings(data: Uc3Data | undefined): FixedFinding[] {
 
 export interface Finding {
   d: number; sw: string; ver: string; cve: string; sev: Sev; cvss: number | null; ex: string; pr: string; age: number
-  bk: string; br: number; kev: number; upd: string; fs: string
+  bk: string; br: number; upd: string; fs: string
   /** 0 = the vendor has no security update yet; absent in data built before 14 Oct */
   ua?: number
   dev: Uc3Device; o: string; u: string
@@ -131,8 +127,57 @@ export interface Finding {
 
 async function fetchUc3(): Promise<Uc3Data> {
   const res = await fetch('/api/uc3/dashboard')
-  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `Portal API answered ${res.status}`)
-  return res.json()
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `CyberSuite could not complete the request (error ${res.status})`)
+  const data: Uc3Data = await res.json()
+  for (const card of [...(data.fixes?.apps ?? []), ...(data.fixes?.settings ?? [])]) if (card.ai) card.ai = scrubAi(card.ai)
+  for (const s of data.fixes?.settings ?? []) {
+    s.microsoft = { ...s.microsoft, description: dropExploitTalk(s.microsoft.description), risk: dropExploitTalk(s.microsoft.risk) }
+  }
+  return data
+}
+
+/** The portal never says a hole is exploited or used by attackers (the agent's guard does the same from its next run;
+ *  this covers texts written before). Microsoft's product names "Exploit Guard / protection" may stay. */
+const exploitTalk = (s: string) => /exploit|attack kit|in the wild|used by attackers|known.exploited|weaponi[sz]|proof.of.concept/i
+  .test(s.replace(/exploit (?:guard|protection)/gi, ''))
+const dropExploitTalk = (t?: string) => t && t.split(/(?<=[.!?])\s+/).filter((s) => !exploitTalk(s)).join(' ')
+function scrubAi(ai: NonNullable<Uc3FixApp['ai']>): NonNullable<Uc3FixApp['ai']> {
+  return {
+    ...ai, what_is_wrong: dropExploitTalk(ai.what_is_wrong), worst_case: dropExploitTalk(ai.worst_case), why_now: dropExploitTalk(ai.why_now),
+    verify: dropExploitTalk(ai.verify), side_effects: dropExploitTalk(ai.side_effects), steps: ai.steps?.filter((s) => !exploitTalk(s)),
+  }
+}
+
+/** One open vulnerability of one app version on one computer */
+export interface VmCve { cve: string; sev: string; cvss: number | null; nofix: boolean; fs: string | null }
+/** One app version on one computer: its open vulnerabilities (worst first), when Defender first found them, and its own
+ *  deadline (the earliest first seen + the patching rule's days for that severity) */
+export interface VmDetail { cves: VmCve[]; firstSeen: string | null; due: string | null }
+export const vmKey = (device: string, software: string, version: string) => `${device}|${software}|${version}`.toLowerCase()
+
+const vmCache = new WeakMap<Uc3Data, Map<string, VmDetail>>()
+/** vmKey → VmDetail for every computer + app version with open vulnerabilities (computed once per data load) */
+export function vmDetails(data: Uc3Data): Map<string, VmDetail> {
+  const hit = vmCache.get(data)
+  if (hit) return hit
+  const [d, sw, ver, cve, sev, cvss, ua, fs] = ['d', 'sw', 'ver', 'cve', 'sev', 'cvss', 'ua', 'fs'].map((k) => data.f.cols.indexOf(k))
+  const lists = new Map<string, VmCve[]>()
+  for (const r of data.f.rows) {
+    const k = vmKey(data.devices[r[d] as number]?.name ?? '', String(r[sw]), String(r[ver]))
+    const list = lists.get(k) ?? []
+    list.push({ cve: String(r[cve]), sev: String(r[sev]), cvss: (r[cvss] as number) ?? null, nofix: r[ua] === 0, fs: r[fs] ? String(r[fs]).slice(0, 10) : null })
+    lists.set(k, list)
+  }
+  const rank = (s: string) => { const i = (SEVS as readonly string[]).indexOf(s); return i < 0 ? SEVS.length : i }
+  const earliest = (xs: (string | null)[]) => xs.filter((x): x is string => !!x).sort()[0] ?? null
+  const out = new Map<string, VmDetail>()
+  for (const [k, list] of lists) {
+    list.sort((a, b) => rank(a.sev) - rank(b.sev) || (b.cvss ?? 0) - (a.cvss ?? 0))
+    const dues = list.map((c) => (c.fs && data.meta.sla[c.sev] != null ? addDays(c.fs, data.meta.sla[c.sev]) : null))
+    out.set(k, { cves: list, firstSeen: earliest(list.map((c) => c.fs)), due: earliest(dues) })
+  }
+  vmCache.set(data, out)
+  return out
 }
 
 export function useUc3Data() {
@@ -203,20 +248,20 @@ export function cveList(rows: Finding[]) {
       const best = fs.reduce((a, f) => ((EXPL_RANK[f.ex] || 0) > (EXPL_RANK[a.ex] || 0) ? f : a), fs[0])
       return {
         cve, fs, sev: fs[0].sev, cvss: Math.max(...fs.map((f) => f.cvss ?? 0)), ex: best.ex,
-        pr: fs.map((f) => f.pr).sort()[0], devs: new Set(fs.map((f) => f.d)).size, kev: fs.some((f) => f.kev),
+        pr: fs.map((f) => f.pr).sort()[0], devs: new Set(fs.map((f) => f.d)).size,
       }
     })
-    .sort((a, b) => PRIO_RANK[a.pr] - PRIO_RANK[b.pr] || Number(b.kev) - Number(a.kev) || b.devs - a.devs || b.cvss - a.cvss)
+    .sort((a, b) => PRIO_RANK[a.pr] - PRIO_RANK[b.pr] || b.devs - a.devs || b.cvss - a.cvss)
 }
 
 export function downloadCsv(rows: Finding[], snapshot: string, opco: string) {
-  const cols = ['device', 'opco', 'software', 'version', 'cve', 'severity', 'cvss', 'exploitability', 'priority', 'age_days', 'sla_breached', 'recommended_update', 'first_seen']
+  const cols = ['device', 'opco', 'software', 'version', 'cve', 'severity', 'cvss', 'priority', 'age_days', 'sla_breached', 'recommended_update', 'first_seen']
   const q = (v: unknown) => {
     const s = String(v ?? '')
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
   const lines = [cols.join(',')].concat(
-    rows.map((f) => [f.dev?.name, f.o, f.sw, f.ver, f.cve, f.sev, f.cvss, f.ex, f.pr, f.age, f.br ? 'yes' : 'no', f.upd, f.fs].map(q).join(',')),
+    rows.map((f) => [f.dev?.name, f.o, f.sw, f.ver, f.cve, f.sev, f.cvss, f.pr, f.age, f.br ? 'yes' : 'no', f.upd, f.fs].map(q).join(',')),
   )
   const a = document.createElement('a')
   a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }))

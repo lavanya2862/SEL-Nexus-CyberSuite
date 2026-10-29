@@ -114,7 +114,7 @@ def publish_all(settings: Settings) -> dict:
 
     # The log lines below mark the stages "Score and report" and "Remediation agent" (the portal's run page reads them)
     published = run_publish(settings)
-    log.info("Score and report finished: %d reporting tables, CISA KEV %s", len(published["tables"]), published["kev"]["status"])
+    log.info("Score and report finished: %d reporting tables", len(published["tables"]))
     log_severity_counts(settings)
     log.info("Remediation agent started")
     published["ai_fixes"] = run_ai_fixes(settings)
@@ -134,14 +134,14 @@ FIX_RESULT_KEYS = ("new", "new_ids", "new_apps", "new_settings", "grew", "grew_v
 def run_fix_stage(settings: Settings) -> dict | None:
     """Fix stage: the fix engine (in the Threat Intel Agent) pulls a fresh inventory from Defender, rebuilds its fix
     plan and lists the fixes that are new in this run. It fixes nothing; optional, so a problem never stops a run."""
-    log.info("Fix stage started")
+    log.info("Remediation stage started")
     engine = settings.fix_engine_dir
     if not settings.fix_stage or not engine:
-        log.info("Fix stage skipped: switched off (UC3_FIX_STAGE=0)")
+        log.info("Remediation stage skipped: switched off in the settings (UC3_FIX_STAGE=0)")
         return None
     python = engine / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     if not python.is_file():
-        log.warning("Fix stage skipped: no fix engine at %s", engine)
+        log.warning("Remediation stage skipped: no remediation engine at %s", engine)
         return None
     # the suite .env must not reach the fix engine as environment (same names, e.g. GEMINI_API_KEY, would override its settings)
     ours = set(dotenv_values(SUITE_ENV))
@@ -151,19 +151,19 @@ def run_fix_stage(settings: Settings) -> dict | None:
                              text=True, encoding="utf-8", errors="replace", timeout=25 * 60,
                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except (OSError, subprocess.TimeoutExpired) as exc:
-        log.warning("Fix stage skipped: the fix engine did not answer (%s)", exc.__class__.__name__)
+        log.warning("Remediation stage skipped: the remediation engine did not respond (%s)", exc.__class__.__name__)
         return None
     line = next((ln for ln in reversed(out.stdout.splitlines()) if ln.startswith("Fix plan:")), None)
     if not line:
         why = (out.stdout.strip().splitlines() or out.stderr.strip().splitlines() or ["no answer"])[-1]
-        log.warning("Fix stage skipped: the fix engine could not refresh the plan (%s)", why[:200])
+        log.warning("Remediation stage skipped: the remediation engine could not refresh the plan (%s)", why[:200])
         return None
     result = json.loads(line.split(":", 1)[1])
     if result.get("inventory") != "ok":
-        log.warning("Fix stage: Defender inventory %s (%s); fixes come from the last good inventory",
+        log.warning("Remediation stage: Defender inventory %s (%s); remediations use the last good inventory",
                     result.get("inventory"), result.get("inventory_note") or "-")
     summary = {k: result.get(k) for k in FIX_RESULT_KEYS}
-    log.info("Fix stage finished: %s", summary)
+    log.info("Remediation stage finished: %s", summary)
     return summary
 
 
@@ -187,7 +187,7 @@ def run_ai_fixes(settings: Settings, **kwargs) -> dict | None:
         result = build_fixes(settings, **kwargs)
         return {**result["counts"], "model": result["model"]}
     except Exception:
-        log.exception("AI fix guide not updated (the rest of the run is fine)")
+        log.exception("AI remediation guide not updated (the rest of the run completed)")
         return None
 
 

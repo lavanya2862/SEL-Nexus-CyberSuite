@@ -18,6 +18,7 @@ import { Chart } from '@/components/Chart'
 import { Chip, Empty, InfoTip, Panel, Table, Tabs } from '@/components/kit'
 import { fetchSummary, type Health, type Summary } from '@/lib/api'
 import { PRIORITY } from '@/lib/uc3'
+import { qualityWord } from '@/lib/format'
 import { useFilters, type WorkTab } from '@/lib/filters'
 import { ago, dateTime, num, shortDate } from '@/lib/format'
 import { chartTokens, statusColor, useTheme } from '@/lib/theme'
@@ -29,8 +30,8 @@ export function Home() {
   if (error || !data)
     return (
       <Panel className="p-6">
-        <h2 className="font-semibold">Unable to reach the portal service</h2>
-        <p className="mt-1 text-sm text-ink-3">{String(error ?? 'No data')}. Start it with `python -m portal serve`, then reload.</p>
+        <h2 className="font-semibold">CyberSuite is not available</h2>
+        <p className="mt-1 text-sm text-ink-3">{String(error ?? 'No data')}. Reload the page; if this continues, contact your administrator.</p>
       </Panel>
     )
   return <HomeView s={data} />
@@ -44,20 +45,19 @@ export function useView(s: Summary) {
     const all = opco === 'all'
     const ot = s.uc3.opco_totals.find((o) => o.opco === opco)
     const totals = all
-      ? { findings: s.uc3.totals.total ?? 0, p1: s.uc3.totals.p1 ?? 0, kev: s.uc3.totals.kev ?? 0, ransomware: s.uc3.totals.ransomware ?? 0,
+      ? { findings: s.uc3.totals.total ?? 0, p1: s.uc3.totals.p1 ?? 0,
           fixed: s.uc3.totals.remediated ?? 0, fixedSince: s.uc3.totals.fixed_since ?? null }
-      : { findings: ot?.findings ?? 0, p1: ot?.p1 ?? 0, kev: ot?.kev ?? 0, ransomware: ot?.ransomware ?? 0,
+      : { findings: ot?.findings ?? 0, p1: ot?.p1 ?? 0,
           fixed: ot?.fixed ?? 0, fixedSince: ot?.fixed_since ?? null }
     const trend = all
       ? s.uc3.trend.map((r) => ({ date: r.date, total: r.total }))
       : s.uc3.trend_opco.filter((r) => r.opco === opco).map((r) => ({ date: r.date, total: r.total }))
 
-    const byApp = new Map<string, { app: string; findings: number; kev: number }>()
+    const byApp = new Map<string, { app: string; findings: number }>()
     for (const a of s.uc3.apps) {
       if (!all && a.opco !== opco) continue
-      const row = byApp.get(a.software_name) ?? { app: a.app, findings: 0, kev: 0 }
+      const row = byApp.get(a.software_name) ?? { app: a.app, findings: 0 }
       row.findings += a.findings
-      row.kev = Math.max(row.kev, a.kev) // same CVEs on every VM: never add them twice
       byApp.set(a.software_name, row)
     }
     const apps = [...byApp.values()].sort((a, b) => b.findings - a.findings)
@@ -67,7 +67,6 @@ export function useView(s: Summary) {
       totals,
       trend,
       apps,
-      kevApps: apps.filter((a) => a.kev > 0).sort((a, b) => b.kev - a.kev),
       fixes: s.uc3.fixes.filter((f) => all || f.opcos.split(',').map((x) => x.trim()).includes(opco)),
       threats: s.uc1.top_threats.filter(
         (t) => all || (t.devices ?? '').split(',').some((d) => deviceOpco.get(d.trim()) === opco),
@@ -100,7 +99,7 @@ function HomeView({ s }: { s: Summary }) {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Security overview</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Summary</h1>
           <p className="mt-1 text-sm text-ink-3">
             {v.opco === 'all' ? 'All VMs' : v.opco} · Defender vulnerabilities, threat intelligence, attack detection and triage
           </p>
@@ -173,7 +172,7 @@ function HealthPill({ h }: { h: PillHealth }) {
         </span>
       </TooltipTrigger>
       <TooltipContent>
-        {h.name}: data as of {dateTime(h.data_as_of)}{h.quality ? ` · quality ${h.quality}` : ''}
+        {h.name}: data as of {dateTime(h.data_as_of)}{h.quality ? ` · quality ${qualityWord(h.quality)}` : ''}
       </TooltipContent>
     </Tooltip>
   )
@@ -190,13 +189,13 @@ function PriorityCard({ v }: { v: View }) {
   return (
     <Panel className="card-hero flex flex-col p-6">
       <div className="flex items-start justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm">Priority 1 findings <InfoTip text="Share of all findings that are highest priority: critical severity, or a vulnerability with a known exploit. The chip shows the count." /></h3>
+        <h3 className="flex items-center gap-1.5 text-sm">P1 findings <InfoTip text="Share of all findings rated P1: the vulnerabilities to remediate first. The chip shows the count." /></h3>
         <Chip>{num(v.totals.p1)}</Chip>
       </div>
       <div className="mt-2 text-[34px] font-normal leading-none tracking-tight tabular">{pct.toFixed(1)}%</div>
       <div className="mt-auto pt-7">
         <div className="relative">
-          <div className="mb-2 text-center text-xs text-ink-3">Priority 2–4</div>
+          <div className="mb-2 text-center text-xs text-ink-3">P2–P4</div>
           <div className="h-[3px] rounded-full" style={{ background: 'linear-gradient(90deg, rgb(255 255 255 / 0.55), #ffd166 75%, var(--signal))' }} />
           <div className="absolute top-6 h-3 w-px bg-ink" style={{ left: `${rest}%` }} />
           <div className="tabular mt-3 text-right text-xs font-medium" style={{ paddingRight: `${Math.max(0, pct - 6)}%` }}>{rest.toFixed(1)}%</div>
@@ -251,7 +250,7 @@ function TrendCard({ v }: { v: View }) {
   return (
     <Panel className="flex flex-col p-6 md:col-span-2 xl:col-span-1">
       <div className="flex items-start justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm">Open vulnerabilities <InfoTip text="Every vulnerability Defender reports, counted once per application per device. The line shows each daily snapshot." /></h3>
+        <h3 className="flex items-center gap-1.5 text-sm">Open findings <InfoTip text="Every vulnerability Defender reports, counted once per application per device. The line shows each daily snapshot." /></h3>
         <Chip>{delta >= 0 ? '+' : '−'}{num(Math.abs(delta))} since {v.trend.at(-2) ? shortDate(v.trend.at(-2)!.date) : '–'}</Chip>
       </div>
       <div className="mt-2 text-[34px] leading-none tracking-tight tabular">{num(last)}</div>
@@ -373,7 +372,7 @@ function FixesView({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'gr
     )
   return (
     <>
-      <Table head={[['#', 'left'], ['App', 'left'], ['Priority', 'left'], ['CVEs', 'right'], ['Remediation', 'left']]}>
+      <Table head={[['#', 'left'], ['App', 'left'], ['Remediation priority', 'left'], ['CVEs', 'right'], ['Remediation', 'left']]}>
         {v.fixes.map((f) => (
           <tr key={f.rank} className="hover:bg-well/60">
             <td className="tabular w-10 text-ink-3">{f.rank}</td>
@@ -398,7 +397,7 @@ function FixesView({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'gr
         ))}
       </Table>
       {s.uc3.ai_fixes?.model && (
-        <p className="mt-3 text-xs text-ink-3">Remediation guidance generated by the agent and validated against Defender data. Review before acting.</p>
+        <p className="mt-3 text-xs text-ink-3">Agent-generated remediation guidance, validated against Defender data. Review before acting.</p>
       )}
     </>
   )
@@ -406,14 +405,13 @@ function FixesView({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'gr
 
 function ThreatsView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
   if (!v.threats.length) return <Empty text="No applicable threats for this VM." />
-  const title = (t: string) => t.replace(/^(Actively exploited|CISA alert): /, '')
   if (layout === 'grid')
     return (
       <div className="grid gap-3 sm:grid-cols-2">
         {v.threats.map((t) => (
           <div key={t.id} className="rounded-xl border border-hairline p-4">
             <div className="flex items-start justify-between gap-3">
-              <Link to={threatHref(t.id)} className="text-sm font-medium leading-snug hover:underline">{title(t.title)}</Link>
+              <Link to={threatHref(t.id)} className="text-sm font-medium leading-snug hover:underline">{t.title}</Link>
               <span className="tabular rounded-md bg-well px-2 py-0.5 text-xs font-semibold">{t.score}</span>
             </div>
             <p className="mt-2 line-clamp-3 text-xs text-ink-3">{t.summary}</p>
@@ -422,12 +420,12 @@ function ThreatsView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
       </div>
     )
   return (
-    <Table head={[['Score', 'left'], ['Threat', 'left'], ['Source', 'left'], ['Devices exposed', 'left'], ['Action', 'left']]}>
+    <Table head={[['Score', 'left'], ['Threat', 'left'], ['Source', 'left'], ['Exposed devices', 'left'], ['Action', 'left']]}>
       {v.threats.map((t) => (
         <tr key={t.id} className="hover:bg-well/60">
           <td className="tabular w-16 font-semibold">{t.score}</td>
           <td className="max-w-[300px]">
-            <Link to={threatHref(t.id)} className="font-medium leading-snug hover:underline">{title(t.title)}</Link>
+            <Link to={threatHref(t.id)} className="font-medium leading-snug hover:underline">{t.title}</Link>
             <div className="mt-1 flex flex-wrap gap-1">
               {(t.chips ?? []).slice(1, 4).map((c) => <span key={c} className="rounded bg-well px-1.5 py-0.5 text-[11px] text-ink-2">{c}</span>)}
             </div>
@@ -460,7 +458,7 @@ function DevicesView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
             <div className="text-xs text-ink-3">last seen {seen(d.last_seen)}</div>
             <div className="mt-3 grid grid-cols-3 text-sm">
               <div><div className="tabular font-medium">{num(d.findings)}</div><div className="text-xs text-ink-3">findings</div></div>
-              <div><div className="tabular font-medium">{num(d.p1)}</div><div className="text-xs text-ink-3">priority 1</div></div>
+              <div><div className="tabular font-medium">{num(d.p1)}</div><div className="text-xs text-ink-3">P1</div></div>
               <div><div className="tabular font-medium">{num(d.threats_exposed)}</div><div className="text-xs text-ink-3">threats</div></div>
             </div>
           </div>
@@ -468,7 +466,7 @@ function DevicesView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
       </div>
     )
   return (
-    <Table head={[['Device', 'left'], ['Findings', 'right'], ['Priority 1', 'right'], ['Threats exposed', 'right'], ['Hunt matches', 'right'], ['Last seen', 'left']]}>
+    <Table head={[['Device', 'left'], ['Findings', 'right'], ['P1', 'right'], ['Applicable threats', 'right'], ['Hunt matches', 'right'], ['Last seen', 'left']]}>
       {v.devices.map((d) => (
         <tr key={d.name} className="hover:bg-well/60">
           <td className="font-medium">{d.name}</td>
@@ -667,7 +665,7 @@ function Uc1Panel({ s }: { s: Summary }) {
       <PipelineHeader tag="Agent" tone="bg-violet" title="Threat Intel Agent" h={s.health.find((h) => h.key === 'uc1')} />
       <div className="grid grid-cols-3 gap-4 border-y border-hairline py-4">
         <Stat value={num(u.new_threats)} label="threats collected (30 days)" />
-        <Stat value={num(u.affecting)} label="affect our devices" />
+        <Stat value={num(u.affecting)} label="applicable to managed devices" />
         <Stat value={num(u.urgent)} label="high priority, remediate first" />
       </div>
       <div>
@@ -707,14 +705,14 @@ function Uc3Panel({ s }: { s: Summary }) {
     <Panel className="flex flex-col gap-5 p-6">
       <PipelineHeader tag="Agent" tone="bg-sky" title="Vulnerability Agent" h={h} />
       <div className="grid grid-cols-3 gap-4 border-y border-hairline py-4">
-        <Stat value={num(h?.vulnerabilities ?? h?.rows)} label="vulnerabilities in Defender" />
+        <Stat value={num(h?.vulnerabilities ?? h?.rows)} label="findings in Defender" />
         <Stat value={`${Math.round((h?.coverage ?? 0) * 100)}%`} label="coverage, nothing missing" />
-        <Stat value={num(s.uc3.totals.cves)} label="different CVEs" />
+        <Stat value={num(s.uc3.totals.cves)} label="unique CVEs" />
       </div>
       <div>
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-medium">Data quality checks</h4>
-          <span className="text-xs text-ink-3">{passed} of {q.length} passed · quality {h?.quality ?? '–'}</span>
+          <span className="text-xs text-ink-3">{passed} of {q.length} passed · quality {qualityWord(h?.quality)}</span>
         </div>
         <ul className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
           {q.slice(0, 10).map((c) => {
@@ -818,7 +816,7 @@ function AttackPanel() {
           <div className="tabular text-2xl leading-none tracking-tight" style={{ color: tone }}>{num(hits.length + caught.length)}</div>
           <div className="mt-1.5 text-xs text-ink-3">detections</div>
         </div>
-        <Stat value={num(hits.length)} label={`found by agent hunts${computers ? `, on ${computers} computer${computers === 1 ? '' : 's'}` : ''}`} />
+        <Stat value={num(hits.length)} label={`found by agent hunts${computers ? `, on ${computers} device${computers === 1 ? '' : 's'}` : ''}`} />
         <Stat value={num(caught.length)} label="detected by Microsoft" />
       </div>
       <div>

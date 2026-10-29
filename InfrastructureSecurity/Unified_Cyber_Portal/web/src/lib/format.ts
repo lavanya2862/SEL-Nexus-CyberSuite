@@ -2,6 +2,10 @@ const nf = new Intl.NumberFormat('en-GB')
 
 export const num = (v: number | null | undefined) => (v == null ? '–' : nf.format(v))
 
+/** A data-quality status in words (the pipelines store PASS / WARN / FAIL / INFO) */
+export const qualityWord = (s: string | null | undefined) =>
+  s ? ({ PASS: 'Passed', WARN: 'Warning', FAIL: 'Failed', INFO: 'Info', ERROR: 'Failed' } as Record<string, string>)[s.toUpperCase()] ?? s : '–'
+
 export function ago(iso: string | null | undefined): string {
   if (!iso) return 'never'
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000)

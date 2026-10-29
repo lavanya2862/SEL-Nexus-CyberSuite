@@ -244,7 +244,7 @@ function ProfileBox({ compact }: { compact?: boolean }) {
           </TooltipTrigger>
           <TooltipContent side="right">{user.name}<span className="text-ink-3"> · {user.email}</span></TooltipContent>
         </Tooltip>
-        {modules && <RailButton label="Switch domain" onClick={modules}><Grip className="size-4" /></RailButton>}
+        {modules && <RailButton label="Switch workspace" onClick={modules}><Grip className="size-4" /></RailButton>}
         <RailButton label="Sign out" onClick={out}><LogOut className="size-4" /></RailButton>
       </div>
     )
@@ -263,7 +263,7 @@ function ProfileBox({ compact }: { compact?: boolean }) {
           {modules && (
             <button
               onClick={modules}
-              title="Switch to another CyberSuite domain"
+              title="Switch to another CyberSuite workspace"
               className="flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-hairline-strong text-sm font-medium text-ink-2 transition-colors hover:border-blue/60 hover:bg-blue/10 hover:text-ink"
             >
               <Grip className="size-4" /> Switch

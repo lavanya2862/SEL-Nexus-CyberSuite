@@ -84,10 +84,7 @@ def gather(packet: dict, settings: Settings, defender=None) -> dict:
     return {
         "devices": devices,
         "uc1": {"available": uc1["available"], "open": uc1.get("open", 0),
-                "exploited_open": uc1.get("exploited_open", 0),
-                "apps": [f"{f['app']} {f['version']} on {f['device']}"
-                         + (" (on the CISA KEV list)" if f["actively_exploited"] else "")
-                         for f in uc1["fixes"] if f["open"]][:6]},
+                "apps": [f"{f['app']} {f['version']} on {f['device']}" for f in uc1["fixes"] if f["open"]][:6]},
         "watchlist_hits": {k: v for k, v in hits.items() if v},
         "account_is_admin": any(d.get("admin_account") for d in devices)
                             or any("admin" in a.lower() for a in accounts),

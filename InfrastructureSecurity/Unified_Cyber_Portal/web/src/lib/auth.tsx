@@ -62,7 +62,7 @@ async function post(path: string, body: object = {}): Promise<{ user: User | nul
     body: JSON.stringify(body),
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || `The portal answered ${res.status}`)
+  if (!res.ok) throw new Error(data.error || `CyberSuite could not complete the request (error ${res.status})`)
   return data
 }
 
@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser({ email: 'local', name: 'Local user', via: 'off', expires: null })
           return
         }
-        if (!cfg.ok) throw new Error(`Portal API answered ${cfg.status}`)
+        if (!cfg.ok) throw new Error(`CyberSuite could not complete the request (error ${cfg.status})`)
         setConfig(await cfg.json())
         setUser((await me.json()).user ?? null)
       })
@@ -97,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [queryClient])
 
   const cognito = useCallback(() => {
-    if (!config?.cognito) throw new Error('Amazon Cognito is not set up on this portal.')
+    if (!config?.cognito) throw new Error('Amazon Cognito is not set up for CyberSuite.')
     return config.cognito
   }, [config])
 

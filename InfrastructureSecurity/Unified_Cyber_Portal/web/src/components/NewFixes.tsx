@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, ArrowRight, Bookmark, CheckCircle2, ChevronDown, ListChecks, Newspaper, ShieldAlert, ShieldCheck, Undo2, Wrench, Zap } from 'lucide-react'
 import { StatusPill } from '@/components/FixLoop'
-import { Panel, SevTag, Tag } from '@/components/kit'
+import { Panel, SevTag } from '@/components/kit'
 import { VulnList } from '@/components/VulnList'
 import { BasketBar } from '@/pages/uc3/FixCentre'
 import { FixDown, canApprove, isSetting, settingChange, useFix, useFixAction, type FixRow } from '@/lib/fix'
@@ -10,7 +10,7 @@ import { num, shortDate } from '@/lib/format'
 import { UC_NAME, type RunFix, type UcKey } from '@/lib/runs'
 import { GettingReady, useAutoStart } from '@/lib/services'
 import { statusColor } from '@/lib/theme'
-import { PRIORITY, SEVS, fixKind, useUc3Data, type FixKind, type Uc3Data, type Uc3FixApp, type Uc3FixSetting } from '@/lib/uc3'
+import { PRIORITY, daysBetween, fixKind, useUc3Data, vmDetails, vmKey, type FixKind, type Uc3Data, type Uc3FixApp, type Uc3FixSetting, type VmCve } from '@/lib/uc3'
 import { cn } from '@/lib/utils'
 
 /** The fix engine's stages (UC1 fix plan): 1 urgent, 2 end of life, 3 other updates. Settings are stage 3. */
@@ -27,22 +27,27 @@ const KIND_LABEL: Record<FixKind, string> = {
 const isResponse = (r: FixRow) => r.action === 'respond'
 const stageOf = (r: FixRow) =>
   isResponse(r) ? { label: r.category || 'Detection', color: statusColor.critical }
-    : isSetting(r) ? { label: 'Security setting', color: 'var(--violet)' } : STAGE[(r.stage as 1 | 2 | 3)] ?? STAGE[3]
+    : isSetting(r) ? { label: 'Misconfiguration', color: 'var(--violet)' } : STAGE[(r.stage as 1 | 2 | 3)] ?? STAGE[3]
 
 function whatItDoes(r: FixRow) {
-  if (r.action === 'respond') return 'Scans the computer with Defender and removes what it finds'
+  if (r.action === 'respond') return 'Scans the device with Defender and removes what it finds'
   if (r.action === 'setting') return settingChange(r)
-  if (r.action === 'remove') return 'Removes this version from the computer'
+  if (r.action === 'remove') return 'Removes this version from the device'
   if (r.action === 'replace') return 'Replaces it with the current version'
   return 'Updates it to the latest version'
 }
 
 /** One vulnerability on the card's computer and app version (Defender's list, as on the Vulnerabilities page) */
-interface Cve { cve: string; sev: string; cvss: number | null; kev: boolean; nofix: boolean }
-/** What a run card shows beyond the fix engine's row: the Remediation card's advice and the vulnerabilities behind it */
-export interface CardDetail { software: string; app?: Uc3FixApp; setting?: Uc3FixSetting; cves: Cve[] }
+/**
+ * What a run card shows beyond the fix engine's row: the Remediation card's advice and the vulnerabilities behind it.
+ * firstSeen / due are this card's own (this computer and version), not the app-wide ones on the Remediation card:
+ * due = the earliest first seen by Defender + the SLA days for that severity; today = the data's snapshot day.
+ */
+export interface CardDetail {
+  software: string; app?: Uc3FixApp; setting?: Uc3FixSetting; cves: VmCve[]
+  firstSeen: string | null; due: string | null; today: string
+}
 
-const sevRank = (s: string) => { const i = (SEVS as readonly string[]).indexOf(s); return i < 0 ? SEVS.length : i }
 
 /** Per fix id: its Remediation advice and its vulnerabilities, worst first (from the Vulnerability Agent's data). */
 function cardDetails(data: Uc3Data | undefined, rows: FixRow[]): Map<string, CardDetail> {
@@ -50,20 +55,12 @@ function cardDetails(data: Uc3Data | undefined, rows: FixRow[]): Map<string, Car
   if (!data) return out
   const apps = new Map((data.fixes?.apps ?? []).map((a) => [a.key.split(':').pop() ?? '', a]))
   const settings = new Map((data.fixes?.settings ?? []).map((s) => [s.config_id, s]))
-  const want = new Map(rows.map((r) => [`${r.device_name}|${r.software_name}|${r.version}`.toLowerCase(), r.fix_id]))
-  const cves = new Map<string, Cve[]>()
-  const [d, sw, ver, cve, sev, cvss, kev, ua] = ['d', 'sw', 'ver', 'cve', 'sev', 'cvss', 'kev', 'ua'].map((k) => data.f.cols.indexOf(k))
-  for (const r of data.f.rows) {
-    const id = want.get(`${data.devices[r[d] as number]?.name ?? ''}|${r[sw]}|${r[ver]}`.toLowerCase())
-    if (!id) continue
-    const list = cves.get(id) ?? []
-    list.push({ cve: String(r[cve]), sev: String(r[sev]), cvss: (r[cvss] as number) ?? null, kev: !!r[kev], nofix: r[ua] === 0 })
-    cves.set(id, list)
-  }
+  const vms = vmDetails(data)
+  const today = String(data.meta.snapshot).slice(0, 10)
   for (const r of rows) {
-    const list = (cves.get(r.fix_id) ?? []).sort((a, b) => sevRank(a.sev) - sevRank(b.sev) || Number(b.kev) - Number(a.kev) || (b.cvss ?? 0) - (a.cvss ?? 0))
+    const vm = vms.get(vmKey(r.device_name, r.software_name, r.version))
     out.set(r.fix_id, {
-      software: r.software_name, cves: list,
+      software: r.software_name, cves: vm?.cves ?? [], firstSeen: vm?.firstSeen ?? null, due: vm?.due ?? null, today,
       app: isSetting(r) || isResponse(r) ? undefined : apps.get(r.software_name),
       setting: r.config_id ? settings.get(r.config_id) : undefined,
     })
@@ -143,6 +140,7 @@ export function NewFixes({ fix, uc, since }: { fix: RunFix; uc: UcKey; since: st
               {fix.new > 0 && fix.waiting > 0 && (
                 <p className="mt-1.5 max-w-[70ch] text-sm text-ink-3">
                   These buttons act on <b className="text-ink-2">this run's {num(fix.new)} only</b>. The {num(fix.waiting)} remediations from earlier runs are not approved or executed from here.
+                  {grewRows.length > 0 && <> {grewRows.length} of them gained new vulnerabilities in this run, so they are listed below with their full count.</>}
                 </p>
               )}
             </div>
@@ -203,8 +201,8 @@ export function NewFixes({ fix, uc, since }: { fix: RunFix; uc: UcKey; since: st
                 <h3 className="font-semibold tracking-tight">Earlier remediations with new vulnerabilities from this run</h3>
                 <p className="mt-1 max-w-[75ch] text-sm text-ink-3">
                   This run found {num(fix.grew_vulns ?? 0)} new vulnerabilit{fix.grew_vulns === 1 ? 'y' : 'ies'} in app versions that already had a remediation.
-                  One update clears the earlier and the new vulnerabilities together, so they join that remediation instead of making a new one.
-                  They do not hold up this run.
+                  A remediation updates the whole app on that device, so it cannot clear only the new ones: approving one of these clears every
+                  vulnerability on it, from earlier runs too. That is why they join the existing remediation instead of making a new one. They do not hold up this run.
                 </p>
               </div>
               {grewOpen.length > 0 && (
@@ -223,7 +221,7 @@ export function NewFixes({ fix, uc, since }: { fix: RunFix; uc: UcKey; since: st
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-hairline pt-4 text-sm">
           <span className="text-ink-3">
             {fix.waiting > 0 ? <><b className="tabular text-ink-2">{num(fix.waiting)}</b> older remediation{fix.waiting === 1 ? ' is' : 's are'} still waiting from earlier runs (review them in Remediation)</> : 'No earlier remediations pending'}
-            {fix.saved > 0 && <> · <b className="tabular text-ink-2">{num(fix.saved)}</b> saved for later</>}
+            {fix.saved > 0 && <> · <b className="tabular text-ink-2">{num(fix.saved)}</b> deferred</>}
           </span>
           <span className="flex flex-wrap gap-x-4 gap-y-1">
             {links.map(([to, label]) => (
@@ -261,7 +259,7 @@ function fixLinks(uc: UcKey, since: string | null, fix: RunFix): [string, string
   const apps = (fix.new_apps ?? 1) > 0 || !since, settings = (fix.new_settings ?? 1) > 0 || !since
   return [
     ...(apps ? [[q('', 'uc3'), `${since ? "This run's app updates" : 'App updates'} ${label}`] as [string, string]] : []),
-    ...(settings ? [[q('/settings', 'uc3'), `${since ? "This run's security settings" : 'Security settings'} ${label}`] as [string, string]] : []),
+    ...(settings ? [[q('/settings', 'uc3'), `${since ? "This run's security settings" : 'Security configuration'} ${label}`] as [string, string]] : []),
   ]
 }
 
@@ -308,7 +306,10 @@ export function FixCardSmall({ r, busy, onFix, onSave, onUndo, detail, added, on
   const setting = detail?.setting
   const cves = detail?.cves ?? []
   const severe = cves.filter((c) => c.sev === 'Critical' || c.sev === 'High').length
-  const kev = cves.length ? cves.filter((c) => c.kev).length : r.kev
+  // this card's own deadline (falls back to the app-wide one before the Vulnerability Agent's data has loaded)
+  const due = detail?.due ?? app?.fix_by ?? null
+  const left = due && detail ? daysBetween(detail.today, due) : null
+  const late = left != null && left < 0
   const noFix = cves.filter((c) => c.nofix).length
   const total = cves.length || r.findings
   const advice = app?.ai ?? setting?.ai ?? null
@@ -329,7 +330,15 @@ export function FixCardSmall({ r, busy, onFix, onSave, onUndo, detail, added, on
         </div>
         {app && (
           <div className="text-[11px] text-ink-3">
-            {KIND_LABEL[fixKind(app)]}{app.fix_by && <> · due <b className="font-medium text-ink-2">{shortDate(app.fix_by)}</b></>}
+            {KIND_LABEL[fixKind(app)]}
+            {due && (late
+              ? <> · <b className="font-medium" style={{ color: statusColor.critical }}>overdue since {shortDate(due)}</b></>
+              : <> · due <b className="font-medium text-ink-2">{shortDate(due)}</b></>)}
+          </div>
+        )}
+        {detail?.firstSeen && !isSetting(r) && !isResponse(r) && (
+          <div className="text-[11px] text-ink-3" title="The deadline counts from the day Defender first found the vulnerability on this device, plus the patching rule's days for its severity. The agent proposing it in this run does not restart that clock.">
+            Defender first found these on this device on <b className="font-medium text-ink-2">{shortDate(detail.firstSeen)}</b>
           </div>
         )}
         <div className="text-xs text-ink-2">{whatItDoes(r)}</div>
@@ -338,6 +347,11 @@ export function FixCardSmall({ r, busy, onFix, onSave, onUndo, detail, added, on
         {added ? (
           <div className="rounded-md px-2 py-1 text-[11px] font-medium" style={{ color: statusColor.warning, background: `color-mix(in oklab, ${statusColor.warning} 12%, transparent)` }}>
             +{num(added)} new vulnerabilit{added === 1 ? 'y' : 'ies'} found in this run
+            {total > added && (
+              <div className="mt-0.5 font-normal text-ink-2">
+                Same update for all of them: approving clears all <b>{num(total)}</b> ({num(total - added)} from earlier runs + {num(added)} new).
+              </div>
+            )}
           </div>
         ) : null}
 
@@ -346,7 +360,12 @@ export function FixCardSmall({ r, busy, onFix, onSave, onUndo, detail, added, on
             <div className="grid grid-cols-3 gap-1.5">
               <Stat n={total} label="Vulnerabilities" />
               <Stat n={severe} label="Critical / high" color={severe ? statusColor.critical : undefined} />
-              <Stat n={kev} label="Known exploited" color={kev ? statusColor.critical : undefined} />
+              {left != null ? (
+                <div className="rounded-lg bg-well px-2.5 py-1.5">
+                  <div className="tabular text-base font-semibold leading-tight" style={{ color: late ? statusColor.critical : undefined }}>{num(Math.abs(left))}</div>
+                  <div className="text-[11px] text-ink-3">{late ? `day${left === -1 ? '' : 's'} overdue` : `day${left === 1 ? '' : 's'} left`}</div>
+                </div>
+              ) : <Stat n={cves.filter((c) => c.nofix).length} label="No update yet" />}
             </div>
             {cves.length > 0 && (
               <ul className="divide-y divide-hairline rounded-lg border border-hairline text-[11px]">
@@ -354,7 +373,6 @@ export function FixCardSmall({ r, busy, onFix, onSave, onUndo, detail, added, on
                   <li key={c.cve} className="flex items-center gap-2 px-2.5 py-1.5">
                     <span className="font-mono text-ink">{c.cve}</span>
                     <span className="ml-auto flex items-center gap-1.5 text-ink-2">
-                      {c.kev && <Tag tone="bad">Exploited</Tag>}
                       <SevTag sev={c.sev} />{c.cvss != null && <span className="tabular text-ink-3">{c.cvss}</span>}
                     </span>
                   </li>
@@ -366,6 +384,12 @@ export function FixCardSmall({ r, busy, onFix, onSave, onUndo, detail, added, on
                 {noFix >= cves.length ? 'No security update available for any of these' : `No security update available for ${num(noFix)} of them (the update remediates the rest)`}
               </div>
             )}
+            {/* one update or removal clears the whole version, whichever agent reported each vulnerability */}
+            {r.threats?.length && !added ? (
+              <div className="rounded-md bg-well px-2 py-1 text-[11px] text-ink-2">
+                Approving clears <b>all {num(total)}</b> vulnerabilities on {r.app} {r.version} on {r.device_name}, not only the ones in threat intelligence.
+              </div>
+            ) : null}
           </>
         ) : !isSetting(r) && r.findings > 0 ? (
           <div className="text-xs text-ink-3">{num(r.findings)} vulnerabilit{r.findings === 1 ? 'y' : 'ies'}</div>

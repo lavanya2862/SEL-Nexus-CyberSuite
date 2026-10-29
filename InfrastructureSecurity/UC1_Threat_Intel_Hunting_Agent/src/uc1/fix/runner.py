@@ -54,7 +54,7 @@ def fix_active(settings: Settings) -> bool:
 def fix_lock(settings: Settings):
     lock = settings.fix_dir / ".fix.lock"
     if fix_active(settings):
-        raise FixBusy("Fixes are already running (website or command line). Wait for them to finish.")
+        raise FixBusy("Remediations are already running. Wait for them to finish.")
     lock.parent.mkdir(parents=True, exist_ok=True)
     lock.write_text(str(os.getpid()))
     try:
@@ -118,7 +118,7 @@ def judge(action: str, result: dict | None) -> tuple[str, str]:
         if code in OK_CODES:
             return "done", f"Old version removed ({_fmt(before)}); now installed: {_fmt(after)}." + reboot
         return "done", f"Old version removed ({_fmt(before)}), but installing the current one failed (exit {code}). " \
-                       "The vulnerability is fixed; install the new version later if it's needed." + reboot
+                       "The vulnerability is remediated; install the new version later if it is needed." + reboot
     return "failed", f"Unknown action {action}"
 
 
@@ -184,7 +184,7 @@ class FixRunner:
         with self.state.edit() as data:
             for fid, f in data["fixes"].items():            # left over from a run that was killed
                 if f.get("status") in ("queued", "running"):
-                    f.update(status="failed", message="Interrupted (UC1 stopped while this fix was running). "
+                    f.update(status="failed", message="Interrupted (the Threat Intel Agent stopped while this remediation was running). "
                                                       "Approve it again to retry.", finished_at=utcnow().isoformat())
             todo = [(fid, f) for fid, f in data["fixes"].items()
                     if f.get("status") == "approved" and (ids is None or fid in ids)]
@@ -206,12 +206,12 @@ class FixRunner:
             t.join()
         summary = {"ran": len(results), "done": sum(1 for s in results.values() if s == "done"),
                    "failed": sum(1 for s in results.values() if s == "failed")}
-        self._say(f"Fix run finished: {summary['done']} fixed, {summary['failed']} failed. "
+        self._say(f"Remediation run finished: {summary['done']} remediated, {summary['failed']} failed. "
                   "Defender confirms within a few hours (next UC1 run).")
         started = sorted({vm for ex in self._executors.values() for vm in getattr(ex, "started", set())})
         if started:
-            self._say(f"UC1 switched on {', '.join(started)} for these fixes. Leave it on for about 6 hours so Defender "
-                      "can scan it and confirm the fixes, then stop it in the Azure portal to save credit.")
+            self._say(f"The Threat Intel Agent started {', '.join(started)} for these remediations. Keep it running for about 6 "
+                      "hours so Defender can scan it and verify the remediations, then stop it in the Azure portal to save cost.")
         return summary
 
     def _device_worker(self, device: str, items: list, results: dict) -> None:
@@ -234,7 +234,7 @@ class FixRunner:
             except FixError as exc:
                 status, message = "failed", str(exc)
             except Exception as exc:  # noqa: BLE001 - one failed fix must not stop the others
-                log.exception("Fix %s crashed", fid)
+                log.exception("Remediation %s failed unexpectedly", fid)
                 status, message = "failed", f"{exc.__class__.__name__}: {exc}"
             with self.state.edit() as data:
                 data["fixes"][fid].update(status=status, message=message[:600], finished_at=utcnow().isoformat(),
@@ -256,7 +256,7 @@ class FixRunner:
         out: dict[str, dict] = {}
 
         def one(device: str, device_id: str) -> None:
-            self._say(f"{device}: checking the computer (read-only) via {method}")
+            self._say(f"{device}: checking the device (read-only) via {method}")
             try:
                 ex = self.executor(method)
                 # read-only means read-only: the check never switches a VM on (fix runs may, see FIX_START_VMS)

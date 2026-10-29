@@ -256,7 +256,7 @@ class Auth:
 
     def _need(self, mode: str) -> None:
         if self.mode != mode:
-            raise AuthError(f"This portal signs in with {self.mode}, not {mode}.", 404)
+            raise AuthError(f"CyberSuite signs in with {self.mode}, not {mode}.", 404)
 
     # ---- local accounts
     def signup(self, body: dict) -> dict:

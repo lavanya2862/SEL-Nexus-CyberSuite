@@ -57,7 +57,7 @@ async function fetchActivity(action: string, q: string): Promise<{ items: Activi
   if (action) params.set('action', action)
   if (q) params.set('q', q)
   const res = await fetch(`/api/activity?${params}`)
-  if (!res.ok) throw new Error(`Portal API answered ${res.status}`)
+  if (!res.ok) throw new Error(`CyberSuite could not complete the request (error ${res.status})`)
   return res.json()
 }
 
@@ -107,7 +107,7 @@ export function ActivityLog() {
                     <td className="whitespace-nowrap"><div className="tabular text-xs">{stamp(e.ts)}</div><div className="text-xs text-ink-3">{ago(e.ts)}</div></td>
                     <td className="max-w-[240px]">
                       <div className={cn('truncate font-medium', e.name === 'Not recorded' ? 'text-ink-3' : 'text-ink')}
-                        title={e.name === 'Not recorded' ? 'Started before the portal recorded who starts each run' : undefined}>{e.name || e.email}</div>
+                        title={e.name === 'Not recorded' ? 'Started before CyberSuite recorded who starts each run' : undefined}>{e.name || e.email}</div>
                       {e.email && e.name !== e.email && <div className="truncate text-xs text-ink-3">{e.email}</div>}
                     </td>
                     <td className="whitespace-nowrap">

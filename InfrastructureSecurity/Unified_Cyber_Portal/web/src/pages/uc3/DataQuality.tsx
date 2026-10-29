@@ -25,13 +25,13 @@ export function DataQuality({ data }: { data: Uc3Data }) {
         [num(r.vulnerability_rows), 'rows downloaded'],
         [r.defender_count == null ? '–' : num(r.defender_count), 'rows in Defender (its own count)'],
         [r.coverage == null ? '–' : `${(r.coverage * 100).toFixed(1)}%`, 'coverage'],
-        [r.repeats == null ? '–' : num(r.repeats), 'repeats: Defender listed them twice, one copy kept'],
+        [r.repeats == null ? '–' : num(r.repeats), 'duplicates: Defender listed them twice, one copy kept'],
         [r.vulnerabilities == null ? '–' : num(r.vulnerabilities), 'vulnerabilities kept (the number on every page)'],
         [num(r.machines), 'devices'],
         [`${r.duration_seconds} s`, 'run time'],
         [num(r.retries), 'retries needed'],
-        [exportAge, 'export age at run'],
-        [num(r.change_rows), 'change events'],
+        [exportAge, 'Defender export age'],
+        [num(r.change_rows), 'changes from Defender'],
       ]
     : []
   return (
@@ -95,7 +95,7 @@ export function DataQuality({ data }: { data: Uc3Data }) {
             />
           </Card>
           <Card title="Run history" description="Each run: records downloaded, Defender coverage, and unique vulnerabilities after de-duplication">
-            <DTable head={[['Date'], ['Rows', 'right'], ['Defender count', 'right'], ['Coverage', 'right'], ['Repeats', 'right'], ['Vulnerabilities', 'right'], ['Devices', 'right'], ['Run time', 'right'], ['Quality']]} minWidth={720}>
+            <DTable head={[['Date'], ['Rows', 'right'], ['Defender count', 'right'], ['Coverage', 'right'], ['Duplicates', 'right'], ['Vulnerabilities', 'right'], ['Devices', 'right'], ['Run time', 'right'], ['Quality']]} minWidth={720}>
               {[...data.runs].reverse().map((h) => (
                 <tr key={h.run_date}>
                   <td className="tabular whitespace-nowrap">{h.run_date}</td>
@@ -114,7 +114,7 @@ export function DataQuality({ data }: { data: Uc3Data }) {
         </div>
       </div>
 
-      <Card title="Devices and VM mapping" description="Each computer gets its VM from its Defender tag, or from its name; otherwise it shows as UNMAPPED. Adding a tag in Defender makes it explicit.">
+      <Card title="Devices and VM mapping" description="Each device gets its VM from its Defender tag, or from its name; otherwise it shows as UNMAPPED. Adding a tag in Defender makes it explicit.">
         <DTable head={[['Device'], ['VM'], ['Device group'], ['Tags'], ['Advice']]} minWidth={680}>
           {data.devices.map((d) => (
             <tr key={d.id}>
@@ -123,7 +123,7 @@ export function DataQuality({ data }: { data: Uc3Data }) {
               <td className="text-ink-2">{d.rbac_group_name || 'Unassigned'}</td>
               <td>{d.tags?.length ? d.tags.map((t) => <Tag key={t}>{t}</Tag>) : '–'}</td>
               <td className="text-ink-2">
-                {d.opco === 'UNMAPPED' ? 'Add a VM tag in Defender or a rule in config/opco_mapping.csv' : d.tags?.length ? 'OK' : 'Mapped by name; a VM tag in Defender would make it explicit'}
+                {d.opco === 'UNMAPPED' ? 'Add a VM tag in Defender or a VM mapping rule' : d.tags?.length ? 'OK' : 'Mapped by name; a VM tag in Defender would make it explicit'}
               </td>
             </tr>
           ))}

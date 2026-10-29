@@ -305,7 +305,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             _record(request, "triage.reopen", agent=AGENT_NAMES["uc4"], target=target, outcome="failed", detail=str(exc))
             return JSONResponse({"error": str(exc), "uc4_down": True}, status_code=503)
         _record(request, "triage.reopen", agent=AGENT_NAMES["uc4"], target=target, outcome="success" if status < 400 else "failed",
-                detail=str(body.get("reason") or "Reopened from the portal")[:300] if status < 400 else str(out.get("error") or ""))
+                detail=str(body.get("reason") or "Reopened from CyberSuite")[:300] if status < 400 else str(out.get("error") or ""))
         return JSONResponse(out, status_code=status)
 
     @app.post("/api/uc4/start-site")

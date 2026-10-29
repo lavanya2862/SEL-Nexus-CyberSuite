@@ -124,7 +124,7 @@ function ToDo({ c }: { c: Uc4Case }) {
           <ul className="mt-2 flex flex-col gap-1 text-sm text-ink-2">
             {v.containment_options.map((o) => <li key={o}>• {CONTAINMENT[o] ?? o}</li>)}
           </ul>
-          <p className="mt-2 text-xs text-ink-3">The portal never performs containment. Only options from the approved list appear here.</p>
+          <p className="mt-2 text-xs text-ink-3">CyberSuite never performs containment. Only options from the approved list appear here.</p>
         </div>
       )}
     </Card>
@@ -356,7 +356,7 @@ function Decide({ c }: { c: Uc4Case }) {
 /* ───────── ask about this incident ───────── */
 
 const PART_WORDS: Record<string, string> = {
-  verdict: 'the verdict', evidence: 'the evidence', alerts: 'the alerts', entities: 'things involved', searches: 'the searches',
+  verdict: 'the verdict', evidence: 'the evidence', alerts: 'the alerts', entities: 'entities', searches: 'the searches',
   threat_intel: 'threat intelligence', history: 'history', context: 'background', defender: 'what Defender did', actions: 'actions taken',
 }
 const STARTERS = ['Summarise this incident', 'Why this verdict?', 'What would make it a true positive?', 'What should I check in Defender?']

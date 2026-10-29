@@ -81,7 +81,7 @@ def post_ask(base: str, body: dict) -> tuple[int, dict]:
 def post_reopen(base: str, body: dict) -> tuple[int, dict]:
     """Undo an automatic close: UC4 reopens the incident in Defender (needs a person's click + confirm)."""
     clean = {"incident_id": str(body.get("incident_id") or "")[:80], "confirm": body.get("confirm") is True,
-             "reason": str(body.get("reason") or "Reopened from the portal")[:300]}
+             "reason": str(body.get("reason") or "Reopened from CyberSuite")[:300]}
     if not clean["incident_id"]:
         return 400, {"error": "incident_id missing"}
     return _call(base, "/api/reopen", clean, timeout=30, header="reopen")

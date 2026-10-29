@@ -37,10 +37,8 @@ def fixes_for(uc1_dir: Path | None, device_names: list[str]) -> dict:
         status = (state.get(item.get("fix_id"), {}) or {}).get("status") or "not approved yet"
         out.append({"device": item.get("device_name"), "app": item.get("app") or item.get("software_name"),
                     "version": item.get("version"), "action": item.get("action"),
-                    "actively_exploited": int(item.get("kev") or 0), "ransomware": int(item.get("ransomware") or 0),
                     "note": item.get("note") or "", "status": STATUS_LABEL.get(status, status),
                     "open": status not in ("done", "verified")})
-    out.sort(key=lambda f: (not f["open"], -f["actively_exploited"], -f["ransomware"], f["app"] or ""))
+    out.sort(key=lambda f: (not f["open"], f["app"] or ""))
     return {"available": True, "fixes": out, "open": sum(f["open"] for f in out),
-            "exploited_open": sum(1 for f in out if f["open"] and f["actively_exploited"]),
             "fix_centre": UC1_FIX_CENTRE, "plan_time": plan.get("generated_at")}

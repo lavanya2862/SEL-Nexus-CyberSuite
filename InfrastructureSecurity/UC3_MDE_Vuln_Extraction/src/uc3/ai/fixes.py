@@ -12,7 +12,7 @@ Card kinds:
            config/setting_fix_catalog.csv; Microsoft's own remediation text is shown next to the AI text.
 
 Who decides what:
-- The DATA decides the facts: which versions, CVEs, devices, how urgent (CISA KEV, P1, SLA), where the files are
+- The DATA decides the facts: which versions, CVEs, devices, what priority (P1, SLA), where the files are
   (Defender's disk paths) and the fix command (config/fix_catalog.csv, checked by a person).
 - The AI only EXPLAINS: what is wrong in plain English, worst case, why now, step-by-step, how to check, side effects.
   It gets app names, versions, counts, CVE IDs, Microsoft's CVE descriptions and install folders (user names masked).
@@ -73,14 +73,14 @@ Rules:
 - Use Microsoft Defender's wording: remediate, remediation, software update, software upgrade, security update,
   configuration change. Do not use the words "fix" or "urgent".
 - Never say the problem is remediated or safe; the next Defender scan confirms it.
-- Never say a vulnerability is actively exploited or used by attackers."""
+- Never mention exploits, exploit code, attack kits, or whether attackers use or have used a vulnerability."""
 
 SCHEMA = {
     "type": "OBJECT",
     "properties": {
         "what_is_wrong": {"type": "STRING", "description": "2-3 plain sentences, max 60 words: what these weaknesses let an attacker do, based on the CVE descriptions"},
         "worst_case": {"type": "STRING", "description": "One sentence, max 30 words: the worst realistic outcome if nothing is done"},
-        "why_now": {"type": "STRING", "description": "One sentence, max 30 words, explaining the priority label using the facts (attacker use list, P1, overdue)"},
+        "why_now": {"type": "STRING", "description": "One sentence, max 30 words, explaining the priority label using the facts (P1, severity, overdue)"},
         "steps": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "3 to 6 short numbered-free steps for the IT person, max 25 words each"},
         "verify": {"type": "STRING", "description": "Max 35 words: how to check it worked (version on the PC, then the next Defender scan)"},
         "side_effects": {"type": "STRING", "description": "Max 30 words: what users notice (restart, closed app, compatibility to test)"},
@@ -103,7 +103,7 @@ Rules:
 - Use Microsoft Defender's wording: remediate, remediation, configuration change. Do not use the words "fix" or
   "urgent".
 - Never say the problem is remediated or safe; the next Defender scan confirms it.
-- Never say a vulnerability is actively exploited or used by attackers."""
+- Never mention exploits, exploit code, attack kits, or whether attackers use or have used a vulnerability."""
 
 SETTING_SCHEMA = {
     "type": "OBJECT",
@@ -196,9 +196,7 @@ def refresh_kb(settings: Settings, client=None) -> dict:
     return {"status": status, "entries": len(cves), "cves": cves}
 
 
-def urgency(kev: int, p1: int, critical_high: int) -> dict:
-    if kev:
-        return {"level": 1, "label": "High: remediate now"}
+def urgency(p1: int, critical_high: int) -> dict:
     if p1:
         return {"level": 1, "label": "High: remediate now"}
     if critical_high:
@@ -218,10 +216,9 @@ def collect_apps(settings: Settings, kb: dict | None = None, catalog: dict | Non
     folders = install_folders(settings, snapshot)
     rows = con.execute("""
         SELECT software_vendor, software_name, software_version, device_name, opco, cve_id, severity, cvss_score,
-               exploitability, priority, age_days, sla_breached, in_cisa_kev,
+               exploitability, priority, age_days, sla_breached,
                CAST(first_seen AS DATE) + CAST(sla_days AS INTEGER) AS due, security_update_available, recommended_update
         FROM fact_vulnerability ORDER BY software_vendor, software_name, software_version, device_name, cve_id""").fetchall()
-    kev_names = dict(con.execute("SELECT cve_id, kev_name FROM dim_cve WHERE in_cisa_kev").fetchall())
     apps: dict[tuple[str, str], list] = {}
     for r in rows:
         apps.setdefault((r[0], r[1]), []).append(r)
@@ -232,9 +229,9 @@ def collect_apps(settings: Settings, kb: dict | None = None, catalog: dict | Non
         cves: dict[str, dict] = {}
         for r in rs:
             c = cves.setdefault(r[5], {"cve": r[5], "severity": r[6], "cvss": r[7], "exploit": r[8], "priority": r[9],
-                                       "kev": bool(r[12]), "patch": False})
+                                       "patch": False})
             c["priority"] = min(c["priority"] or "P9", r[9] or "P9")
-            c["patch"] = c["patch"] or r[14] is not False      # unknown counts as "an update exists"
+            c["patch"] = c["patch"] or r[13] is not False      # unknown counts as "an update exists"
         versions = []
         for ver in sorted({r[2] for r in rs}, key=_version_key, reverse=True):
             vr = [r for r in rs if r[2] == ver]
@@ -243,15 +240,14 @@ def collect_apps(settings: Settings, kb: dict | None = None, catalog: dict | Non
                              "folders": folders.get((name, ver), []),
                              "eos": {"status": e["status"], "date": e["date"]} if e else None})
         devices = sorted({(r[3], r[4]) for r in rs})
-        kev = sorted(c for c, v in cves.items() if v["kev"])
         p1 = sum(1 for v in cves.values() if v["priority"] == "P1")
         crit_high = sum(1 for v in cves.values() if v["severity"] in ("Critical", "High"))
-        dues = [r[13] for r in rs if r[13] is not None]
-        top = sorted(cves.values(), key=lambda v: (not v["kev"], v["priority"] or "P9", -(v["cvss"] or 0), v["cve"]))[:TOP_CVES]
+        dues = [r[12] for r in rs if r[12] is not None]
+        top = sorted(cves.values(), key=lambda v: (v["priority"] or "P9", -(v["cvss"] or 0), v["cve"]))[:TOP_CVES]
         past_eos = [v for v in versions if v["eos"] and v["eos"]["status"] == "EOS Version"]
         no_patch = sorted(c for c, v in cves.items() if not v["patch"])
         is_os = bool(OS_RE.match(name or ""))
-        updates = sorted({r[15] for r in rs if r[15]})
+        updates = sorted({r[14] for r in rs if r[14]})
         fix_type = FIX_UPGRADE if past_eos else FIX_OS if is_os else FIX_NONE if len(no_patch) == len(cves) else FIX_UPDATE
         default_action = {
             FIX_OS: "Install the latest Windows security update" + (f" ({', '.join(updates[:3])})" if updates else "")
@@ -267,19 +263,17 @@ def collect_apps(settings: Settings, kb: dict | None = None, catalog: dict | Non
             "findings": len(rs), "cves": len(cves), "p1": p1,
             "critical": sum(1 for v in cves.values() if v["severity"] == "Critical"),
             "high": sum(1 for v in cves.values() if v["severity"] == "High"),
-            "kev_cves": [{"cve": c, "name": kev_names.get(c)} for c in kev],
             "exploit_public": sum(1 for v in cves.values() if v["exploit"] not in (None, "NoExploit")),
             "overdue": sum(1 for r in rs if r[11]),
             "fix_by": min(dues).isoformat() if dues else None,
             "oldest_days": max((r[10] or 0) for r in rs),
-            "urgency": urgency(len(kev), p1, crit_high),
+            "urgency": urgency(p1, crit_high),
             # nothing to install yet: the catalogue's update command would only reinstall the same holes
             "fix": {"action": default_action if fix_type == FIX_NONE else cat.get("action") or default_action,
                     "command": None if fix_type == FIX_NONE else cat.get("command") or None,
                     "url": cat.get("official_url") or None,
                     "note": cat.get("note") or None, "in_catalog": bool(cat)},
-            "top_cves": [{**v, "description": (kb.get(v["cve"], {}).get("description") or "")[:500],
-                          "kev_name": kev_names.get(v["cve"])} for v in top],
+            "top_cves": [{**v, "description": (kb.get(v["cve"], {}).get("description") or "")[:500]} for v in top],
         })
     by_name = {a["software"]: a for a in out}
     for (name, ver), e in sorted(eos.items()):   # past (or near) end of support but no CVE today: still needs replacing
@@ -292,7 +286,7 @@ def collect_apps(settings: Settings, kb: dict | None = None, catalog: dict | Non
                 "fix_type": FIX_UPGRADE, "os": bool(OS_RE.match(name)), "no_patch": [],
                 "app": cat.get("app") or PRETTY.get(name) or name.replace("_", " ").title(), "versions": [],
                 "devices": [], "opcos": [],
-                "findings": 0, "cves": 0, "p1": 0, "critical": 0, "high": 0, "kev_cves": [], "exploit_public": 0,
+                "findings": 0, "cves": 0, "p1": 0, "critical": 0, "high": 0, "exploit_public": 0,
                 "overdue": 0, "fix_by": None, "oldest_days": 0, "urgency": None,
                 "fix": {"action": cat.get("action") or f"Replace {name} with a supported version",
                         "command": cat.get("command") or None, "url": cat.get("official_url") or None,
@@ -310,7 +304,7 @@ def collect_apps(settings: Settings, kb: dict | None = None, catalog: dict | Non
         soonest = min((v["eos"]["date"] for v in card["versions"] if v["eos"]["date"]), default=None)
         card["urgency"] = ({"level": 2, "label": "Medium: end of support reached"} if ended
                            else {"level": 3, "label": f"Low: end of support on {soonest}" if soonest else "Low: end of support soon"})
-    out.sort(key=lambda a: (a["urgency"]["level"], -len(a["kev_cves"]), -a["p1"], -a["cves"]))
+    out.sort(key=lambda a: (a["urgency"]["level"], -a["p1"], -a["cves"]))
     return snapshot, out
 
 
@@ -381,7 +375,6 @@ def ai_facts(app: dict, today: date) -> dict:
                                 "install_folders": v["folders"]} for v in app["versions"]],
         "devices_affected": len(app["devices"]), "business_units": len(app["opcos"]),
         "cves": app["cves"], "p1_cves": app["p1"], "critical_cves": app["critical"], "high_cves": app["high"],
-        "cves_with_public_exploit": app["exploit_public"],
         "findings_past_deadline": app["overdue"], "fix_by": app["fix_by"], "today": today.isoformat(),
         "urgency_label": app["urgency"]["label"],
         "fix_action": app["fix"]["action"], "command": app["fix"]["command"] or "", "fix_note": app["fix"]["note"] or "",
@@ -415,6 +408,21 @@ URL_RE = re.compile(r"(?:https?://|www\.)\S+", re.I)
 SENT_RE = re.compile(r"(?<=[.!?])\s+")
 REG_RE = re.compile(r"\b(?:HKLM|HKCU|HKEY_[A-Z_]+)[:\\][^\s,;'\"]*", re.I)
 CMDLET_RE = re.compile(r"\b(?:Get|Set|New|Remove|Add|Enable|Disable|Start|Stop|Restart|Resume|Install|Uninstall|Clear|Import|Export)-[A-Z][A-Za-z]+\b")
+# The cards never say a hole is exploited or used by attackers; Microsoft's product names (Exploit Guard / protection) may stay
+EXPLOIT_RE = re.compile(r"exploit|attack kit|in the wild|used by attackers|known.exploited|weaponi[sz]|proof.of.concept", re.I)
+PRODUCT_RE = re.compile(r"exploit (?:guard|protection)", re.I)
+
+
+def _exploit_talk(text: str) -> bool:
+    return bool(EXPLOIT_RE.search(PRODUCT_RE.sub("", text)))
+
+
+def scrub(ai: dict) -> dict:
+    """Drop the sentences and steps that talk about exploits (also for texts cached before this rule)."""
+    out = {k: " ".join(s for s in SENT_RE.split(str(v or "").strip()) if s and not _exploit_talk(s)) if k in TEXT_FIELDS else v
+           for k, v in ai.items()}
+    out["steps"] = [s for s in ai.get("steps") or [] if not _exploit_talk(s)]
+    return out
 
 
 def _allowed_numbers(facts_text: str) -> set[str]:
@@ -434,6 +442,7 @@ def _problems(text: str, allowed: set[str], facts_text: str) -> list[str]:
     plain = facts_text.replace("\\\\", "\\").lower()   # JSON doubles backslashes in registry paths
     found += [f"registry path {r}" for r in REG_RE.findall(text) if r.rstrip(".").lower() not in plain]
     found += [f"command {c}" for c in CMDLET_RE.findall(text) if c.lower() not in plain]
+    found += ["exploit wording"] if _exploit_talk(text) else []
     return found
 
 
@@ -537,7 +546,7 @@ def build_fixes(settings: Settings, use_ai: bool = True, force: bool = False, ai
         h = _hash(facts)
         hit = cache.get(app["key"])
         if hit and hit["hash"] == h and not force:
-            app.update(ai=hit["ai"], source="ai", model=hit["model"], generated_at=hit["generated_at"], guard_notes=hit["guard"])
+            app.update(ai=scrub(hit["ai"]), source="ai", model=hit["model"], generated_at=hit["generated_at"], guard_notes=hit["guard"])
             reused += 1
             continue
         if client is not None:
@@ -552,7 +561,7 @@ def build_fixes(settings: Settings, use_ai: bool = True, force: bool = False, ai
                          "generated_at": datetime.now(timezone.utc).isoformat(timespec="minutes")}
                 cache[app["key"]] = entry
                 app.update(ai=clean, source="ai", model=entry["model"], generated_at=entry["generated_at"], guard_notes=removed)
-                log.info("AI fix card: %s (%d correction(s))", app["app"], len(removed))
+                log.info("AI remediation card: %s (%d correction(s))", app["app"], len(removed))
                 continue
             except AIUnavailable as exc:
                 client, ai_message = None, str(exc)
@@ -560,7 +569,7 @@ def build_fixes(settings: Settings, use_ai: bool = True, force: bool = False, ai
             except ValueError as exc:
                 log.warning("AI answer for %s not used: %s", app["app"], exc)
         if hit:   # facts changed but the AI could not be asked: keep the last AI text, marked as older
-            app.update(ai=hit["ai"], source="ai (previous facts)", model=hit["model"], generated_at=hit["generated_at"],
+            app.update(ai=scrub(hit["ai"]), source="ai (previous facts)", model=hit["model"], generated_at=hit["generated_at"],
                        guard_notes=hit["guard"])
         else:
             app.update(ai=rules_fn(app), source="rules", model=None, generated_at=None, guard_notes=[])
@@ -600,7 +609,7 @@ def _write_parquet(settings: Settings, result: dict) -> None:
         "vendor": a["vendor"], "impact": None,
         "installed_versions": ", ".join(v["version"] for v in a["versions"]), "urgency": a["urgency"]["label"],
         "urgency_level": a["urgency"]["level"], "fix_by": a["fix_by"], "cves": a["cves"], "p1": a["p1"],
-        "kev_cves": len(a["kev_cves"]), "no_patch_cves": len(a["no_patch"]), "overdue_findings": a["overdue"],
+        "no_patch_cves": len(a["no_patch"]), "overdue_findings": a["overdue"],
         "devices": len(a["devices"]),
         "device_names": ", ".join(d["name"] for d in a["devices"]), "opcos": ", ".join(a["opcos"]),
         "fix_action": a["fix"]["action"], "command": a["fix"]["command"], "what_is_wrong": a["ai"]["what_is_wrong"],
@@ -612,7 +621,7 @@ def _write_parquet(settings: Settings, result: dict) -> None:
         "snapshot_date": result["snapshot"], "rank": i, "kind": "setting", "fix_type": s["fix_type"], "app": s["app"],
         "vendor": "Microsoft (Windows setting)", "impact": s["impact"], "installed_versions": None,
         "urgency": s["urgency"]["label"], "urgency_level": s["urgency"]["level"], "fix_by": None, "cves": 0, "p1": 0,
-        "kev_cves": 0, "no_patch_cves": 0, "overdue_findings": 0, "devices": len(s["devices"]),
+        "no_patch_cves": 0, "overdue_findings": 0, "devices": len(s["devices"]),
         "device_names": ", ".join(d["name"] for d in s["devices"]), "opcos": ", ".join(s["opcos"]),
         "fix_action": s["fix"]["action"], "command": s["fix"]["command"], "what_is_wrong": s["ai"]["what_is_wrong"],
         "worst_case": s["ai"]["worst_case"], "why_now": s["ai"]["why_now"], "steps": "\n".join(s["ai"]["steps"]),

@@ -157,11 +157,11 @@ class Pipeline:
         return self.step("inventory", inventory.pull, self.store, self.defender)
 
     def enrich(self):
-        self.step("derive", derive.run, self.store, self.settings.kev_backfill_days)
+        self.step("derive", derive.run, self.store, self.settings.cve_window_days)
         missing = [r["cve_id"] for r in self.store.query("""
             SELECT DISTINCT l.value AS cve_id FROM threat_links l LEFT JOIN cves c ON c.cve_id = l.value
             WHERE l.link_type = 'cve' AND (c.cve_id IS NULL OR c.description IS NULL)
-              AND l.threat_id IN (SELECT threat_id FROM threats WHERE kind IN ('kev', 'advisory', 'pulse'))""")][:60]
+              AND l.threat_id IN (SELECT threat_id FROM threats WHERE kind IN ('advisory', 'pulse'))""")][:60]
         if missing:
             self.step("nvd_details", fetch_cves, self.ctx, missing)
         self.step("epss", epss.collect, self.ctx)

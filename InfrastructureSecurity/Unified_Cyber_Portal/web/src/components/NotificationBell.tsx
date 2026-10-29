@@ -39,7 +39,7 @@ export function NotificationBell() {
     queryKey: ['notifications'],
     queryFn: async () => {
       const res = await fetch('/api/notifications')
-      if (!res.ok) throw new Error(`the portal answered ${res.status}`)
+      if (!res.ok) throw new Error(`CyberSuite could not complete the request (error ${res.status})`)
       return (await res.json()) as { items: Note[] }
     },
     refetchInterval: 15_000,

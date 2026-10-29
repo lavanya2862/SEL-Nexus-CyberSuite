@@ -24,7 +24,6 @@ class Indicator(BaseModel):
 class ThreatAnalysis(BaseModel):
     summary: str = Field(description="Plain-English summary for a non-expert manager, max 80 words")
     threat_type: str = Field(description="One of: vulnerability, malware, phishing, campaign, indicator_list, advisory, other")
-    exploited_in_wild: str = Field(description="yes, no or unknown, based only on the source")
     cves: list[str] = Field(description="CVE IDs mentioned in the source")
     products: list[Product] = Field(description="Affected products named in the source (max 10)")
     techniques: list[Technique] = Field(description="ATT&CK techniques clearly supported by the source (max 6)")

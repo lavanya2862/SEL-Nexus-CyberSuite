@@ -30,7 +30,6 @@ CREATE TABLE IF NOT EXISTS threat_links (
 CREATE TABLE IF NOT EXISTS cves (
     cve_id VARCHAR PRIMARY KEY, description VARCHAR, published_at TIMESTAMP, last_modified_at TIMESTAMP,
     cvss DOUBLE, severity VARCHAR, vector VARCHAR, products JSON,
-    kev_added DATE, kev_due DATE, kev_ransomware VARCHAR, kev_action VARCHAR, kev_name VARCHAR,
     epss DOUBLE, epss_percentile DOUBLE, epss_date DATE, updated_at TIMESTAMP);
 CREATE TABLE IF NOT EXISTS iocs (
     ioc_type VARCHAR, value VARCHAR, source VARCHAR, malware VARCHAR, confidence INTEGER,

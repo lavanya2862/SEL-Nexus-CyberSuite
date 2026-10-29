@@ -92,13 +92,16 @@ class UC1:
     def threat_match_counts(self, first_found: dict[tuple[str, str], str], list_rows: dict[tuple[str, str, str], tuple[int, int]]) -> dict | None:
         """Per app (Defender's software name): how many rows of its vulnerability list (UC3.list_rows: one per computer,
         version and CVE) a threat in the news names, so the card and the list show the same number;
-        split: {app: [still open, fixed]}."""
+        split: {app: [still open, fixed]}; vm_cves: {"computer|app|version" (lower case): [CVE, …]} for the Remediation
+        page's per-computer cards (it keeps the ones still open)."""
         data = self._matches()
         if data is None:
             return None
         pairs: dict[str, set] = {}
+        vm_cves: dict[str, set] = {}
         for r in self._early_rows(data, first_found):
             pairs.setdefault(r[1], set()).add((r[0], r[3]))
+            vm_cves.setdefault(f"{r[0]}|{r[1]}|{r[2]}".lower(), set()).add(r[3])
         split: dict[str, list[int]] = {}
         for sw, p in pairs.items():
             o = f = 0
@@ -107,7 +110,8 @@ class UC1:
                 o, f = o + ro, f + rf
             if o + f:
                 split[sw] = [o, f]
-        return {"built_at": data.get("built_at"), "counts": {sw: o + f for sw, (o, f) in split.items()}, "split": split}
+        return {"built_at": data.get("built_at"), "counts": {sw: o + f for sw, (o, f) in split.items()}, "split": split,
+                "vm_cves": {k: sorted(v) for k, v in vm_cves.items()}}
 
     def threat_matches(self, software: str, first_found: dict[tuple[str, str], str]) -> dict | None:
         """One app's vulnerabilities that a threat in the news names:

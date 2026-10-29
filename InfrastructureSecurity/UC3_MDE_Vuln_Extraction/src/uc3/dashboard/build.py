@@ -16,7 +16,7 @@ import duckdb
 from uc3.config import CONFIG_DIR, Settings
 from uc3.status import read_status
 
-FINDING_COLUMNS = ["d", "sw", "ver", "cve", "sev", "cvss", "ex", "pr", "age", "bk", "br", "kev", "upd", "fs", "ua"]
+FINDING_COLUMNS = ["d", "sw", "ver", "cve", "sev", "cvss", "ex", "pr", "age", "bk", "br", "upd", "fs", "ua"]
 FIXED_COLUMNS = ["d", "sw", "ver", "cve", "sev", "fixed", "fs", "days"]
 
 
@@ -56,7 +56,7 @@ def build_payload(settings: Settings) -> dict:
     for row in _dicts(con, """
             SELECT device_id, device_name, opco, software_name AS sw, software_version AS ver, cve_id AS cve,
                    severity AS sev, cvss_score AS cvss, exploitability AS ex, priority AS pr, age_days AS age,
-                   age_bucket AS bk, sla_breached AS br, in_cisa_kev AS kev, recommended_update AS upd,
+                   age_bucket AS bk, sla_breached AS br, recommended_update AS upd,
                    strftime(first_seen, '%Y-%m-%d') AS fs, security_update_available AS ua
             FROM fact_vulnerability ORDER BY device_id, sw, cve"""):
         if row["device_id"] not in index:   # vulnerability for a device missing from the device list
@@ -65,7 +65,7 @@ def build_payload(settings: Settings) -> dict:
                             "osv": None, "tags": [], "last_seen": None, "health": "Unknown", "exposure": None,
                             "stale": False, "findings": 0, "critical": 0, "p1": 0})
         row["d"] = index[row["device_id"]]
-        row["br"], row["kev"] = int(bool(row["br"])), int(bool(row["kev"]))
+        row["br"] = int(bool(row["br"]))
         row["ua"] = int(row["ua"] is not False)   # 0 = Defender says the vendor has no security update yet
         findings.append([row[c] for c in FINDING_COLUMNS])
 
@@ -94,11 +94,6 @@ def build_payload(settings: Settings) -> dict:
     latest_dq = _dicts(con, """SELECT check_name AS name, status, value, expected, message, run_date
                                FROM dq_status WHERE run_date = (SELECT max(run_date) FROM dq_status)""")
     kql_path = settings.data_dir / "reference" / "kql_limit.json"
-    kev_path = settings.data_dir / "reference" / "cisa_kev.json"
-    kev_meta = {"entries": 0, "version": None}
-    if kev_path.is_file():
-        catalog = json.loads(kev_path.read_text(encoding="utf-8"))
-        kev_meta = {"entries": len(catalog.get("vulnerabilities", [])), "version": catalog.get("catalogVersion")}
     with (CONFIG_DIR / "sla_policy.csv").open(encoding="utf-8") as fh:
         sla = {r["severity"].strip(): int(r["days_to_fix"]) for r in csv.DictReader(fh)}
 
@@ -109,15 +104,13 @@ def build_payload(settings: Settings) -> dict:
         fixes["stale"] = True
     return {
         "meta": {"snapshot": snapshot, "built_at": datetime.now(timezone.utc).isoformat(timespec="minutes"),
-                 "source": "Microsoft Defender for Endpoint (lab tenant)", "kev": kev_meta, "sla": sla},
+                 "source": "Microsoft Defender for Endpoint (lab tenant)", "sla": sla},
         "run": runs[-1] if runs else None,
         "runs": runs,
         "kql": json.loads(kql_path.read_text()) if kql_path.is_file() else None,
         "devices": devices,
         "f": {"cols": FINDING_COLUMNS, "rows": findings},
         "fixed": {"cols": FIXED_COLUMNS, "rows": fixed},
-        "kev": _dicts(con, """SELECT cve_id AS cve, kev_name AS name, kev_date_added AS added, kev_ransomware AS rw
-                             FROM dim_cve WHERE in_cisa_kev"""),
         "daily": _rows(con, """SELECT snapshot_date, opco, severity, priority, vulnerabilities, exploitable, sla_breaches
                               FROM fact_daily_summary ORDER BY 1"""),
         "changes": _rows(con, """SELECT event_date, opco, status, coalesce(severity, 'None'), count(*)

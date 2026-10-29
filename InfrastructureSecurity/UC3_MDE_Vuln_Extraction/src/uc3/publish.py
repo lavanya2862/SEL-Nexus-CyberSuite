@@ -1,19 +1,14 @@
 """Publish step: write the Power-BI-ready reporting tables to data/reporting/*.parquet.
 
 Every dashboard (the HTML Command Centre, the Excel summary, Power BI later) reads ONLY these files.
-Also refreshes the CISA "Known Exploited
-Vulnerabilities" list (cached for 24 h; a failed download falls back to the cached copy and never breaks a run).
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import pyarrow as pa
-import requests
 
 from uc3.config import Settings
 from uc3.posture import publish_posture
@@ -21,16 +16,13 @@ from uc3.transform import connect
 
 log = logging.getLogger("uc3.publish")
 
-KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
-KEV_MAX_AGE = timedelta(hours=24)
-
 REPORTING_SQL = {
     "fact_vulnerability": """
         SELECT v.snapshot_date, v.device_id, v.device_name, v.opco, v.software_vendor, v.software_name,
                v.software_version, v.cve_id, v.severity, v.cvss_score, v.exploitability, v.priority,
                v.first_seen, v.age_days, v.age_bucket, v.sla_days, v.sla_breached, v.recommended_update,
-               v.security_update_available, v.device_is_stale, (k.cve_id IS NOT NULL) AS in_cisa_kev
-        FROM vuln_current v LEFT JOIN ref_cisa_kev k ON k.cve_id = v.cve_id
+               v.security_update_available, v.device_is_stale
+        FROM vuln_current v
         WHERE v.cve_id IS NOT NULL""",
     "fact_daily_summary": "SELECT * FROM vuln_daily_summary",
     "fact_change_event": """
@@ -51,11 +43,7 @@ REPORTING_SQL = {
             SELECT device_id, count(*) AS findings, count(*) FILTER (WHERE severity = 'Critical') AS critical,
                    count(*) FILTER (WHERE priority = 'P1') AS p1
             FROM vuln_current WHERE cve_id IS NOT NULL GROUP BY device_id) f USING (device_id)""",
-    "dim_cve": """
-        SELECT c.*, (k.cve_id IS NOT NULL) AS in_cisa_kev, k.vulnerability_name AS kev_name,
-               k.date_added AS kev_date_added, k.due_date AS kev_due_date,
-               coalesce(k.ransomware_use = 'Known', false) AS kev_ransomware
-        FROM cve_summary c LEFT JOIN ref_cisa_kev k ON k.cve_id = c.cve_id""",
+    "dim_cve": "SELECT * FROM cve_summary",
     "dim_software": "SELECT * FROM software_summary",
     "dim_opco": """
         SELECT opco, count(*) AS devices, count(*) FILTER (WHERE is_stale) AS stale_devices
@@ -68,45 +56,6 @@ REPORTING_SQL = {
     "dq_status": "SELECT * FROM dq_results",
     "run_history": "SELECT * FROM run_history",
 }
-
-
-def refresh_kev(settings: Settings, session=requests) -> dict:
-    """Download the CISA KEV list at most once a day; fall back to the cached copy on any failure."""
-    path = settings.data_dir / "reference" / "cisa_kev.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    age = datetime.now(timezone.utc) - datetime.fromtimestamp(path.stat().st_mtime, timezone.utc) if path.is_file() else None
-    status = "cached"
-    if age is None or age > KEV_MAX_AGE:
-        try:
-            response = session.get(KEV_URL, timeout=60)
-            response.raise_for_status()
-            data = response.json()
-            if not isinstance(data.get("vulnerabilities"), list):
-                raise ValueError("unexpected format")
-            tmp = path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(data), encoding="utf-8")
-            tmp.replace(path)
-            status = "downloaded"
-        except Exception as exc:   # network, HTTP or format problem: keep going with the cache
-            log.warning("CISA KEV download failed (%s); using cached copy if any", exc)
-            status = "cached (download failed)" if path.is_file() else "unavailable"
-    if not path.is_file():
-        return {"status": status, "entries": 0, "catalog_version": None, "path": None}
-    data = json.loads(path.read_text(encoding="utf-8"))
-    return {"status": status, "entries": len(data["vulnerabilities"]), "catalog_version": data.get("catalogVersion"),
-            "path": path}
-
-
-def _kev_table(kev: dict) -> pa.Table:
-    records = json.loads(kev["path"].read_text(encoding="utf-8"))["vulnerabilities"] if kev["path"] else []
-    return pa.table({
-        "cve_id": [r.get("cveID") for r in records],
-        "vulnerability_name": [r.get("vulnerabilityName") for r in records],
-        "date_added": [r.get("dateAdded") for r in records],
-        "due_date": [r.get("dueDate") for r in records],
-        "ransomware_use": [r.get("knownRansomwareCampaignUse") for r in records],
-    }, schema=pa.schema([(n, pa.string()) for n in
-                         ("cve_id", "vulnerability_name", "date_added", "due_date", "ransomware_use")]))
 
 
 def _run_history_table(settings: Settings) -> pa.Table:
@@ -136,16 +85,13 @@ def _run_history_table(settings: Settings) -> pa.Table:
     return pa.Table.from_pylist(rows, schema=schema)
 
 
-def run_publish(settings: Settings, kev_session=requests) -> dict:
+def run_publish(settings: Settings) -> dict:
     settings.ensure_dirs()
-    kev = refresh_kev(settings, kev_session)
     out: dict[str, int] = {}
     with connect(settings) as con:
         con.execute("""CREATE TABLE IF NOT EXISTS dq_results (run_date DATE, check_name VARCHAR, status VARCHAR,
                        value VARCHAR, expected VARCHAR, message VARCHAR, checked_at TIMESTAMP)""")
-        kev_arrow, history_arrow = _kev_table(kev), _run_history_table(settings)
-        con.register("kev_arrow", kev_arrow)
-        con.execute("CREATE OR REPLACE TABLE ref_cisa_kev AS SELECT * FROM kev_arrow")
+        history_arrow = _run_history_table(settings)
         con.register("history_arrow", history_arrow)
         con.execute("CREATE OR REPLACE TABLE run_history AS SELECT * FROM history_arrow")
         for name, sql in REPORTING_SQL.items():
@@ -158,4 +104,4 @@ def run_publish(settings: Settings, kev_session=requests) -> dict:
             out.update(publish_posture(settings, con).get("tables", {}))
         except Exception:   # settings / end-of-support tables are extra: never block the main reporting tables
             log.exception("Security-settings tables not published")
-    return {"tables": out, "kev": {k: (str(v) if isinstance(v, Path) else v) for k, v in kev.items()}}
+    return {"tables": out}

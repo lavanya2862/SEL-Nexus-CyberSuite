@@ -545,7 +545,7 @@ def to_pdf(docx_path: Path) -> Path | None:
     converters = ([("Microsoft Word", lambda: _word_pdf(docx_path, pdf))] if _word_installed() else []) + \
                  ([("LibreOffice", lambda s=_soffice(): _soffice_pdf(docx_path, s))] if _soffice() else [])
     if not converters:
-        log.warning("PDF skipped: Microsoft Word is not installed on this computer (the Word file is ready)")
+        log.warning("PDF skipped: Microsoft Word is not installed on this server (the Word file is ready)")
         return None
     for name, convert in converters:
         try:

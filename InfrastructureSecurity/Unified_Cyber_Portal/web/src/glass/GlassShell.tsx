@@ -14,18 +14,18 @@ import './glass.css'
 
 const RAIL = [
   { to: '/glass', label: 'Overview', icon: LayoutGrid, end: true },
-  { to: '/glass/uc1', label: 'the assistant · Threat Intel & Hunting', icon: Crosshair },
-  { to: '/glass/uc3', label: 'the assistant · Vulnerabilities', icon: ScanSearch },
+  { to: '/glass/uc1', label: 'Threats', icon: Crosshair },
+  { to: '/glass/uc3', label: 'Vulnerabilities', icon: ScanSearch },
   { to: '/glass/fixes', label: 'Remediation', icon: Wrench },
   { to: '/glass/reports', label: 'Reports', icon: FileText },
 ]
 
 const MENU = [
-  { to: '/glass', label: 'Dashboard', icon: LayoutGrid, end: true },
-  { to: '/glass/uc1', label: 'Threat intel', tag: 'the assistant', tone: 'var(--g-violet)', icon: Crosshair },
-  { to: '/glass/uc1/hunts', label: 'Hunting', tag: 'the assistant', tone: 'var(--g-violet)', icon: Radar },
-  { to: '/glass/uc3', label: 'Vulnerabilities', tag: 'the assistant', tone: 'var(--g-sky)', icon: ScanSearch },
-  { to: '/glass/uc3/quality', label: 'Data quality', tag: 'the assistant', tone: 'var(--g-sky)', icon: Database },
+  { to: '/glass', label: 'Summary', icon: LayoutGrid, end: true },
+  { to: '/glass/uc1', label: 'Threats', tag: 'Threat Intel Agent', tone: 'var(--g-violet)', icon: Crosshair },
+  { to: '/glass/uc1/hunts', label: 'Attack detection', tag: 'Threat Intel Agent', tone: 'var(--g-violet)', icon: Radar },
+  { to: '/glass/uc3', label: 'Vulnerabilities', tag: 'Vulnerability Agent', tone: 'var(--g-sky)', icon: ScanSearch },
+  { to: '/glass/uc3/quality', label: 'Data quality', tag: 'Vulnerability Agent', tone: 'var(--g-sky)', icon: Database },
   { to: '/glass/fixes', label: 'Remediation', icon: Wrench },
 ]
 
@@ -98,15 +98,15 @@ export function GlassShell() {
                   </button>
                 </span>
               </TooltipTrigger>
-              <TooltipContent className={glassTip}>Preview: wired to the real the assistant + the assistant pipelines in the next step</TooltipContent>
+              <TooltipContent className={glassTip}>Preview design: more pages are being added</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <button className="grid size-9 place-items-center rounded-full text-[var(--g-ink-2)] hover:bg-white/5" aria-label="About this portal">
+                <button className="grid size-9 place-items-center rounded-full text-[var(--g-ink-2)] hover:bg-white/5" aria-label="About CyberSuite">
                   <Info className="size-[18px]" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent className={cn(glassTip, 'max-w-64')}>Lab PoC on this PC only. Data: Microsoft Defender (2 lab VMs) and 10 public threat feeds.</TooltipContent>
+              <TooltipContent className={cn(glassTip, 'max-w-64')}>Data: Microsoft Defender and public threat intelligence feeds.</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -117,7 +117,7 @@ export function GlassShell() {
                   ) : null}
                 </button>
               </TooltipTrigger>
-              <TooltipContent className={glassTip}>{data?.uc1.totals.alerts ?? 0} alerts raised by the assistant (lab tests included)</TooltipContent>
+              <TooltipContent className={glassTip}>{data?.uc1.totals.alerts ?? 0} alerts raised by the Threat Intel Agent (lab tests included)</TooltipContent>
             </Tooltip>
           </div>
 

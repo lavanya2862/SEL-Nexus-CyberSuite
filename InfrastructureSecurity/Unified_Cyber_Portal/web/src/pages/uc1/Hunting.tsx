@@ -123,7 +123,7 @@ function CaughtCard({ r }: { r: QueueRow }) {
           </div>
           <div className="mt-1.5 text-base font-semibold leading-snug">{r.title}</div>
           <div className="text-xs text-ink-3">
-            {(r.devices.join(', ') || r.accounts.slice(0, 2).join(', ') || 'no computer named')}{when ? ` · ${dateTime(when.toISOString())}` : ''}
+            {(r.devices.join(', ') || r.accounts.slice(0, 2).join(', ') || 'no device named')}{when ? ` · ${dateTime(when.toISOString())}` : ''}
           </div>
         </div>
         <HopLink to={`/respond/${encodeURIComponent(r.incident_id)}`}>View incident</HopLink>

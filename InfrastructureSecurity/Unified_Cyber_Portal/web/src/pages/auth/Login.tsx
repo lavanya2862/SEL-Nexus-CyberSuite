@@ -39,7 +39,7 @@ export function Login() {
   return (
     <AuthLayout>
       <AuthHeading title="Sign in">Use your work email to open Infrastructure Security.</AuthHeading>
-      {ready && !config && <FormError message="The portal is not answering. Check that it is running, then reload this page." />}
+      {ready && !config && <FormError message="CyberSuite is not available. Reload this page; if this continues, contact your administrator." />}
       <form onSubmit={submit} className="space-y-5" noValidate>
         <Field label="Work email" type="email" autoComplete="username" inputMode="email" required autoFocus
           value={email} onChange={(e) => setEmail(e.target.value)} disabled={busy} invalid={!!error} />
@@ -50,7 +50,7 @@ export function Login() {
       </form>
       <p className="mt-6 text-center text-sm text-ink-3">
         {config?.signup_open === false ? (
-          'Need access? Ask the portal owner to add you.'
+          'Need access? Contact your administrator.'
         ) : (
           <>
             New here?{' '}

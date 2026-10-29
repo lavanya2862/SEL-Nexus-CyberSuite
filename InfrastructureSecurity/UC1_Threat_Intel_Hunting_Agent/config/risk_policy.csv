@@ -1,6 +1,4 @@
 setting,value,meaning
-kev_points,35,On CISA's known-exploited list
-ransomware_points,15,Known use in ransomware campaigns
 epss_high,0.5,EPSS threshold for 'high'
 epss_high_points,15,Points when EPSS >= epss_high
 epss_medium,0.1,EPSS threshold for 'medium'

@@ -1,6 +1,6 @@
 """Phase 4b: risk score from fixed, explainable rules (config/risk_policy.csv). The AI never sets the score.
 
-Signals: on CISA KEV, known ransomware use, EPSS, CVSS, Defender 'exploit available', NCSC-NL [H/H] rating,
+Signals: EPSS, CVSS, Defender 'exploit available', NCSC-NL [H/H] rating,
 devices exposed, hunt hits. Without exposure or hits the rating is capped ("monitor"): a dangerous flaw we
 don't have is not our emergency.
 """
@@ -13,7 +13,6 @@ from uc1.config import read_policy
 from uc1.store import Store, utcnow
 
 DEFAULTS = {
-    "kev_points": 35, "ransomware_points": 15,
     "epss_high": 0.5, "epss_high_points": 15, "epss_medium": 0.1, "epss_medium_points": 8,
     "cvss_critical": 9.0, "cvss_critical_points": 15, "cvss_high": 7.0, "cvss_high_points": 10,
     "exploit_available_points": 10, "ncsc_high_high_points": 15,
@@ -42,10 +41,6 @@ def score_threat(t: dict, cves: list[dict], exposure: list[dict], hits: int, exp
         points += int(n)
         factors.append(f"{label} (+{int(n)})")
 
-    if any(c.get("kev_added") for c in cves):
-        add(p["kev_points"], "listed by CISA (KEV)")
-    if any((c.get("kev_ransomware") or "").lower() == "known" for c in cves):
-        add(p["ransomware_points"], "CISA links it to ransomware")
     epss = max((c.get("epss") or 0 for c in cves), default=0)
     if epss >= p["epss_high"]:
         add(p["epss_high_points"], f"EPSS {epss:.0%} chance of attack in 30 days")

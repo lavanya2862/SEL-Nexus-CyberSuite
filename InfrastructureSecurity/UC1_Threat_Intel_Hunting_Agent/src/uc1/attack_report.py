@@ -38,7 +38,7 @@ def build(store: Store, settings: Settings, run_id: str | None = None, steps: di
              (f"{len(found):,}", "Searches with results", "something matched", ds.SERIOUS),
              (f"{co.get('new_hits', len(new_ids)):,}", "New signs of attack", "since the last run", ds.BAD),
              (f"{len(signs):,}", "Signs of attack open", f"{len(signs) - len(real)} are harmless lab tests", ds.SERIOUS),
-             (f"{new_steps:,}", "Fix steps written", "for signs of attack", ds.GOOD),
+             (f"{new_steps:,}", "Resolution steps written", "for signs of attack", ds.GOOD),
              (f"{al.get('new_alerts', 0):,}", "Alerts sent", "to the security team" if al.get("new_alerts") else
               "no one needed to be told", ds.BAD if al.get("new_alerts") else ds.INK_3)])
     r.para(f"This run ran {len(hunts)} searches in Microsoft Defender; {len(found)} found something. "

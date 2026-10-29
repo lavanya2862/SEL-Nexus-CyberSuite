@@ -8,7 +8,7 @@ import { num, shortDate } from '@/lib/format'
 import { chartTokens, statusColor, useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import {
-  FEED_NAME, PERIODS, RATINGS, cleanTitle, inPeriod, isClueBundle, isSign, periodData, periodLabel, threatHref, usePeriod, useThreat, useUc1Clues, useUc1Data,
+  FEED_NAME, PERIODS, RATINGS, inPeriod, isClueBundle, isSign, periodData, periodLabel, threatHref, usePeriod, useThreat, useUc1Clues, useUc1Data,
   type ExplorerRow, type Rating, type Uc1Data,
 } from '@/lib/uc1'
 import { AiChip, Resolve, ScoreBar, Uc1Header, Uc1Loading } from './common'
@@ -203,7 +203,7 @@ function AffectCard({ e, story, openAtStart }: { e: ExplorerRow; story: Story | 
             <ScoreBar score={e.score} width={64} />
             <StoryBadge s={story} />
           </div>
-          <div className="mt-1.5 font-semibold leading-snug">{cleanTitle(e.title).replace(/^(TEST:\s*)?Hunt hit:\s*/, '').replace(/AI-drafted:\s*/, '')}</div>
+          <div className="mt-1.5 font-semibold leading-snug">{e.title.replace(/^(TEST:\s*)?Hunt hit:\s*/, '').replace(/AI-drafted:\s*/, '')}</div>
           <div className="mt-1 text-xs text-ink-3">
             On {devices || '–'}{e.action && <> · <span className="text-ink-2">Do: {e.action}</span></>}
           </div>
@@ -236,7 +236,8 @@ function AffectDetail({ e, story }: { e: ExplorerRow; story: Story | null }) {
       <section>
         <h3 className="flex items-center gap-2 text-sm font-semibold">What it is {t.ai_status === 'done' && <AiChip origin="ai" />}</h3>
         <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{t.summary || t.text.split('\n')[0]}</p>
-        {e.chips.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{e.chips.map((c) => <span key={c} className={cn('rounded-md px-2 py-0.5 text-[11px]', /KEV|Ransomware|exploit|Hunt/.test(c) ? 'bg-signal/15 text-signal' : 'bg-well text-ink-2')}>{c}</span>)}</div>}
+        {/* no chip says a hole is exploited (older data still has "Public exploit") */}
+        {e.chips.some((c) => !/exploit/i.test(c)) && <div className="mt-2 flex flex-wrap gap-1">{e.chips.filter((c) => !/exploit/i.test(c)).map((c) => <span key={c} className={cn('rounded-md px-2 py-0.5 text-[11px]', /Ransomware|Hunt/.test(c) ? 'bg-signal/15 text-signal' : 'bg-well text-ink-2')}>{c}</span>)}</div>}
       </section>
 
       <section>
@@ -479,7 +480,7 @@ function ThreatList({ rows: all }: { rows: ExplorerRow[] }) {
                 <td><ScoreBar score={e.score} width={60} /></td>
                 <td className="max-w-[420px]">
                   <div className="flex items-start gap-2">
-                    <Link to={threatHref(e.id)} className="font-medium leading-snug hover:underline">{cleanTitle(e.title)}</Link>
+                    <Link to={threatHref(e.id)} className="font-medium leading-snug hover:underline">{e.title}</Link>
                   </div>
                   <div className="mt-0.5 flex items-center gap-1 text-xs text-ink-3">
                     {e.source}
@@ -589,7 +590,7 @@ function Health({ d }: { d: Uc1Data }) {
     ['Threat hunts completed', `${num(Number(m.hunts_completed) || 0)} (≈${num(Number(m.hunts_per_month_projected) || 0)} a month)`, `${m.hunts_per_run} per run`],
     ['Proactive threats identified', num(Number(m.proactive_threats_identified) || 0), 'threats matched to managed devices'],
     ['Reports published', num(Number(m.reports_published) || 0), 'last 30 days'],
-    ['Manual effort equivalent', `${num(Number(m['manual_hours_equivalent (assumption)']) || 0)} h`, 'assumption (config/metrics_assumptions.csv)'],
+    ['Manual effort saved (estimate)', `${num(Number(m['manual_hours_equivalent (assumption)']) || 0)} h`, 'estimate based on standard analyst times'],
     ['Agent calls · corrected by checks', `${num(Number(m.ai_calls) || 0)} · ${m.ai_items_corrected_by_guard ?? '–'}`, 'automatic fact checks'],
   ]
   return (

@@ -90,7 +90,7 @@ def pull(store: Store, client: DefenderClient) -> dict:
 
     defender_count = (client.run_query(VULN_COUNT_QUERY) or [{}])[0].get("Count")
     if len(vuln_rows) >= MAX_HUNT_ROWS:
-        log.warning("Vulnerability query hit the 100k limit: use UC3's export method for this estate size")
+        log.warning("Vulnerability query hit the 100k limit: use the Vulnerability Agent's export method for this estate size")
 
     # replace the snapshot (current state only; history is not needed for UC1)
     for table, rows in (("devices", devices), ("software", software), ("device_vulns", vulns)):

@@ -101,7 +101,7 @@ export function Timeline({ s }: { s: Story }) {
     { label: 'Announced', when: s.announced, note: 'by the vendor / NVD' },
     { label: 'Identified', when: s.known, note: 'Threat Intel Agent' },
     s.match === 'defender'
-      ? { label: 'Defender listed it', when: s.listed, note: s.ahead ? `${s.ahead} day${s.ahead === 1 ? '' : 's'} after us` : 'on our computer', tone: s.ahead ? 'good' : undefined }
+      ? { label: 'Defender listed it', when: s.listed, note: s.ahead ? `${s.ahead} day${s.ahead === 1 ? '' : 's'} after us` : 'on our device', tone: s.ahead ? 'good' : undefined }
       : s.match === 'early'
         ? { label: 'Defender', when: null, note: `not listed yet · waiting ${s.waiting} day${s.waiting === 1 ? '' : 's'}`, tone: 'warn' }
         : { label: 'Defender', when: null, note: 'not reported (14+ days)', tone: 'muted' },

@@ -223,7 +223,7 @@ class RunCommandExecutor:
         if state != "running":
             if not allow_start:
                 raise FixError(f"Azure access works, but {device_name} is switched off ({state}). The read-only check "
-                               "never starts a VM: start it in the Azure portal to check it, or just run the fixes "
+                               "never starts a VM: start it in the Azure portal to check it, or run the remediations "
                                "(UC1 starts it then).")
             if not self.settings.fix_start_vms:
                 raise FixError(f"{device_name} is {state}: start it in the Azure portal (or set FIX_START_VMS=1)")

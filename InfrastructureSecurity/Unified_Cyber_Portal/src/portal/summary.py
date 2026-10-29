@@ -58,8 +58,7 @@ def _uc3_part(uc3: UC3, now: datetime) -> dict:
             sum(vulnerabilities) filter (where severity = 'Critical') critical,
             sum(exploitable) exploitable, sum(sla_breaches) sla_breaches
         from {{fact_daily_summary}} where snapshot_date = {latest}""", "fact_daily_summary")
-    cves = uc3.query("""select count(*) cves, count(*) filter (where in_cisa_kev) kev,
-            count(*) filter (where in_cisa_kev and kev_ransomware) ransomware from {dim_cve}""", "dim_cve")
+    cves = uc3.query("""select count(*) cves from {dim_cve}""", "dim_cve")
     trend = uc3.query("""select snapshot_date::varchar date, sum(vulnerabilities) total,
             sum(vulnerabilities) filter (where priority = 'P1') p1, sum(exploitable) exploitable
         from {fact_daily_summary} group by 1 order by 1""", "fact_daily_summary")
@@ -70,26 +69,21 @@ def _uc3_part(uc3: UC3, now: datetime) -> dict:
     devices = uc3.query("""select device_name, opco, findings, critical, p1, exposure_level,
             last_seen::varchar last_seen, is_stale from {dim_device} order by findings desc""", "dim_device")
     fixes = uc3.query("""select rank, app, installed_versions, urgency, urgency_level, fix_by::varchar fix_by,
-            cves, p1, kev_cves, devices, opcos, fix_action, command, why_now, source
+            cves, p1, devices, opcos, fix_action, command, why_now, source
         from {ai_fix_plan} order by rank limit 8""", "ai_fix_plan")
     latest_v = "(select max(snapshot_date) from {fact_vulnerability})"
     opco_totals = uc3.query(f"""select opco, count(*) findings, count(*) filter (where priority = 'P1') p1,
             count(*) filter (where severity = 'Critical') critical,
-            count(distinct cve_id) filter (where in_cisa_kev) kev, count(distinct device_id) devices
+            count(distinct device_id) devices
         from {{fact_vulnerability}} where snapshot_date = {latest_v} group by 1 order by 1""", "fact_vulnerability")
-    ransom = uc3.query(f"""select v.opco, count(distinct v.cve_id) ransomware
-        from {{fact_vulnerability}} v join {{dim_cve}} c using (cve_id)
-        where v.snapshot_date = (select max(snapshot_date) from {{fact_vulnerability}}) and c.kev_ransomware
-        group by 1""", "fact_vulnerability", "dim_cve")
     fixed = uc3.query("""select opco, count(*) fixed, min(fixed_date)::varchar since
         from {fact_remediation} group by 1""", "fact_remediation")
     for row in opco_totals:
-        row["ransomware"] = next((r["ransomware"] for r in ransom if r["opco"] == row["opco"]), 0)
         f = next((r for r in fixed if r["opco"] == row["opco"]), {})
         row["fixed"], row["fixed_since"] = f.get("fixed", 0), f.get("since")
     names = uc3.app_names()
     apps = uc3.query(f"""select software_vendor || ':' || software_name as app_key, software_name, opco, count(*) findings,
-            count(*) filter (where priority = 'P1') p1, count(distinct cve_id) filter (where in_cisa_kev) kev
+            count(*) filter (where priority = 'P1') p1
         from {{fact_vulnerability}} where snapshot_date = {latest_v} group by all order by findings desc""",
                      "fact_vulnerability")
     for row in apps:
@@ -138,7 +132,6 @@ def _uc1_part(uc1: UC1, now: datetime) -> dict:
             "new_threats": metrics.get("new_threats"),
             "pct_assessed": metrics.get("pct_assessed"),
             "affecting": (data.get("posture") or {}).get("affecting"),
-            "kev_on_devices": (data.get("posture") or {}).get("kev"),
             "urgent": (data.get("posture") or {}).get("urgent"),
             "hunts_per_run": metrics.get("hunts_per_run"),
             "hunts_ok": sum(1 for h in hunts if h.get("status") == "ok"),

@@ -106,7 +106,7 @@ def build(store: Store, settings: Settings, run_id: str | None, ai=None, steps: 
     r.tiles([(f"{checked:,}", "News items checked", f"from {ok_feeds} public sources", ds.BLUE),
              (f"{len(real_new):,}", "New threats", "first seen in this run", ds.SERIOUS),
              (f"{ex.get('new_threats_exposed', 0):,}", "New threats affecting us", "since the last run", ds.BAD),
-             (f"{new_fixes:,}", "Fix steps written", "for threats that affect us", ds.GOOD),
+             (f"{new_fixes:,}", "Remediation steps written", "for applicable threats", ds.GOOD),
              (f"{len(d['affecting']):,}", "Threats affecting us now", "on our computers' software", ds.SERIOUS),
              (f"{len(d['alerts']):,}", "Alerts sent", "to the security team" if d["alerts"] else "no one needed to be told",
               ds.BAD if d["alerts"] else ds.INK_3)])
@@ -145,7 +145,7 @@ def build(store: Store, settings: Settings, run_id: str | None, ai=None, steps: 
             [[t["rating"], t["title"][:140], t["computers"], (t["fix"] or "")[:120]] for t in d["affecting"]
              if t["rating"] != "Low"][:50], [1.8, 8, 3.5, 4.5], colour_cols={0: RATING_COLOURS})
 
-    r.h1("5. Fix steps written in this run")
+    r.h1("5. Remediation steps written in this run")
     fixes = d["fixes"]
     if fixes:
         r.para(f"{len(fixes):,} threats got fix steps in this run. The {min(len(fixes), CARDS_MAX)} most serious are shown "
@@ -186,12 +186,12 @@ def build(store: Store, settings: Settings, run_id: str | None, ai=None, steps: 
 
     r.h1("Appendix: how this report was produced")
     r.bullets([
-        "Threats come from free public sources: CISA KEV, NVD, FIRST EPSS, MITRE ATT&CK, NCSC-NL, CERT-EU, Microsoft MSRC, "
+        "Threats come from free public sources: NVD, FIRST EPSS, MITRE ATT&CK, NCSC-NL, CERT-EU, Microsoft MSRC, "
         "abuse.ch and (optionally) AlienVault OTX.",
         "Our computers' software comes from Microsoft Defender for Endpoint.",
-        "Ratings come from fixed rules: on the CISA KEV list, ransomware use, EPSS (chance of attack in 30 days), CVSS, "
+        "Ratings come from fixed rules: EPSS (chance of attack in 30 days), CVSS, "
         "a public exploit, and whether our computers are exposed.",
-        "The AI reads each threat and writes fix steps; its answers are checked against the data before they are used.",
+        "The AI reads each threat and writes remediation steps; its answers are checked against the data before they are used.",
     ])
     settings.reports_dir.mkdir(parents=True, exist_ok=True)
     stamp = started.strftime("%Y%m%d_%H%M")

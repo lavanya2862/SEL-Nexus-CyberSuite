@@ -199,7 +199,7 @@ function Accuracy({ byVerdict }: { byVerdict: Record<string, number> }) {
     ['False positives auto-closed', g.false_alarms_closable_pct],
   ] as const : []
   return (
-    <Card title="Model accuracy (backtest)" description={g ? `Tested on ${g.n} real incidents with expert-graded verdicts (Microsoft GUIDE)` : 'Run the backtest to populate this view'}>
+    <Card title="Model accuracy (backtest on past incidents)" description={g ? `Tested on ${g.n} real incidents with expert-graded verdicts (Microsoft GUIDE)` : 'Run the backtest to populate this view'}>
       {g ? (
         <ul className="flex flex-col gap-3">
           {bars.map(([label, pct]) => (
@@ -238,7 +238,7 @@ function WhereItFits() {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       {([
-        [Wrench, 'Remediation', 'Prevent', 'Remediate vulnerable applications, unsupported software and weak settings before they are exploited. Planned work: days.', '/fixes'],
+        [Wrench, 'Remediation', 'Prevent', 'Remediate vulnerable applications, unsupported software and weak settings. Planned work: days.', '/fixes'],
         [Radar, 'Attack detection', 'Hunt proactively', 'Identify attackers who gained access without triggering an alert.', '/uc1/hunts'],
         [BellRing, 'Triage', 'Respond', 'Defender has raised an incident: classify and respond. High-severity incidents: respond within minutes.', null],
       ] as const).map(([Icon, title, role, text, to]) => (

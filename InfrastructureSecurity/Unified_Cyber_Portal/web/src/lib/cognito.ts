@@ -59,7 +59,7 @@ export async function cognitoSignIn(cfg: CognitoConfig, email: string, password:
   if (data.AuthenticationResult?.IdToken) return data.AuthenticationResult.IdToken
   if (data.ChallengeName === 'NEW_PASSWORD_REQUIRED')
     throw new CognitoError('NewPasswordRequired', 'Your account was made by an administrator and needs a new password first. Ask them to reset it.')
-  throw new CognitoError(data.ChallengeName ?? 'Unknown', 'This account needs an extra sign-in step the portal does not support yet.')
+  throw new CognitoError(data.ChallengeName ?? 'Unknown', 'This account needs an extra sign-in step CyberSuite does not support yet.')
 }
 
 /** Create the account; Cognito emails a 6-digit code unless the pool confirms users automatically. */

@@ -108,7 +108,7 @@ def fetch_window(ctx: FeedContext, start: datetime, end: datetime, *, tag: str) 
 
 
 def fetch_cves(ctx: FeedContext, cve_ids: list[str]) -> int:
-    """Fetch specific CVEs (e.g. KEV entries Defender shows on our devices) that aren't in `cves` yet."""
+    """Fetch specific CVEs (e.g. advisory CVEs Defender shows on our devices) that aren't in `cves` yet."""
     headers = {"apiKey": ctx.settings.nvd_api_key} if ctx.settings.nvd_api_key else {}
     pause = 0.7 if ctx.settings.nvd_api_key else 6.5
     count = 0

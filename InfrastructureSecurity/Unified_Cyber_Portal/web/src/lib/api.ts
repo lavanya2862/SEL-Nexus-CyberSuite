@@ -41,7 +41,6 @@ export interface Fix {
   fix_by: string | null
   cves: number
   p1: number
-  kev_cves: number
   devices: number
   opcos: string
   fix_action: string
@@ -73,12 +72,11 @@ export interface Summary {
   health: Health[]
   devices: Device[]
   uc1: {
-    posture: { rating?: string; urgent?: number; kev?: number; affecting?: number }
+    posture: { rating?: string; urgent?: number; affecting?: number }
     totals: {
       new_threats: number | null
       pct_assessed: number | null
       affecting: number | null
-      kev_on_devices: number | null
       urgent: number | null
       hunts_per_run: number | null
       hunts_ok: number
@@ -102,8 +100,6 @@ export interface Summary {
       exploitable?: number
       sla_breaches?: number
       cves?: number
-      kev?: number
-      ransomware?: number
       devices: number
       remediated: number
       fixed_since?: string | null
@@ -111,9 +107,9 @@ export interface Summary {
     }
     trend: { date: string; total: number; p1: number; exploitable: number }[]
     trend_opco: { date: string; opco: string; total: number }[]
-    opco_totals: { opco: string; findings: number; p1: number; critical: number; kev: number; ransomware: number; devices: number
+    opco_totals: { opco: string; findings: number; p1: number; critical: number; devices: number
                    fixed?: number; fixed_since?: string | null }[]
-    apps: { software_name: string; app: string; opco: string; findings: number; p1: number; kev: number }[]
+    apps: { software_name: string; app: string; opco: string; findings: number; p1: number }[]
     quality: { check_name: string; status: string; message: string }[]
     priority: { priority: string; count: number }[]
     opco: { opco: string; severity: string; count: number }[]
@@ -128,6 +124,6 @@ export interface Summary {
 
 export async function fetchSummary(): Promise<Summary> {
   const res = await fetch('/api/summary')
-  if (!res.ok) throw new Error(`Portal API answered ${res.status}`)
+  if (!res.ok) throw new Error(`CyberSuite could not complete the request (error ${res.status})`)
   return res.json()
 }

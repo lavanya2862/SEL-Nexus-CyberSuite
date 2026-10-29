@@ -72,10 +72,10 @@ def gather(settings: Settings) -> dict:
 
     vulns = q(f"""
         SELECT v.device_name, v.opco, v.software_vendor, v.software_name, v.software_version, v.cve_id, v.severity,
-               v.cvss_score, v.exploitability, v.priority, v.in_cisa_kev, CAST(v.first_seen AS DATE) AS first_seen,
+               v.cvss_score, v.exploitability, v.priority, CAST(v.first_seen AS DATE) AS first_seen,
                v.age_days, v.age_bucket, v.sla_days, CAST(v.first_seen AS DATE) + CAST(v.sla_days AS INTEGER) AS fix_by,
-               v.sla_breached, v.recommended_update, v.security_update_available, c.kev_name
-        FROM fact_vulnerability v LEFT JOIN dim_cve c USING (cve_id)
+               v.sla_breached, v.recommended_update, v.security_update_available
+        FROM fact_vulnerability v
         ORDER BY {SEV_RANK.replace('severity', 'v.severity')}, v.cvss_score DESC NULLS LAST, v.software_name, v.device_name, v.cve_id""")
     for v in vulns:
         v["guide"] = guides.get(f"{v['software_vendor']}:{v['software_name']}")
@@ -109,15 +109,10 @@ def gather(settings: Settings) -> dict:
                   FROM fact_daily_summary GROUP BY 1 ORDER BY 1""")
     top_cves = q(f"""
         SELECT cve_id, any_value(severity) AS severity, max(cvss_score) AS cvss, min(priority) AS priority,
-               bool_or(in_cisa_kev) AS kev, any_value(exploitability) AS exploitability, count(DISTINCT device_id) AS devices,
+               any_value(exploitability) AS exploitability, count(DISTINCT device_id) AS devices,
                string_agg(DISTINCT software_name, ', ') AS apps, string_agg(DISTINCT opco, ', ') AS opcos, count(*) AS findings
         FROM fact_vulnerability GROUP BY cve_id
-        ORDER BY min(priority), bool_or(in_cisa_kev) DESC, count(DISTINCT device_id) DESC, max(cvss_score) DESC NULLS LAST LIMIT 100""")
-    kev = q("""SELECT v.cve_id, any_value(c.kev_name) AS name, any_value(v.severity) AS severity, max(v.cvss_score) AS cvss,
-                      string_agg(DISTINCT v.software_name || ' ' || v.software_version, ', ') AS apps,
-                      string_agg(DISTINCT v.device_name, ', ') AS devices, count(*) AS findings
-               FROM fact_vulnerability v LEFT JOIN dim_cve c USING (cve_id) WHERE v.in_cisa_kev
-               GROUP BY v.cve_id ORDER BY max(v.cvss_score) DESC NULLS LAST""")
+        ORDER BY min(priority), count(DISTINCT device_id) DESC, max(cvss_score) DESC NULLS LAST LIMIT 100""")
     apps = q(f"""SELECT software_vendor, software_name, software_version,
                         {", ".join(f"count(*) FILTER (WHERE severity = '{s}') AS {s.lower()}" for s in SEVS)},
                         count(*) AS findings, count(DISTINCT device_id) AS devices, any_value(recommended_update) AS update
@@ -130,7 +125,7 @@ def gather(settings: Settings) -> dict:
     return {
         "snapshot": snapshot, "manifest": manifest, "counts": counts, "quality": quality, "fixes": fixes,
         "vulns": vulns, "devices": devices, "changes": changes, "sev": sev, "prio": prio, "by_opco": by_opco,
-        "ages": ages, "sla": sla, "trend": trend, "top_cves": top_cves, "kev": kev, "apps": apps,
+        "ages": ages, "sla": sla, "trend": trend, "top_cves": top_cves, "apps": apps,
         "oldest": oldest[:25], "history": history,
         "totals": {
             "defender_rows": total_rows, "unique": len(vulns), "repeats": max(0, total_rows - len(vulns)),
@@ -139,7 +134,7 @@ def gather(settings: Settings) -> dict:
             "fixed": len(changes["Fixed"]) if changes["Fixed"] or "fixed" not in counts else counts["fixed"],
             "updated": len(changes["Updated"]),
             "critical": sev.get("Critical", 0), "high": sev.get("High", 0), "p1": prio.get("P1", 0),
-            "overdue": sum(1 for v in vulns if v["sla_breached"]), "kev_cves": len(kev),
+            "overdue": sum(1 for v in vulns if v["sla_breached"]),
             "app_versions": len(apps), "quality": quality.get("overall") or (history[0]["quality"] if history else "n/a"),
         },
     }

@@ -47,7 +47,7 @@ def affected(store: Store) -> list[dict]:
                             WHERE match_type = 'cve' ORDER BY device_name, detail"""):
         exposure.setdefault(e["threat_id"], []).append(e)
     cves: dict[str, list[dict]] = {}
-    for c in store.query("""SELECT l.threat_id, c.cve_id, c.cvss, c.kev_added, c.kev_ransomware FROM threat_links l
+    for c in store.query("""SELECT l.threat_id, c.cve_id, c.cvss FROM threat_links l
                             JOIN cves c ON c.cve_id = l.value WHERE l.link_type = 'cve'"""):
         cves.setdefault(c["threat_id"], []).append(c)
     for t in threats:
@@ -120,7 +120,7 @@ def run(store: Store, settings: Settings, ai: GeminiClient | None) -> dict:
                 res = advise_one(t, ai)
             except AIUnavailable as exc:
                 ai_note = str(exc)
-                log.warning("AI fix steps unavailable: %s", exc)
+                log.warning("AI remediation steps unavailable: %s", exc)
         if res is None:
             old = have.get(t["threat_id"])
             if old and old["basis"] == t["basis"]:
@@ -136,7 +136,7 @@ def run(store: Store, settings: Settings, ai: GeminiClient | None) -> dict:
     out = {"threats": total, "by_ai": by_ai, "new_ai": done["ai"], "new_standard": done["standard"]}
     if ai_note:
         out["ai_note"] = ai_note[:200]
-    log.info("Fix steps: %s", out)
+    log.info("Remediation steps: %s", out)
     return out
 
 

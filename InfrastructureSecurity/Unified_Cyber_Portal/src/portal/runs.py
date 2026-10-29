@@ -158,7 +158,7 @@ def download_words(info: dict, vulns: int | None = None) -> str:
         return text
     new, fixed = counts
     text += f" · {new:,} new in this run" if new else " · none new in this run"
-    return text + (f" · {fixed:,} fixed" if fixed else "")
+    return text + (f" · {fixed:,} remediated" if fixed else "")
 
 
 def advice_summary(info: dict, stopped: str = "") -> str:
@@ -178,7 +178,7 @@ def advice_summary(info: dict, stopped: str = "") -> str:
 
 
 def fix_words(info: dict) -> str:
-    """The Fix stage in a few words: "6 new fixes to approve · 102 waiting from earlier runs"."""
+    """The Remediation stage in a few words: "6 new remediations to approve · 102 waiting from earlier runs"."""
     new, waiting = int(info.get("new") or 0), int(info.get("waiting") or 0)
     text = f"{new} new remediation{'s' if new > 1 else ''} to approve" if new else "No new remediations this run"
     return text + (f" · {waiting:,} waiting from earlier runs" if waiting else "")
@@ -248,7 +248,7 @@ def friendly(name: str, value) -> str | None:
             new = sum(int(n) for v in d.values() for n in re.findall(r"\d+", str(v)))
             return f"{_n(new)} new items · {feed_counts(d)}"
         if name == "inventory":
-            return f"{_n(d['vulnerabilities'])} vulnerabilities on {d['devices']} computers"
+            return f"{_n(d['vulnerabilities'])} vulnerabilities on {d['devices']} devices"
         if name == "derive":
             return f"{_n(d.get('relevant_new_cves', 0))} new CVEs that matter to us"
         if name == "nvd_details":
@@ -260,7 +260,7 @@ def friendly(name: str, value) -> str | None:
         if name == "analyse":
             return f"{_n(d['candidates'])} threats assessed"
         if name == "exposure":
-            return f"{_n(d['threats_exposed'])} threats affect our {d.get('devices', '?')} computers"
+            return f"{_n(d['threats_exposed'])} threats apply to our {d.get('devices', '?')} devices"
         if name in ("score", "rescore"):
             return f"{d.get('Critical', 0)} critical · {d.get('High', 0)} high · {d.get('Medium', 0)} medium"
         if name == "hunt":
@@ -271,7 +271,7 @@ def friendly(name: str, value) -> str | None:
             return _alerts(d["new_alerts"]).capitalize()
         if name == "fix_advice":
             new = _new_steps(d)
-            return f"Fix steps written for {_plural(new, 'threat')}" if new else "No new remediation steps needed"
+            return f"Remediation steps written for {_plural(new, 'threat')}" if new else "No new remediation steps needed"
         if name == "resolve":
             new = _new_steps(d)
             return f"Resolution steps written for {_plural(new, 'detection')}" if new else "No new remediation steps needed"
@@ -421,20 +421,21 @@ class RunState:
     def _feed_uc3(self, line: str) -> None:
         d, c = self._index("download"), self._index("check")
         sc, a, fx = self._index("score"), self._index("advice"), self._index("fix")
-        line = line.replace("Advice agent", "Remediation agent")       # logs from before the rename
-        if "Fix stage started" in line:
-            self._finish(a, detail=self.steps[a].detail or "Fix advice updated")
+        line = (line.replace("Advice agent", "Remediation agent").replace("Fix stage", "Remediation stage")   # older logs
+                .replace("AI fix card:", "AI remediation card:").replace("AI fix guide", "AI remediation guide"))
+        if "Remediation stage started" in line:
+            self._finish(a, detail=self.steps[a].detail or "Remediation guidance updated")
             self._start(fx)
-            self.steps[fx].detail = "Fetching the latest software list from Defender and checking which fixes are new"
+            self.steps[fx].detail = "Fetching the latest software list from Defender and checking which remediations are new"
             return
-        if "Fix stage finished:" in line:
-            info = _literal(line.split("Fix stage finished:", 1)[1].strip())
+        if "Remediation stage finished:" in line:
+            info = _literal(line.split("Remediation stage finished:", 1)[1].strip())
             if isinstance(info, dict):
                 self.results["fix"] = info
                 self._finish(fx, detail=fix_words(info))
             return
-        if "Fix stage skipped:" in line:
-            self._finish(fx, "skipped", _short(line.split("Fix stage skipped:", 1)[1].strip()))
+        if "Remediation stage skipped:" in line:
+            self._finish(fx, "skipped", _short(line.split("Remediation stage skipped:", 1)[1].strip()))
             return
         if "Extract finished:" in line:
             info = _literal(line.split("Extract finished:", 1)[1].strip())
@@ -464,26 +465,26 @@ class RunState:
         elif "Remediation agent started" in line:
             self._finish(sc, detail=self.steps[sc].detail or REPORT_READY)
             self._start(a)
-        elif "AI fix card:" in line:
+        elif "AI remediation card:" in line:
             if self.steps[a].status == "pending":           # logs written before the stage markers existed
                 self._finish(sc, detail=self.steps[sc].detail or REPORT_READY)
                 self._start(a)
-            item = line.split("AI fix card:", 1)[1].split("(")[0].strip()
-            self.steps[a].detail = f"Writing advice: {item}"
+            item = line.split("AI remediation card:", 1)[1].split("(")[0].strip()
+            self.steps[a].detail = f"Writing remediation guidance: {item}"
         elif "Remediation agent finished:" in line:
             info = _literal(line.split("Remediation agent finished:", 1)[1].strip())
             if isinstance(info, dict):
                 self.results["advice"] = info
                 self._finish(a, detail=advice_summary(info, self.results.get("ai_stopped", "")))
             else:
-                self._finish(a, "error", "AI advice not updated this run (the rest of the run is fine)")
+                self._finish(a, "error", "AI remediation guidance not updated this run (the rest of the run completed)")
         elif "Open findings by severity:" in line:
             sev = _literal(line.split("Open findings by severity:", 1)[1].strip())
             if isinstance(sev, dict):
                 self.results["severity"] = sev
         elif "uc3.ai:" in line and ("AI stopped:" in line or "AI explanations off:" in line):
             self.results["ai_stopped"] = line.split("AI stopped:" if "AI stopped:" in line else "AI explanations off:", 1)[1].strip()
-        elif "AI fix guide" in line and ":" in line:
+        elif "AI remediation guide" in line and ":" in line:
             self.results["ai_fixes"] = line.split(":", 1)[1].strip()
         elif "Quality:" in line:
             self.results["quality"] = line.rsplit("Quality:", 1)[1].strip()
@@ -491,7 +492,7 @@ class RunState:
         elif "Daily run finished" in line:
             self._finish(sc, detail=self.steps[sc].detail or REPORT_READY)
             self._finish(a, detail=self.steps[a].detail if self.steps[a].detail and not self.steps[a].detail.startswith("Writing")
-                         else "Fix advice updated")
+                         else "Remediation guidance updated")
         elif "Run FAILED" in line:
             self.message = _short(line.split("Run FAILED", 1)[1].strip(" :"))
             for i, s in enumerate(self.steps):
@@ -591,7 +592,7 @@ class RunState:
             for i, s in enumerate(self.steps):
                 if s.status == "running":
                     self._finish(i, "error", "Stopped here")
-            self.message = ("The run stopped without finishing (the computer or the portal may have been restarted). "
+            self.message = ("The run stopped without finishing (the server or CyberSuite may have been restarted). "
                             "The log shows how far it got. Press Run to try again.")
             return
         if exit_code == 0:
@@ -626,14 +627,14 @@ class RunState:
                 stale = ex.get("defender_refreshed") is False
                 add("New in this run", f"{counts[0]:,}",
                     "Defender has no newer data yet" if stale else "not there in the last run")
-                add("Fixed since the last run", f"{counts[1]:,}",
+                add("Remediated since the last run", f"{counts[1]:,}",
                     "Defender has no newer data yet" if stale else "no longer found by Defender")
             adv = r.get("advice") if isinstance(r.get("advice"), dict) else {}
             if adv:
                 settings = adv.get("settings", 0)
-                add("Fix cards written", f"{adv.get('apps', 0) + settings:,}",
+                add("Remediation cards written", f"{adv.get('apps', 0) + settings:,}",
                     f"applying them resolves {adv.get('vulnerabilities', 0):,} vulnerabilities"
-                    + (f" and {settings:,} weak setting{'s' if settings != 1 else ''}" if settings else ""))
+                    + (f" and {settings:,} misconfiguration{'s' if settings != 1 else ''}" if settings else ""))
             fx = self.fix_result()
             if fx:
                 new = int(fx.get("new") or 0)
@@ -707,7 +708,7 @@ class RunState:
         fx = self.fix_result()
         if fx:
             new = int(fx.get("new") or 0)
-            add("New fixes to approve", f"{new:,}", "proposed in this run: decide on each below" if new
+            add("New remediations to approve", f"{new:,}", "proposed in this run: decide on each below" if new
                 else "nothing new to approve in this run")
 
     def report_file(self) -> str | None:
@@ -801,11 +802,11 @@ def fix_waiting(run: dict, fix_dir: Path, read: Callable[[Path], dict | None] = 
     step = {**step}
     if open_ids:
         step.update(status="waiting", finished_at=None,
-                    detail=f"Waiting for you: {len(open_ids)} of {len(ids)} new fix{'es' if len(ids) != 1 else ''} to decide")
+                    detail=f"Awaiting your decision: {len(open_ids)} of {len(ids)} new remediation{'s' if len(ids) != 1 else ''}")
     elif ids:
-        step["detail"] = f"All {len(ids)} handled: {to_fix} to fix, {saved} saved for later"
+        step["detail"] = f"All {len(ids)} decided: {to_fix} approved, {saved} deferred"
     hint = (f"{len(open_ids)} still waiting for you below" if open_ids
-            else f"of {len(ids)} new fix{'es' if len(ids) != 1 else ''} in this run" if ids else "no new remediations in this run")
+            else f"of {len(ids)} new remediation{'s' if len(ids) != 1 else ''} in this run" if ids else "no new remediations in this run")
     facts = [{**f, "value": str(to_fix), "hint": hint} if f.get("label") == APPROVED_FACT else f
              for f in run.get("facts") or []]
     return {**run, "fix": {**fix, "open": len(open_ids), "to_fix": to_fix, "saved_now": saved}, "facts": facts,
@@ -852,7 +853,7 @@ def run_findings(new_ids: dict | None, dashboard: dict | None) -> list[dict]:
         if a:
             msg = a.get("message") or ""
             out.append({"kind": "alert", "id": aid, "title": a.get("title") or "", "rating": a.get("rating"),
-                        "why": f"Rated {a.get('rating')} and it affects our computers, so the security team is told",
+                        "why": f"Rated {a.get('rating')} and it applies to our devices, so the security team is told",
                         "where": _line(msg, "Affected:"), "action": _line(msg, "First action:"),
                         "test": bool(a.get("is_test")), "to": f"/uc1/threat/{quote(str(a.get('threat_id')), safe='')}"})
     return out
@@ -994,9 +995,9 @@ class RunManager:
             # the run is not over until a person decided on its new fixes: a new run would bury them
             waiting = self.fixes_waiting(uc, current)
             if waiting:
-                return False, current, (f"The last run is paused at the Fix step: {waiting} new "
-                                        + ("fix still needs" if waiting == 1 else "fixes still need")
-                                        + " your decision. Press Fix or Save for later on each one below, then run again.")
+                return False, current, (f"The last run is paused at the Remediation stage: {waiting} new "
+                                        + ("remediation still needs" if waiting == 1 else "remediations still need")
+                                        + " your decision. Approve or defer each one below, then run again.")
             # uc1 and attack both run in UC1's folder and open its one DuckDB file, which only one process may hold
             for other, other_root in self.uc_dirs.items():
                 if other != uc and other_root == root and self.running(other):
