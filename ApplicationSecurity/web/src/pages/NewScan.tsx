@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, Check, FlaskConical, Loader2 } from 'lucide-react'
 import { AgentTile } from '@/components/Agents'
-import { Btn, Card, Field, Notice, PageHeader, Panel, inputCls } from '@/components/kit'
+import { Btn, Card, Choice, Field, Notice, PageHeader, Panel, inputCls } from '@/components/kit'
 import { post, useCaps } from '@/lib/api'
 import { SEVERITIES, sevLabel } from '@/lib/labels'
 import { useToast } from '@/lib/toast'
@@ -43,7 +43,7 @@ export function NewScan() {
     if (list.length) options.scanners = list
     try {
       const r = await post<{ job: Job; deduplicated: boolean }>('/api/v1/jobs', { repo_url: repo.trim(), options })
-      if (r.deduplicated) toast('An identical scan is already in progress: opening it.')
+      if (r.deduplicated) toast('An identical scan is already in progress. Opening it now.')
       navigate(`/runs/${r.job.id}`)
     } catch (err) {
       toast((err as Error).message, true)
@@ -54,75 +54,74 @@ export function NewScan() {
   const sc = c?.scanners ?? {}
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="New scan" description="Paste a GitHub repository link: that is the only thing you need. The four agents do the rest." />
+      <PageHeader title="New scan" description="Initiate an application security assessment of a GitHub repository. The four agents detect, remediate, validate and report on vulnerabilities end to end." />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <Panel className="p-6">
           <form onSubmit={submit} autoComplete="off" className="flex flex-col gap-5">
-            <Field label="GitHub repository" hint="For example https://github.com/owner/repository. Private repositories need a GitHub token (Settings).">
+            <Field label="GitHub repository URL" hint="For example https://github.com/owner/repository. Private repositories require a GitHub token in Settings.">
               <input autoFocus required value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="https://github.com/owner/repository" className={cn(inputCls, 'h-12 text-[15px]')} />
             </Field>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Branch, tag or commit"><input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="default branch" className={inputCls} /></Field>
-              <Field label="Fix issues from this severity up">
-                <select value={minSev} onChange={(e) => setMinSev(e.target.value)} className={inputCls}>
-                  {SEVERITIES.slice(0, 5).map((s) => <option key={s} value={s}>{sevLabel(s)}</option>)}
-                </select>
+              <Field label="Branch, tag or commit"><input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Default branch" className={inputCls} /></Field>
+              <Field label="Minimum severity to remediate">
+                <Choice field label="Minimum severity to remediate" value={minSev} onChange={setMinSev}
+                  options={SEVERITIES.slice(0, 5).map((s) => ({ value: s, label: `${sevLabel(s)} and above` }))} />
               </Field>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Switch on={autoFix} set={setAutoFix} title="Apply fixes" text="The Remediation Agent fixes findings on a separate branch." />
-              <Switch on={llm} set={setUseLlm} disabled={!c?.llm.enabled} title="Code fixes by the Remediation Agent"
-                text={c?.llm.enabled ? `Uses ${c.llm.model}.` : <>Needs an AI model: <Link to="/settings" className="text-sky underline">Settings</Link>.</>} />
-              <Switch on={pr} set={setCreatePr} disabled={!c?.github_token_configured} title="Open the pull request by itself"
-                text={c?.github_token_configured ? 'Off = you approve first in Approvals. Scans that need review become draft PRs.' : <>Needs a GitHub token: <Link to="/settings" className="text-sky underline">Settings</Link>.</>} />
-              <Switch on={github} set={setGhTests} disabled={!c?.github_token_configured} title="Run tests on GitHub; the Remediation Agent fixes failures"
-                text={c?.github_token_configured ? 'After the run: every test runs on GitHub Actions; failing tests are fixed by the Remediation Agent and run again (up to 3 times).' : <>Needs a GitHub token: <Link to="/settings" className="text-sky underline">Settings</Link>.</>} />
+              <Switch on={autoFix} set={setAutoFix} title="Automated remediation" text="The Remediation Agent remediates findings on an isolated branch." />
+              <Switch on={llm} set={setUseLlm} disabled={!c?.llm.enabled} title="AI-assisted remediation"
+                text={c?.llm.enabled ? `Uses ${c.llm.model}.` : <>Requires an AI model. Configure one in <Link to="/settings" className="text-sky underline">Settings</Link>.</>} />
+              <Switch on={pr} set={setCreatePr} disabled={!c?.github_token_configured} title="Raise the pull request automatically"
+                text={c?.github_token_configured ? 'When off, remediations wait for approval in Approvals. Scans that require review are raised as draft pull requests.' : <>Requires a GitHub token. Configure one in <Link to="/settings" className="text-sky underline">Settings</Link>.</>} />
+              <Switch on={github} set={setGhTests} disabled={!c?.github_token_configured} title="CI test validation on GitHub Actions"
+                text={c?.github_token_configured ? 'After the scan, the full test suite runs on GitHub Actions. The Remediation Agent resolves failing tests and re-runs them, up to 3 times.' : <>Requires a GitHub token. Configure one in <Link to="/settings" className="text-sky underline">Settings</Link>.</>} />
             </div>
             <details className="rounded-xl border border-hairline p-4">
-              <summary className="cursor-pointer text-sm font-medium text-ink-2">More options</summary>
+              <summary className="cursor-pointer text-sm font-medium text-ink-2">Advanced options</summary>
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Max code fixes per scan"><input type="number" min={1} max={200} value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="server default" className={inputCls} /></Field>
-                <Field label="When a scan needs review">
-                  <select value={onFlag} onChange={(e) => setOnFlag(e.target.value)} className={inputCls}>
-                    <option value="draft">Open a draft PR (needs-investigation)</option>
-                    <option value="skip">Hold until approved by hand</option>
-                  </select>
+                <Field label="Maximum remediations per scan"><input type="number" min={1} max={200} value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="Organisation default" className={inputCls} /></Field>
+                <Field label="When validation requires review">
+                  <Choice field label="When validation requires review" value={onFlag} onChange={setOnFlag} options={[
+                    { value: 'draft', label: 'Raise a draft pull request for investigation' },
+                    { value: 'skip', label: 'Hold until manually approved' },
+                  ]} />
                 </Field>
-                <Field label="Scanners (comma-separated)"><input value={scanners} onChange={(e) => setScanners(e.target.value)} placeholder="all available" className={inputCls} /></Field>
+                <Field label="Scanners (comma-separated)"><input value={scanners} onChange={(e) => setScanners(e.target.value)} placeholder="All available scanners" className={inputCls} /></Field>
               </div>
             </details>
             <div className="flex items-center gap-3">
               <Btn type="submit" disabled={busy || !repo.trim()} className="h-11 px-5 text-[15px]">
-                {busy ? <><Loader2 className="size-4 animate-spin" /> Starting…</> : <>Start scan <ArrowRight className="size-4" /></>}
+                {busy ? <><Loader2 className="size-4 animate-spin" /> Initiating…</> : <>Start scan <ArrowRight className="size-4" /></>}
               </Btn>
-              <span className="text-xs text-ink-3">You’ll go straight to the live scan.</span>
+              <span className="text-xs text-ink-3">You will be taken to the live scan view.</span>
             </div>
           </form>
         </Panel>
 
         <div className="flex flex-col gap-5">
-          <Card title="What will happen" description="With the current setup on this server:">
+          <Card title="Assessment workflow" description="Based on the current configuration of this environment:">
             <ol className="flex flex-col gap-3">
-              <Step id="analysis" title="Analysis Agent" text={`${sc.codeql?.available ? 'CodeQL' : 'Built-in code rules'} + ${sc.trivy?.available ? 'Trivy' : 'OSV'} + supporting scanners, then remove duplicates and rank by risk.`} />
-              <Step id="remediation" title="Remediation Agent" text={c?.llm.enabled ? 'Dependency upgrades, safe rewrites and code fixes: one commit per fix.' : 'Dependency upgrades and safe rewrites (code fixes need an AI model).'} />
-              <Step id="validation" title="Validation Agent" text="Syntax checks, security-regression guard and a fresh security scan." />
-              <Step id="reporting" title="Reporting Agent" text="Report, SARIF file, one diff per fix and the validation verdict." />
+              <Step id="analysis" title="Analysis Agent" text={`${sc.codeql?.available ? 'CodeQL' : 'Built-in SAST rules'}, ${sc.trivy?.available ? 'Trivy' : 'OSV'} and supporting scanners; findings are consolidated and prioritised by risk.`} />
+              <Step id="remediation" title="Remediation Agent" text={c?.llm.enabled ? 'Dependency upgrades, rule-based and AI-assisted remediations, one commit per remediation.' : 'Dependency upgrades and rule-based remediations (AI-assisted remediation requires an AI model).'} />
+              <Step id="validation" title="Validation Agent" text="Syntax checks, a security-regression guard and a confirmation scan." />
+              <Step id="reporting" title="Reporting Agent" text="Assessment report, SARIF file, a diff per remediation and the validation verdict." />
               {github && (
                 <li className="flex items-start gap-3">
                   <span className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-well text-sky"><FlaskConical className="size-4" /></span>
-                  <div className="text-sm"><div className="font-medium">GitHub tests</div><div className="text-ink-3">The fix branch is pushed; GitHub Actions runs every test; the Remediation Agent fixes failures and runs them again (up to 3 times).</div></div>
+                  <div className="text-sm"><div className="font-medium">CI test validation</div><div className="text-ink-3">The remediation branch is pushed and GitHub Actions runs the full test suite. The Remediation Agent resolves failures and re-runs them, up to 3 times.</div></div>
                 </li>
               )}
               <li className="flex items-start gap-3">
                 <span className="tile-signal grid size-8 shrink-0 place-items-center rounded-[10px]"><Check className="size-4" /></span>
-                <div className="text-sm"><div className="font-medium">You approve</div><div className="text-ink-3">{c?.github_token_configured ? 'A pull request opens for review (a draft when a check fails).' : 'Download the patch, or add a GitHub token to open pull requests.'}</div></div>
+                <div className="text-sm"><div className="font-medium">Human approval</div><div className="text-ink-3">{c?.github_token_configured ? 'A pull request is raised for review (as a draft when a validation check fails).' : 'Download the patch, or configure a GitHub token to raise pull requests.'}</div></div>
               </li>
             </ol>
           </Card>
-          {c && !sc.codeql?.available && <Notice tone="warn" title="CodeQL is not installed on this server">Code analysis falls back to Semgrep, Bandit and the built-in rules. Run <code className="font-mono">scripts/install-codeql.ps1</code> to install it.</Notice>}
-          {c && !c.llm.enabled && <Notice tone="warn" title="No AI model: the Remediation Agent’s code fixes are off">Dependency upgrades and safe rewrites still run. <Link to="/settings" className="text-sky underline">Add a model in Settings</Link>.</Notice>}
-          {c && !c.github_token_configured && <Notice tone="warn" title="No GitHub token: fixes cannot be pushed">You can still download the patch. <Link to="/settings" className="text-sky underline">Add a token in Settings</Link>.</Notice>}
+          {c && !sc.codeql?.available && <Notice tone="warn" title="CodeQL is not installed in this environment">Code analysis falls back to Semgrep, Bandit and the built-in SAST rules. Run <code className="font-mono">scripts/install-codeql.ps1</code> to install it.</Notice>}
+          {c && !c.llm.enabled && <Notice tone="warn" title="AI-assisted remediation is unavailable">No AI model is configured. Dependency upgrades and rule-based remediations still apply. <Link to="/settings" className="text-sky underline">Configure a model in Settings</Link>.</Notice>}
+          {c && !c.github_token_configured && <Notice tone="warn" title="Remediations cannot be pushed to GitHub">No GitHub token is configured. The patch remains available for download. <Link to="/settings" className="text-sky underline">Configure a token in Settings</Link>.</Notice>}
         </div>
       </div>
     </div>

@@ -53,7 +53,7 @@ export function AgentCard({ id, view, to }: { id: AgentId; view?: AgentView | nu
         </div>
         {view && <AgentStatusTag status={view.status} />}
       </div>
-      {outs ? <KVList items={outs} /> : <p className="text-sm text-ink-3">{view?.status === 'running' ? 'Working on it now…' : view ? 'Waiting for the previous agent.' : 'No scans yet.'}</p>}
+      {outs ? <KVList items={outs} /> : <p className="text-sm text-ink-3">{view?.status === 'running' ? 'In progress…' : view ? 'Awaiting the previous agent.' : 'No scans have been run yet.'}</p>}
       <p className="mt-auto line-clamp-2 border-t border-hairline pt-3 text-xs leading-relaxed text-ink-2">{lead}</p>
       <span className="flex items-center gap-1 text-xs font-medium text-sky">Open {a.name} <ArrowRight className="size-3 transition-transform group-hover:translate-x-0.5" /></span>
     </Link>
@@ -79,15 +79,15 @@ export function AgentPanel({ view, job }: { view: AgentView; job?: Job }) {
 
       <div className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-[1fr_auto_1fr]">
         <div className="rounded-xl border border-hairline bg-well/40 p-4">
-          <h4 className="mb-3 text-xs font-semibold uppercase tracking-[0.1em] text-ink-3">1 · What it received</h4>
+          <h4 className="mb-3 text-xs font-semibold uppercase tracking-[0.1em] text-ink-3">1 · Inputs</h4>
           <KVList items={view.inputs} />
         </div>
         <div className="hidden place-items-center text-ink-3 md:grid"><ArrowRight className="size-5" /></div>
         <div className="tint-box rounded-xl p-4" style={{ '--tint': a.tone } as CSSProperties}>
-          <h4 className="mb-3 text-xs font-semibold uppercase tracking-[0.1em] text-ink-3">2 · What it produced</h4>
+          <h4 className="mb-3 text-xs font-semibold uppercase tracking-[0.1em] text-ink-3">2 · Outputs</h4>
           {view.outputs.length ? <KVList items={view.outputs} /> : (
             <>
-              <p className="text-sm text-ink-3">{view.status === 'running' ? 'Working on it now.' : 'Nothing yet.'} When it finishes it delivers:</p>
+              <p className="text-sm text-ink-3">{view.status === 'running' ? 'In progress.' : 'No outputs yet.'} On completion it delivers:</p>
               <ul className="mt-2 list-disc pl-5 text-sm text-ink-2">{view.contract_out.map((x) => <li key={x}>{x}</li>)}</ul>
             </>
           )}
@@ -95,7 +95,7 @@ export function AgentPanel({ view, job }: { view: AgentView; job?: Job }) {
       </div>
 
       <div>
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.1em] text-ink-3">3 · What it concluded</h4>
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.1em] text-ink-3">3 · Conclusions</h4>
         {view.learnings.length ? (
           <ul className="flex flex-col gap-2">
             {view.learnings.map((l, i) => {
@@ -108,7 +108,7 @@ export function AgentPanel({ view, job }: { view: AgentView; job?: Job }) {
               )
             })}
           </ul>
-        ) : <p className="text-sm text-ink-3">Its conclusions appear here when it finishes.</p>}
+        ) : <p className="text-sm text-ink-3">Conclusions appear here on completion.</p>}
       </div>
 
       {view.steps.length > 0 && (
@@ -127,7 +127,7 @@ export function StoryCard({ story, job, linkToRun }: { story: Story; job: Job; l
   const tint = d?.kind === 'pr' ? 'var(--teal)' : d?.kind === 'investigate' || d?.kind === 'retry' ? 'var(--amber)' : 'var(--blue)'
   return (
     <div>
-      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">In plain English</div>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3">Summary</div>
       <p className="mt-1 text-lg font-semibold leading-snug tracking-tight">{story.headline}</p>
       {story.lines.filter(Boolean).length > 0 && (
         <ol className="mt-3 flex list-decimal flex-col gap-1.5 pl-5 text-sm text-ink-2">
@@ -137,11 +137,11 @@ export function StoryCard({ story, job, linkToRun }: { story: Story; job: Job; l
       {d && (
         <div className="tint-box mt-4 flex flex-wrap items-center gap-3 rounded-xl p-4" style={{ '--tint': tint } as CSSProperties}>
           <div className="min-w-0 flex-1 text-sm">
-            <div className="font-semibold text-ink">{d.kind === 'pr' ? 'Next step' : 'Your decision'}</div>
+            <div className="font-semibold text-ink">{d.kind === 'pr' ? 'Next step' : 'Decision required'}</div>
             <div className="text-ink-2">{d.text}</div>
           </div>
           {d.url ? <LinkBtn href={d.url} external kind="good">Open pull request <ExternalLink className="size-3.5" /></LinkBtn>
-            : linkToRun ? <LinkBtn to={`/runs/${job.id}`} kind="primary">Review &amp; decide <ArrowRight className="size-3.5" /></LinkBtn> : null}
+            : linkToRun ? <LinkBtn to={`/runs/${job.id}`} kind="primary">Review and decide <ArrowRight className="size-3.5" /></LinkBtn> : null}
         </div>
       )}
     </div>

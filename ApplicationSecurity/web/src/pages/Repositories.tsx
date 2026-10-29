@@ -29,10 +29,10 @@ export function Repositories() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Repositories" description="The security posture of each repository you scanned, and how its findings are trending. Scan one again to check new code." />
+      <PageHeader title="Repositories" description="The security posture of each scanned repository and the trend of its findings over time. Re-scan a repository to assess new code." />
       <Panel className="p-6">
         {repos.data.items.length ? (
-          <DTable head={[['Repository'], ['Last scan'], ['Open findings', 'right'], ['Fixed / confirmed', 'right'], ['Validation'], ['Pull request'], ['Findings trend'], ['Scans', 'right'], ['']]} minWidth={1100}>
+          <DTable head={[['Repository'], ['Last scan'], ['Open findings', 'right'], ['Remediated / verified', 'right'], ['Validation'], ['Pull request'], ['Findings trend'], ['Scans', 'right'], ['']]} minWidth={1100}>
             {repos.data.items.map((r) => {
               const c = r.latest_completed
               const s = c?.summary ?? {}
@@ -49,7 +49,7 @@ export function Repositories() {
                   <td className="tabular text-right">{r.runs}</td>
                   <td>
                     <div className="flex flex-nowrap gap-2">
-                      <Btn kind="quiet" disabled={busy === r.repo_url} onClick={() => rescan(r.repo_url)}><RefreshCw className="size-3.5" /> Scan again</Btn>
+                      <Btn kind="quiet" disabled={busy === r.repo_url} onClick={() => rescan(r.repo_url)}><RefreshCw className="size-3.5" /> Re-scan</Btn>
                       {c && <LinkBtn to={`/runs/${c.id}`}>Latest scan</LinkBtn>}
                     </div>
                   </td>
@@ -57,7 +57,7 @@ export function Repositories() {
               )
             })}
           </DTable>
-        ) : <Empty text="No repositories scanned yet."><LinkBtn to="/scan" kind="primary">Start a scan</LinkBtn></Empty>}
+        ) : <Empty text="No repositories have been scanned yet."><LinkBtn to="/scan" kind="primary">Start a scan</LinkBtn></Empty>}
       </Panel>
     </div>
   )

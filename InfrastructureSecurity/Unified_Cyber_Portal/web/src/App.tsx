@@ -1,6 +1,6 @@
 import { Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
-import { AuditLog } from '@/pages/AuditLog'
+import { ActivityLog } from '@/pages/ActivityLog'
 import { ComingSoon, Home } from '@/pages/Home'
 import { Reports } from '@/pages/Reports'
 import { Respond } from '@/pages/Respond'
@@ -44,7 +44,7 @@ export default function App() {
           <Route path="fixes/progress" element={<FixProgress />} />
           <Route path="fixes/:tab?" element={<FixCentre />} />
           <Route path="reports" element={<Reports />} />
-          <Route path="audit" element={<AuditLog />} />
+          <Route path="activity" element={<ActivityLog />} />
           <Route path="respond"element={<Respond />} />
           <Route path="respond/:id" element={<RespondCase />} />
           <Route path="runs/:uc?" element={<Runs />} />

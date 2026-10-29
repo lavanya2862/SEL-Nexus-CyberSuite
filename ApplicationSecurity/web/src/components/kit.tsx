@@ -1,8 +1,9 @@
 // Shared building blocks for every page (one look, no copies per page). The first half is the Infrastructure
 // Vulnerabilities portal's kit unchanged, so both modules of the CyberSuite look and behave the same.
-import { useEffect, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react'
+import { Children, isValidElement, useEffect, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, ArrowRight, CheckCircle2, Info, Loader2, XCircle } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, Info, Loader2, XCircle } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { AGENT_STATUS, FIX_STATUS, JOB_STATUS, VERDICT, sevLabel } from '@/lib/labels'
 import { chartTokens, statusColor, useTheme } from '@/lib/theme'
@@ -156,7 +157,7 @@ export const JobStatusTag = ({ job }: { job: Pick<Job, 'status'> }) => {
 export function VerdictTag({ v }: { v?: string | null }) {
   if (!v) return <span className="text-ink-3">–</span>
   const s = VERDICT[v] ?? { label: v, tone: 'idle' as const }
-  return <StatusTag tone={s.tone} label={s.label} title={v === 'flagged' ? 'A validation check failed: the pull request opens as a draft for investigation.' : undefined} />
+  return <StatusTag tone={s.tone} label={s.label} title={v === 'flagged' ? 'A validation check failed. The pull request is raised as a draft for investigation.' : undefined} />
 }
 
 export function FixStatusTag({ s }: { s: string }) {
@@ -269,13 +270,52 @@ export function Field({ label, hint, children }: { label: ReactNode; hint?: Reac
 
 export const inputCls = 'h-10 w-full rounded-[10px] border border-hairline-strong bg-field px-3 text-sm text-ink outline-none transition-[border-color,box-shadow] placeholder:text-ink-3 focus:border-blue/60 focus:ring-3 focus:ring-blue/15 disabled:opacity-60'
 
-/** Filter row: selects and a search box in one line, as on the portal's tables. */
-export function Select({ value, onChange, children, label }: { value: string; onChange: (v: string) => void; children: ReactNode; label: string }) {
+export interface ChoiceOption { value: string; label: ReactNode; hint?: ReactNode }
+
+/** The suite's own dropdown (themed, never the browser's). As a filter (the default) it turns blue while it filters,
+ *  that is on anything but the first option; as a form field it fills the width like an input. */
+export function Choice({ value, onChange, options, label, field, placeholder, className }: {
+  value: string; onChange: (v: string) => void; options: ChoiceOption[]; label: string; field?: boolean; placeholder?: string; className?: string
+}) {
+  const cur = options.find((o) => o.value === value)
+  const on = !field && value !== options[0]?.value
   return (
-    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className={cn(inputCls, 'h-9 w-auto max-w-[240px] truncate pr-8')}>
-      {children}
-    </select>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" aria-label={label}
+          className={cn('flex min-w-0 items-center gap-2 rounded-[10px] border bg-field px-3 text-left text-sm transition-[border-color,box-shadow] hover:border-blue/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-blue/15 data-[state=open]:border-blue/60 data-[state=open]:ring-3 data-[state=open]:ring-blue/15',
+            field ? 'h-10 w-full border-hairline-strong text-ink' : 'h-9 w-auto max-w-[260px]',
+            !field && (on ? 'border-blue/60 text-ink' : 'border-hairline-strong text-ink-2'), className)}>
+          <span className={cn('min-w-0 flex-1 truncate', !cur && 'text-ink-3')}>{cur?.label ?? placeholder ?? value}</span>
+          <ChevronDown className="size-4 shrink-0 text-ink-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start"
+        className="max-h-80 min-w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto rounded-xl border border-hairline bg-panel p-1.5 shadow-xl">
+        <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
+          {options.map((o) => (
+            <DropdownMenuRadioItem key={o.value} value={o.value}
+              className="gap-2 rounded-lg py-2 pl-2.5 text-ink-2 focus:bg-well focus:text-ink data-[state=checked]:font-medium data-[state=checked]:text-ink">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{o.label}</span>
+                {o.hint && <span className="block text-xs font-normal text-ink-3">{o.hint}</span>}
+              </span>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
+}
+
+/** Filter row: dropdowns and a search box in one line, as on the portal's tables. Takes <option> children for brevity
+ *  and shows them in the suite's own dropdown. */
+export function Select({ value, onChange, children, label }: { value: string; onChange: (v: string) => void; children: ReactNode; label: string }) {
+  const options = Children.toArray(children).filter(isValidElement).map((el) => {
+    const p = el.props as { value?: string; children?: ReactNode }
+    return { value: String(p.value ?? ''), label: p.children }
+  })
+  return <Choice label={label} value={value} onChange={onChange} options={options} />
 }
 
 export function Search({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
@@ -287,7 +327,7 @@ export function Loading({ text = 'Loading…' }: { text?: string }) {
 }
 
 export function ErrorBox({ error }: { error: unknown }) {
-  return <Notice tone="bad" title="Something went wrong">{String((error as Error)?.message ?? error)}</Notice>
+  return <Notice tone="bad" title="Unable to complete the request">{String((error as Error)?.message ?? error)}</Notice>
 }
 
 function useCountUp(to: number) {

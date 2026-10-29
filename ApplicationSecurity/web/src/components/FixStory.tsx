@@ -79,7 +79,7 @@ export function FixStory({ fix, findings, onOpenFinding, compact }: {
   const m = METHOD[fix.method]
   return (
     <div className="flex flex-col gap-2.5">
-      <Step icon={ScanSearch} tone="var(--rose)" label="The problem · found by the Analysis Agent">
+      <Step icon={ScanSearch} tone="var(--rose)" label="Vulnerability · identified by the Analysis Agent">
         <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
           {p.severity !== 'unknown' && <SevTag sev={p.severity} />}
           <span className="font-semibold leading-snug">{p.headline}</span>
@@ -97,22 +97,22 @@ export function FixStory({ fix, findings, onOpenFinding, compact }: {
           </div>
         )}
       </Step>
-      <Step icon={Wrench} tone="var(--blue)" label="The fix · made by the Remediation Agent">
+      <Step icon={Wrench} tone="var(--blue)" label="Remediation · applied by the Remediation Agent">
         <div className="font-semibold leading-snug">{title}</div>
         {extra && <div className="text-xs text-ink-3">{extra}</div>}
         {fix.explanation ? <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{compact ? plain(fix.explanation, 220) : fix.explanation}</p>
           : fix.detail && !compact ? <p className="mt-1.5 text-sm text-ink-3">{plain(fix.detail, 400)}</p> : null}
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
           <StatusTag tone="info" label={m?.label ?? fix.method} />
-          <StatusTag tone={fix.risk === 'high' ? 'bad' : fix.risk === 'medium' ? 'warn' : 'good'} label={`${fix.risk} risk change`} />
+          <StatusTag tone={fix.risk === 'high' ? 'bad' : fix.risk === 'medium' ? 'warn' : 'good'} label={`${fix.risk[0].toUpperCase()}${fix.risk.slice(1)}-risk change`} />
           {fix.status !== 'applied' && <StatusTag tone="bad" label={fix.status} />}
           <span className="break-all font-mono text-ink-3">{fix.files.join(', ')}</span>
         </div>
       </Step>
-      <Step icon={ShieldCheck} tone="var(--teal)" label="The check · by the Validation Agent">
+      <Step icon={ShieldCheck} tone="var(--teal)" label="Verification · by the Validation Agent">
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          {fix.verified === true ? <StatusTag tone="good" label="Rescan: vulnerability gone" />
-            : fix.verified === false ? <StatusTag tone="warn" label="Rescan: still reported" /> : <StatusTag tone="idle" label="Not rescanned" />}
+          {fix.verified === true ? <StatusTag tone="good" label="Confirmation scan: resolved" />
+            : fix.verified === false ? <StatusTag tone="warn" label="Confirmation scan: still reported" /> : <StatusTag tone="idle" label="Not verified by scan" />}
           <VerdictTag v={fix.validation_status} />
           <span className="text-ink-3">
             {fix.verified === true ? 'A fresh scan of the fix branch no longer reports it.'

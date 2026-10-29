@@ -7,7 +7,6 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Wordmark } from '@/components/Brand'
-import { Tour, shouldShowTour } from '@/components/Help'
 import { NotificationBell } from '@/components/NotificationBell'
 import { HelpBot } from '@/components/HelpBot'
 import { goToSharedLogin, useAuth } from '@/lib/auth'
@@ -24,7 +23,7 @@ const GROUPS: { heading: string; tone: string; on: string; items: Item[] }[] = [
   { heading: 'Dashboard', tone: 'var(--area-find)', on: 'var(--area-find-on)', items: [
     { to: '/uc3', label: 'Vulnerabilities', icon: ScanSearch }, { to: '/uc1', label: 'Threats', icon: Crosshair },
     { to: '/uc1/hunts', label: 'Attack detection', icon: Radar }, { to: '/respond', label: 'Alert triage', icon: Siren }] },
-  { heading: 'Archives', tone: 'var(--area-trust)', on: 'var(--area-trust-on)', items: [{ to: '/reports', label: 'Reports', icon: FileText }, { to: '/audit', label: 'Audit log', icon: ScrollText }] },]
+  { heading: 'Archives', tone: 'var(--area-trust)', on: 'var(--area-trust-on)', items: [{ to: '/reports', label: 'Reports', icon: FileText }, { to: '/activity', label: 'Activity log', icon: ScrollText }] },]
 const NAV = GROUPS.flatMap((g) => g.items)
 
 // Breadcrumb names for the tabs inside a page (the page itself comes from the menu)
@@ -73,7 +72,6 @@ export function AppShell() {
   const { pathname } = useLocation()
   const { theme, toggle } = useTheme()
   const { openDrawer, runs } = useRuns()
-  const [tour, setTour] = useState(false)
   const [collapsed, setCollapsed] = useCollapsedNav()
   const onHome = pathname === '/'
   // the most specific menu item wins (/uc1/hunts is Attack detection, not Threats)
@@ -81,10 +79,6 @@ export function AppShell() {
     .filter((to) => (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(to + '/')))
     .sort((a, b) => b.length - a.length)[0]
   const anyRunning = Object.values(runs ?? {}).some((r) => r?.status === 'running')
-
-  useEffect(() => {
-    if (shouldShowTour()) setTour(true)
-  }, [])
 
   // A new page always opens at the top (the browser would otherwise keep the last page's scroll position).
   // Pages that jump to a card themselves (?app= on Fix) still do so after this.
@@ -124,9 +118,9 @@ export function AppShell() {
         {/* One clear menu */}
         <aside
           className={cn(
-            'nav-surface sticky hidden shrink-0 flex-col overflow-hidden border-r border-hairline transition-[width] duration-200 lg:flex',
+            'nav-surface sticky ml-3 mt-3 hidden shrink-0 flex-col overflow-hidden rounded-[20px] border border-hairline shadow-[0_1px_2px_rgb(0_0_0/0.04),0_10px_28px_-14px_rgb(0_0_0/0.18)] transition-[width] duration-200 lg:flex',
             collapsed ? 'w-16' : 'w-64',
-            'top-14 h-[calc(100svh-56px)]',
+            'top-[68px] h-[calc(100svh-80px)]',
           )}
         >
           {collapsed ? <CollapsedMenu
@@ -162,7 +156,6 @@ export function AppShell() {
         </main>
       </div>
 
-      <Tour open={tour} onOpenChange={setTour} />
       <HelpBot />
     </div>
   )
@@ -172,9 +165,9 @@ export function AppShell() {
 
 function MenuGroups({ activeItem, onPick }: { activeItem?: string; onPick?: () => void }) {
   return (
-    <nav className="flex-1 overflow-y-auto px-3 pb-3 pt-1" aria-label="Main menu">
+    <nav className="nav-scroll flex-1 overflow-y-auto px-3 pb-3 pt-1" aria-label="Main menu">
       {GROUPS.map((g) => (
-        <div key={g.heading} className="mt-4 flex flex-col gap-0.5">
+        <div key={g.heading} className="mt-3 flex flex-col gap-0.5">
           <div className="flex items-center gap-2 px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3 after:h-px after:flex-1 after:bg-hairline after:content-['']">
             <span className="size-1.5 shrink-0 rounded-full" style={{ background: g.tone }} aria-hidden />{g.heading}
           </div>
@@ -188,7 +181,7 @@ function MenuGroups({ activeItem, onPick }: { activeItem?: string; onPick?: () =
                 aria-current={active ? 'page' : undefined}
                 style={{ '--area': g.tone, '--area-on': g.on } as CSSProperties}
                 className={cn(
-                  'group relative flex h-10 items-center gap-3 rounded-[10px] px-1.5 text-sm transition-colors',
+                  'group relative flex h-9 items-center gap-3 rounded-[10px] px-1.5 text-sm transition-colors',
                   active ? 'nav-on font-semibold text-ink' : 'text-ink-2 hover:bg-well hover:text-ink',
                 )}
               >
@@ -307,7 +300,7 @@ function CollapsedMenu({ activeItem, onExpand }: { activeItem?: string; onExpand
       <div className="flex flex-col items-center gap-1 pt-3">
         <RailButton label="Open the menu" hint="Ctrl+B" onClick={onExpand}><PanelLeftOpen className="size-[18px]" /></RailButton>
       </div>
-      <nav className="flex flex-1 flex-col items-center overflow-y-auto pb-3" aria-label="Main menu">
+      <nav className="nav-scroll flex flex-1 flex-col items-center overflow-y-auto pb-3" aria-label="Main menu">
         {GROUPS.map((g) => (
           <div key={g.heading} className="flex flex-col items-center gap-1">
             <span className="my-2 h-px w-6 bg-hairline" aria-hidden />

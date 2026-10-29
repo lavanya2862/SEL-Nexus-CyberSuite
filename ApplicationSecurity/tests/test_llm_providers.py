@@ -170,3 +170,28 @@ def test_settings_need_only_provider_key_and_a_listed_model(monkeypatch):
         assert get.calls[-1]["url"] == "https://generativelanguage.googleapis.com/v1beta/openai/models"
         c.post("/api/v1/settings/models", json={"llm_provider": "openai", "llm_base_url": "https://gw.example.com/v1"})
         assert get.calls[-1]["url"] == "https://gw.example.com/v1/models"
+
+
+def test_connection_test_uses_the_model_picked_on_screen(monkeypatch):
+    """Test connection checks the provider, model and key shown in Settings, saved or not, and says which model the
+    provider answered as, so picking another model is really tested."""
+    from remediation.api import app
+    cap = _Capture({**OPENAI_STYLE, "model": "models/gemini-2.5-pro"})
+    monkeypatch.setattr("remediation.llm.httpx.post", cap)
+    with TestClient(app) as c:
+        c.put("/api/v1/settings", json={"llm_provider": "gemini", "llm_model": "gemini-3.5-flash-lite",
+                                        "llm_api_key": "AIzaSaved4567890", "llm_base_url": None})
+        r = c.post("/api/v1/settings/test-llm", json={"llm_provider": "gemini", "llm_model": "gemini-2.5-pro",
+                                                      "llm_api_key": "••••7890"}).json()
+        assert cap.calls[-1]["json"]["model"] == "gemini-2.5-pro"  # the one picked, not the saved one
+        assert cap.calls[-1]["headers"]["Authorization"] == "Bearer AIzaSaved4567890"  # the saved key
+        assert r["model"] == "gemini-2.5-pro" and r["answered_by"] == "gemini-2.5-pro" and r["reply"] == "OK"
+
+        # a key typed but not saved yet, at another provider
+        c.post("/api/v1/settings/test-llm", json={"llm_provider": "openai", "llm_model": "gpt-4o", "llm_api_key": "sk-typed"})
+        assert cap.calls[-1]["url"] == "https://api.openai.com/v1/chat/completions"
+        assert cap.calls[-1]["json"]["model"] == "gpt-4o" and cap.calls[-1]["headers"]["Authorization"] == "Bearer sk-typed"
+
+        # without a body it still tests the saved settings
+        c.post("/api/v1/settings/test-llm")
+        assert cap.calls[-1]["json"]["model"] == "gemini-3.5-flash-lite"

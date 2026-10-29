@@ -12,8 +12,8 @@ const STATUS_COLOR: Record<string, string> = {
 }
 
 export function stageStatusText(s: Stage) {
-  if (s.status === 'running') return 'Running…'
-  if (s.status === 'pending') return 'Waiting'
+  if (s.status === 'running') return 'In progress'
+  if (s.status === 'pending') return 'Pending'
   if (s.status === 'skipped') return 'Skipped'
   return `${s.status[0].toUpperCase()}${s.status.slice(1)}${s.duration_seconds != null ? ' · ' + dur(s.duration_seconds) : ''}`
 }
@@ -22,7 +22,7 @@ function metricChips(s: Stage): string[] {
   const m = s.metrics ?? {}
   const out: string[] = []
   if (s.id === 'analysis' && m.unique != null) out.push(`${m.unique} findings`, `${m.critical ?? 0} crit · ${m.high ?? 0} high`)
-  if (s.id === 'remediation' && m.fixes != null) out.push(`${m.fixes} fixes`, `${m.ai_fixes ?? 0} code fixes`)
+  if (s.id === 'remediation' && m.fixes != null) out.push(`${m.fixes} remediations`, `${m.ai_fixes ?? 0} AI-assisted`)
   if (s.id === 'validation' && m.verdict) out.push(String(m.verdict), `${m.verified ?? 0} confirmed`)
   if (s.id === 'ingest' && m.commit) out.push(String(m.commit).slice(0, 8))
   if (s.id === 'reporting' && m.artifacts) out.push(`${m.artifacts} files`)
@@ -65,7 +65,7 @@ export function PipelineFlow({ stages, selected, onSelect }: { stages: Stage[]; 
                 {/* the agent doing this step stands out in the signal colour; the pipeline's own steps and "You" stay plain */}
                 {s.agent && s.id in AGENTS
                   ? <div className="text-xs font-semibold text-[var(--signal)]">{s.agent}</div>
-                  : <div className="text-xs text-ink-3">{s.agent ?? (s.id === 'approval' ? 'You' : 'Pipeline')}</div>}
+                  : <div className="text-xs text-ink-3">{s.agent ?? (s.id === 'approval' ? 'Reviewer' : 'Pipeline')}</div>}
               </div>
               <div className="text-xs font-medium" style={{ color: s.status === 'pending' || s.status === 'skipped' ? 'var(--ink-3)' : color }}>{stageStatusText(s)}</div>
               {chips.length > 0 && <div className="flex flex-wrap gap-1">{chips.map((c) => <span key={c} className="rounded-md border border-hairline px-1.5 py-0.5 text-[11px] text-ink-2">{c}</span>)}</div>}
@@ -109,7 +109,7 @@ export function StageDetail({ stage }: { stage?: Stage }) {
       <p className="mt-1 text-sm text-ink-3">{stage.summary || meta.description}</p>
       <div className="mt-3">
         {stage.steps?.length ? <StepList steps={stage.steps} />
-          : <p className="text-sm text-ink-3">{stage.status === 'pending' ? 'This step has not started yet.' : stage.status === 'running' ? 'Working on it; its steps appear here as they finish.' : 'No step details.'}</p>}
+          : <p className="text-sm text-ink-3">{stage.status === 'pending' ? 'This stage has not started yet.' : stage.status === 'running' ? 'In progress. Steps appear here as they complete.' : 'No step details are available.'}</p>}
       </div>
     </div>
   )

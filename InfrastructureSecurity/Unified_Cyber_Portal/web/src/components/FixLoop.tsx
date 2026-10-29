@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { AlertTriangle, Check, CheckCircle2, Loader2, Minus, Play, RefreshCw, ShieldCheck, Undo2, X } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { GettingReady, useAutoStart } from '@/lib/services'
-import { Empty, Panel, Tag } from '@/components/kit'
+import { Choice, Empty, Panel, Tag } from '@/components/kit'
 import { ago, dateTime, num } from '@/lib/format'
 import { UC_NAME } from '@/lib/runs'
 import { statusColor } from '@/lib/theme'
@@ -93,13 +93,11 @@ function Loop({ v }: { v: FixView }) {
 
       {/* actions */}
       <Panel className="flex flex-wrap items-center gap-2 p-4">
-        <label className="flex items-center gap-2 text-sm text-ink-2">
+        <div className="flex items-center gap-2 text-sm text-ink-2">
           How
-          <select value={method} onChange={(e) => setMethod(e.target.value as FixMethod)} className="rounded-lg border border-hairline bg-panel px-2.5 py-1.5 text-sm">
-            <option value="runcommand">Azure Run Command (Azure VMs)</option>
-            <option value="liveresponse">Defender Live Response (any Defender PC)</option>
-          </select>
-        </label>
+          <Choice label="Remediation method" value={method} onChange={(v) => setMethod(v as FixMethod)} className="w-auto py-1.5"
+            options={[{ value: 'runcommand', label: 'Azure Run Command (Azure VMs)' }, { value: 'liveresponse', label: 'Defender Live Response (any Defender PC)' }]} />
+        </div>
         <span className="mx-1 h-6 w-px bg-hairline" />
         <Btn onClick={() => run('approve', selected.filter(canApprove).map((r) => r.fix_id))} disabled={!selected.some(canApprove) || act.isPending}>
           <Check className="size-4" /> Approve selected

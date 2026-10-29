@@ -19,11 +19,11 @@ export function Who({ p, compact }: { p?: Person | null; compact?: boolean }) {
   )
 }
 
-export function RunsTable({ items, empty = 'No scans yet.' }: { items: Job[]; empty?: string }) {
+export function RunsTable({ items, empty = 'No scans have been run yet.' }: { items: Job[]; empty?: string }) {
   const navigate = useNavigate()
   if (!items.length) return <Empty text={empty} />
   return (
-    <DTable head={[['Repository'], ['Status'], ['Step'], ['Findings', 'right'], ['Fixes', 'right'], ['Validation'], ['Pull request'], ['Started by'], ['Started']]} minWidth={1040}>
+    <DTable head={[['Repository'], ['Status'], ['Step'], ['Findings', 'right'], ['Remediations', 'right'], ['Validation'], ['Pull request'], ['Initiated by'], ['Initiated']]} minWidth={1040}>
       {items.map((j) => {
         const s = j.summary ?? {}
         return (
@@ -74,14 +74,14 @@ export function FindingsTable({ items, jobId, showRepo, extra }: { items: Findin
         )}
         <Select label="Severity" value={f.sev} onChange={set('sev')}><option value="">All severities</option>{SEVERITIES.map((s) => <option key={s} value={s}>{sevLabel(s)}</option>)}</Select>
         <Select label="Type" value={f.type} onChange={set('type')}><option value="">All types</option>{FINDING_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select>
-        <Select label="Fix status" value={f.status} onChange={set('status')}><option value="">Any fix status</option>{Object.entries(FIX_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>
+        <Select label="Remediation status" value={f.status} onChange={set('status')}><option value="">Any remediation status</option>{Object.entries(FIX_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>
         <Select label="Scanner" value={f.scanner} onChange={set('scanner')}><option value="">All scanners</option>{scanners.map((s) => <option key={s} value={s}>{s}</option>)}</Select>
-        <Search value={f.q} onChange={set('q')} placeholder="Search title, file, package, CVE…" />
+        <Search value={f.q} onChange={set('q')} placeholder="Search by title, file, package or CVE…" />
         {extra}
       </div>
       {rows.length ? (
         <>
-          <DTable head={[['#'], ['Risk'], ['Severity'], ['Finding'], ...(showRepo ? [['Repository'] as [string]] : []), ['Where'], ['Found by'], ['Fix']]} minWidth={showRepo ? 1040 : 920} maxHeight={720}>
+          <DTable head={[['#'], ['Risk'], ['Severity'], ['Finding'], ...(showRepo ? [['Repository'] as [string]] : []), ['Location'], ['Detected by'], ['Remediation']]} minWidth={showRepo ? 1040 : 920} maxHeight={720}>
             {shown.map((x) => (
               <tr key={`${x.job_id ?? jobId}:${x.finding_id}`} className="cursor-pointer hover:bg-well/60" onClick={() => openFinding(x.job_id ?? jobId!, x.finding_id)}>
                 <td className="tabular text-ink-3">{x.priority_rank ?? ''}</td>
@@ -101,7 +101,7 @@ export function FindingsTable({ items, jobId, showRepo, extra }: { items: Findin
           </DTable>
           <p className="text-xs text-ink-3">{rows.length > 400 ? `Showing 400 of ${rows.length}. ` : `${rows.length} of ${items.length} findings. `}Click a row for the full details, the code and the fix.</p>
         </>
-      ) : <Empty text={items.length ? 'No findings match the filters.' : 'No findings: the repository is clean.'} />}
+      ) : <Empty text={items.length ? 'No findings match the selected filters.' : 'No findings were identified in this repository.'} />}
     </div>
   )
 }
