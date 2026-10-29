@@ -9,7 +9,7 @@ import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
 // The four stops every fix passes, left to right
-const STOPS = ['Waiting', 'Fixing', 'Fixed', 'Confirmed by Defender'] as const
+const STOPS = ['Waiting', 'Remediating', 'Remediated', 'Confirmed by Defender'] as const
 type StopState = 'todo' | 'now' | 'done' | 'failed'
 
 function stops(r: FixRow): StopState[] {
@@ -38,14 +38,14 @@ export function FixProgress() {
   const auto = useAutoStart(error instanceof FixDown, 'fix')
   return (
     <div className="flex flex-col gap-5">
-      <Link to="/fixes" className="inline-flex w-fit items-center gap-1.5 text-sm text-ink-3 hover:text-ink"><ArrowLeft className="size-4" /> Fix</Link>
+      <Link to="/fixes" className="inline-flex w-fit items-center gap-1.5 text-sm text-ink-3 hover:text-ink"><ArrowLeft className="size-4" /> Remediation</Link>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Remediation progress</h1>
         <p className="mt-1 text-sm text-ink-3">Each remediation advances as the device reports back. Remediations continue if you leave this page.</p>
       </div>
       {isLoading ? <Skeleton className="h-64 rounded-2xl" /> : error ? (
         <Panel className="p-6">
-          {error instanceof FixDown ? <GettingReady what="fix progress" {...auto} /> : <Empty text={`Unable to load remediations: ${(error as Error).message}`} />}
+          {error instanceof FixDown ? <GettingReady what="remediation progress" {...auto} /> : <Empty text={`Unable to load remediations: ${(error as Error).message}`} />}
         </Panel>
       ) : v && <Body v={v} />}
     </div>
@@ -81,7 +81,7 @@ function Body({ v }: { v: FixView }) {
           {rows.length > 0 && (
             <div className="text-right">
               <div className="tabular text-3xl font-semibold tracking-tight">{pct}%</div>
-              <div className="text-xs text-ink-3">{finished} of {rows.length} fixes finished</div>
+              <div className="text-xs text-ink-3">{finished} of {rows.length} remediations finished</div>
             </div>
           )}
         </div>
@@ -97,7 +97,7 @@ function Body({ v }: { v: FixView }) {
       {rows.length > 0 && (
         <div className="card-row gap-4 [--card-min:170px]">
           {[
-            { icon: Wrench, label: 'Fixed', value: count((r) => r.status === 'done' || r.status === 'verified'), color: 'var(--sky)' },
+            { icon: Wrench, label: 'Remediated', value: count((r) => r.status === 'done' || r.status === 'verified'), color: 'var(--sky)' },
             { icon: ShieldCheck, label: 'Confirmed by Defender', value: count((r) => r.status === 'verified'), color: statusColor.good },
             { icon: XCircle, label: 'Failed', value: count((r) => r.status === 'failed' || r.status === 'still_there'), color: statusColor.critical },
             { icon: Clock, label: 'Still to do', value: count((r) => r.status === 'queued' || r.status === 'running'), color: 'var(--ink-3)' },
@@ -116,7 +116,7 @@ function Body({ v }: { v: FixView }) {
           <div className="flex items-center gap-2">
             <Monitor className="size-4 text-ink-3" />
             <h3 className="font-semibold tracking-tight">{d}</h3>
-            <span className="text-xs text-ink-3">· {rows.filter((r) => r.device_name === d).length === 1 ? '1 fix' : `${rows.filter((r) => r.device_name === d).length} fixes`}</span>
+            <span className="text-xs text-ink-3">· {rows.filter((r) => r.device_name === d).length === 1 ? '1 remediation' : `${rows.filter((r) => r.device_name === d).length} remediations`}</span>
           </div>
           <ul className="mt-4 flex flex-col divide-y divide-hairline">
             {rows.filter((r) => r.device_name === d).map((r) => <FixTrack key={r.fix_id} r={r} />)}

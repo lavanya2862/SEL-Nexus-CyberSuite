@@ -13,6 +13,8 @@ import {
 } from '@/lib/fix'
 
 const utc = (s: string | null | undefined) => (s ? s.replace(' ', 'T') + (s.endsWith('Z') || s.includes('+') ? '' : 'Z') : null)
+/** Stage names in Defender's words; plans saved before the rename still carry the old names in v.stages */
+const STAGE_NAME: Record<number, string> = { 2: 'End of support', 3: 'Routine update', 4: 'No action needed' }
 
 /** "Fix automatically": approve, run and verify fixes on the lab VMs with UC1's fix engine. */
 export function FixLoop() {
@@ -23,8 +25,8 @@ export function FixLoop() {
     return (
       <Panel className="p-6">
         {error instanceof FixDown
-          ? <GettingReady what="automatic fixing" {...auto} />
-          : <p className="text-sm" style={{ color: statusColor.critical }}>Could not load the fixes: {String((error as Error).message)}</p>}
+          ? <GettingReady what="automated remediation" {...auto} />
+          : <p className="text-sm" style={{ color: statusColor.critical }}>Could not load remediation tasks: {String((error as Error).message)}</p>}
       </Panel>
     )
   }
@@ -63,7 +65,7 @@ function Loop({ v }: { v: FixView }) {
             Commands come only from the approved remediation catalogue. Nothing runs without your approval.
           </p>
           <ol className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-            {['1 · Plan', '2 · You approve', '3 · It fixes', '4 · Defender confirms'].map((s) => (
+            {['1 · Plan', '2 · You approve', '3 · Remediate', '4 · Defender confirms'].map((s) => (
               <li key={s} className="rounded-lg bg-well px-3 py-2 font-medium text-ink-2">{s}</li>
             ))}
           </ol>
@@ -103,7 +105,7 @@ function Loop({ v }: { v: FixView }) {
           <Check className="size-4" /> Approve selected
         </Btn>
         <Btn onClick={() => run('approve', urgent.map((r) => r.fix_id))} disabled={!urgent.length || act.isPending}>
-          <AlertTriangle className="size-4" /> Approve all urgent ({urgent.length})
+          <AlertTriangle className="size-4" /> Approve all high priority ({urgent.length})
         </Btn>
         <Btn onClick={() => setConfirm('all')} disabled={!fixable.some(canApprove) || act.isPending}>Approve everything</Btn>
         <Btn onClick={() => run('unapprove', selected.filter(canWithdraw).map((r) => r.fix_id))} disabled={!selected.some(canWithdraw) || act.isPending}>
@@ -118,7 +120,7 @@ function Loop({ v }: { v: FixView }) {
           disabled={busy || !approved.length || act.isPending}
           className="inline-flex items-center gap-2 rounded-lg btn-blue px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <Play className="size-4" /> Run approved fixes ({approved.length})
+          <Play className="size-4" /> Run approved remediations ({approved.length})
         </button>
       </Panel>
       {act.error && (
@@ -206,7 +208,7 @@ export function Progress({ v }: { v: FixView }) {
           {live ? <Loader2 className="size-5 animate-spin text-sky" /> : <CheckCircle2 className="size-5" style={{ color: statusColor.good }} />}
           <div>
             <h3 className="font-semibold tracking-tight">
-              {live ? (v.worker.task === 'probe' ? 'Checking device connectivity…' : 'Fixing…') : 'Last remediation task'}
+              {live ? (v.worker.task === 'probe' ? 'Checking device connectivity…' : 'Remediating…') : 'Last remediation task'}
             </h3>
             <p key={v.worker.step || v.worker.message} className="text-sm text-ink-3 animate-in fade-in slide-in-from-left-1 duration-300">
               {live ? v.worker.step || 'Starting' : v.worker.message}
@@ -317,7 +319,7 @@ function DevicePlan({ device, rows, stages, sel, toggle, setMany }: {
               return (
                 <tr key={r.fix_id} className={cn('align-top', sel.has(r.fix_id) && 'bg-well/70', r.status === 'running' && 'bg-sky/5')}>
                   <td><input type="checkbox" className="size-4 accent-[var(--blue)]" aria-label={`Select ${r.app}`} disabled={!on} checked={sel.has(r.fix_id)} onChange={() => toggle(r.fix_id)} /></td>
-                  <td className="whitespace-nowrap text-xs text-ink-2">{r.stage === 1 ? <Tag tone="bad">Urgent</Tag> : stages[String(r.stage)] ?? r.stage}</td>
+                  <td className="whitespace-nowrap text-xs text-ink-2">{r.stage === 1 ? <Tag tone="bad">High priority</Tag> : STAGE_NAME[r.stage] ?? stages[String(r.stage)] ?? r.stage}</td>
                   <td>
                     <div className="font-medium">{r.app}</div>
                     <div className="text-xs text-ink-3">{r.version}{r.note ? ` · ${r.note}` : ''}</div>

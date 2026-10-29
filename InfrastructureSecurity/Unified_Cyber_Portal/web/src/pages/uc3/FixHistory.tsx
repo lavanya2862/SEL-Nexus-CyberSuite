@@ -44,16 +44,16 @@ export function FixHistory() {
       <Panel className="grid gap-6 p-6 md:grid-cols-[auto_minmax(0,1fr)] md:items-center">
         <div className="flex items-baseline gap-3">
           <span className="tabular text-[40px] leading-none tracking-tight" style={{ color: statusColor.good }}>{num(fixed.length)}</span>
-          <span className="text-sm text-ink-3">vulnerabilities fixed<br />{first ? `since ${shortDate(first)}` : ''}</span>
+          <span className="text-sm text-ink-3">vulnerabilities remediated<br />{first ? `since ${shortDate(first)}` : ''}</span>
         </div>
         <div className="text-sm text-ink-2">
           <p>
-            <b>{num(byPortal)}</b> of them were fixed by Cyber Command ({num(runs.filter((r) => r.status === 'verified' && !isSetting(r)).length)} app updates), and Defender confirmed each one.
+            <b>{num(byPortal)}</b> of them were remediated by Cyber Command ({num(runs.filter((r) => r.status === 'verified' && !isSetting(r)).length)} app updates), and Defender confirmed each one.
             The other <b>{num(fixed.length - byPortal)}</b> were resolved outside the portal, for example through automatic application updates or manual patching.
           </p>
           <p className="mt-1.5 text-xs text-ink-3">
-            {avgDays != null && <>On average a vulnerability was open {avgDays.toFixed(1)} days before it was fixed. </>}
-            Source: Microsoft Defender’s change feed. A vulnerability counts as fixed when Defender stops finding it on that computer.
+            {avgDays != null && <>On average a vulnerability was open {avgDays.toFixed(1)} days before it was remediated. </>}
+            Source: Microsoft Defender’s change feed. A vulnerability counts as remediated when Defender stops finding it on that computer.
           </p>
         </div>
       </Panel>
@@ -166,7 +166,7 @@ function DefenderLog({ fixed, portalKeys }: { fixed: FixedFinding[]; portalKeys:
               <section key={day}>
                 <div className="mb-2 flex items-baseline gap-2">
                   <h3 className="font-semibold">{new Date(day).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</h3>
-                  <span className="text-sm text-ink-3">{num(fs.length)} vulnerabilities fixed</span>
+                  <span className="text-sm text-ink-3">{num(fs.length)} vulnerabilities remediated</span>
                 </div>
                 <div className="flex flex-col gap-2">
                   {groups.map(([k, g]) => <FixedGroup key={k} rows={g} byPortal={portalKeys.has(k)} />)}
@@ -191,7 +191,7 @@ function FixedGroup({ rows, byPortal }: { rows: FixedFinding[]; byPortal: boolea
       <button onClick={() => setOpen(!open)} className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-left hover:bg-well/60" aria-expanded={open}>
         <span className="font-medium">{pretty(f.sw)} <span className="tabular font-normal text-ink-3">{f.ver}</span></span>
         <span className="text-sm text-ink-3">on {f.dev?.name}{groupAfter(f)}</span>
-        {byPortal && <Tag><ShieldCheck className="mr-1 inline size-3" />fixed by Cyber Command</Tag>}
+        {byPortal && <Tag><ShieldCheck className="mr-1 inline size-3" />remediated by Cyber Command</Tag>}
         <span className="ml-auto flex items-center gap-3 text-sm">
           {crit > 0 && <span className="text-xs text-ink-3">{num(crit)} critical</span>}
           <b className="tabular">{num(rows.length)}</b>

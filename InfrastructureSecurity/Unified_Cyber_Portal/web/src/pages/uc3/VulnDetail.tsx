@@ -56,7 +56,7 @@ export function VulnDetail() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link to={`/fixes?sw=${encodeURIComponent(f.sw)}`} className="inline-flex items-center gap-2 btn-blue rounded-lg px-4 py-2 text-sm font-semibold">
-            <Zap className="size-4" /> Fix this app
+            <Zap className="size-4" /> Remediate this app
           </Link>
           <a href={`https://nvd.nist.gov/vuln/detail/${encodeURIComponent(f.cve)}`} target="_blank" rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-lg border border-hairline bg-panel px-3 py-2 text-sm font-medium hover:bg-well">
@@ -67,8 +67,8 @@ export function VulnDetail() {
 
       <Panel className="flex items-start gap-3 p-5 text-sm leading-relaxed text-ink-2">
         <p>
-          This weakness is in <b className="text-ink">{app}</b>. The fix: <b className="text-ink">{action}</b>.{' '}
-          {sameApp.length > 1 && <>That also fixes the other {num(sameApp.length - 1)} vulnerabilities in this app on this computer.</>}
+          This weakness is in <b className="text-ink">{app}</b>. Remediation: <b className="text-ink">{action}</b>.{' '}
+          {sameApp.length > 1 && <>This also remediates the other {num(sameApp.length - 1)} vulnerabilities in this app on this computer.</>}
         </p>
       </Panel>
 
@@ -99,7 +99,7 @@ export function VulnDetail() {
         <Card title="Same vulnerability on other computers" description={elsewhere.length ? `${num(elsewhere.length)} more` : undefined}>
           {elsewhere.length ? <FindingTable rows={elsewhere} show="computer" onOpen={(x) => navigate(findingHref(x))} /> : <Empty text="Only on this computer." />}
         </Card>
-        <Card title={`Everything ${app} has on ${f.dev?.name}`} description={`${num(sameApp.length)} vulnerabilities · one update fixes them all`}>
+        <Card title={`Everything ${app} has on ${f.dev?.name}`} description={`${num(sameApp.length)} vulnerabilities · one update remediates them all`}>
           <FindingTable rows={sameApp} show="cve" current={key} onOpen={(x) => navigate(findingHref(x))} />
         </Card>
       </div>

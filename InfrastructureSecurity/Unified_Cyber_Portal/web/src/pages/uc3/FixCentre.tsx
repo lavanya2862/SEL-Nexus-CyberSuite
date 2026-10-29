@@ -24,9 +24,9 @@ import { GettingReady, useAutoStart } from '@/lib/services'
 import { Uc3Loading } from './common'
 
 const LEVEL = {
-  1: { label: 'Immediate', color: statusColor.critical },
-  2: { label: 'Within 30 days', color: statusColor.warning },
-  3: { label: 'Next patch cycle', color: 'var(--ink-3)' },
+  1: { label: 'High', color: statusColor.critical },
+  2: { label: 'Medium', color: statusColor.warning },
+  3: { label: 'Low', color: 'var(--ink-3)' },
 } as const
 
 const softwareOf = (a: Uc3FixApp) => a.key.split(':').pop() ?? ''
@@ -42,14 +42,14 @@ const VIEWS: [View, string][] = [['cards', 'Updates & upgrades'], ['settings', '
 
 /** The fix-type chips on Updates & upgrades (?type= picks one, e.g. from the Vulnerabilities overview). */
 const KINDS: [FixKind, string, string][] = [
-  ['update', 'App updates', 'A newer version of the app fixes the vulnerabilities'],
-  ['os', 'Windows updates', 'The vulnerabilities are in Windows itself: install the Windows update (Windows Update, WSUS or Intune), usually with a restart'],
-  ['upgrade', 'Unsupported software', 'At or near end of support: the vendor no longer issues fixes, so upgrade to a supported version'],
-  ['none', 'No fix yet', 'The vendor has not released a fix: apply compensating controls until one is available'],
+  ['update', 'Software update', 'A newer version of the software resolves the vulnerabilities'],
+  ['os', 'OS security update', 'The vulnerabilities are in Windows itself: install the Windows security update (Windows Update, WSUS or Intune), usually with a restart'],
+  ['upgrade', 'Software upgrade', 'At or near end of support: the vendor no longer issues security updates, so upgrade to a supported version'],
+  ['none', 'Attention required', 'No security update available: apply compensating controls until the vendor releases one'],
 ]
 const KIND_PHRASE: Record<FixKind, [string, string]> = {
-  update: ['app update', 'app updates'], os: ['Windows update', 'Windows updates'],
-  upgrade: ['upgrade of unsupported software', 'upgrades of unsupported software'], none: ['app with no fix yet', 'apps with no fix yet'],
+  update: ['software update', 'software updates'], os: ['OS security update', 'OS security updates'],
+  upgrade: ['software upgrade', 'software upgrades'], none: ['app needing attention', 'apps needing attention'],
 }
 
 /** Act › Fix: what to update and why (UC3 advice), and "fix it for me" on every computer (UC1 fix engine). */
@@ -177,24 +177,24 @@ function FixCards() {
       <Panel className="grid gap-6 p-6 md:grid-cols-[auto_minmax(0,1fr)] md:items-center">
         <div className="flex items-baseline gap-3">
           <span className="tabular text-[40px] leading-none tracking-tight">{num(vulns - noPatch)}</span>
-          <span className="text-sm text-ink-3">vulnerabilities<br />these fixes close</span>
+          <span className="text-sm text-ink-3">vulnerabilities<br />these remediations close</span>
         </div>
         <div className="text-sm text-ink-2">
           <p>
-            <b>{num(inOpco.length)} fixes</b> cover the <b>{num(vulns)} vulnerabilities</b> Defender found:{' '}
+            <b>{num(inOpco.length)} remediations</b> cover the <b>{num(vulns)} vulnerabilities</b> Defender found:{' '}
             {KINDS.filter(([k]) => k !== 'none' && ofKind(k)).map(([k], i, all) => (
               <span key={k}>{i > 0 && (i === all.length - 1 ? ' and ' : ', ')}{num(ofKind(k))} {KIND_PHRASE[k][ofKind(k) === 1 ? 0 : 1]}</span>
             ))}
             {settings > 0 && <>, plus <Link to="/fixes/settings" className="underline decoration-hairline underline-offset-2 hover:decoration-ink"><b>{num(settings)} security settings</b></Link> to change</>}.{' '}
-            {num(inOpco.filter((a) => a.urgency.level === 1).length)} are marked “Fix now”.
+            {num(inOpco.filter((a) => a.urgency.level === 1).length)} are marked High priority.
           </p>
           <p className="mt-1.5">
             {noPatch > 0
-              ? <><b style={{ color: statusColor.warning }}>{num(noPatch)} have no fix from the vendor yet</b>: their cards say how to protect the computers until one comes.</>
-              : <>Every vulnerability currently has a vendor fix.</>}
+              ? <><b style={{ color: statusColor.warning }}>{num(noPatch)} have no security update available</b>: their cards list compensating controls until one is released.</>
+              : <>A security update is available for every vulnerability.</>}
           </p>
           <p className="mt-1.5 text-xs text-ink-3">
-            Urgency, numbers and commands come from Defender data and fixed catalogues; the agent only explains them. Built {ago(X.built_at)}.
+            Priority, numbers and commands come from Defender data and fixed catalogues; the agent only explains them. Built {ago(X.built_at)}.
           </p>
           {verified.length > 0 && (
             <Link to="/fixes/history" className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium hover:underline" style={{ color: statusColor.good }}
@@ -220,13 +220,13 @@ function FixCards() {
               { value: 'uc3', label: UC_NAME.uc3, count: agentCounts.uc3, dot: 'var(--sky)' },
               { value: 'uc1', label: UC_NAME.uc1, count: agentCounts.uc1, dot: 'var(--violet)' }]} />
           </Field>
-          <Field label="Fix type">
-            <Choice label="Fix type" value={kind} onChange={(k) => pickKind(k as 'all' | FixKind)}
-              options={[{ value: 'all', label: 'All fix types', count: inOpco.length }, ...KINDS.map(([k, l]) => ({ value: k, label: l, count: ofKind(k) }))]} />
+          <Field label="Remediation type">
+            <Choice label="Remediation type" value={kind} onChange={(k) => pickKind(k as 'all' | FixKind)}
+              options={[{ value: 'all', label: 'All remediation types', count: inOpco.length }, ...KINDS.map(([k, l]) => ({ value: k, label: l, count: ofKind(k) }))]} />
           </Field>
-          <Field label="Urgency">
-            <Choice label="Urgency" value={String(level)} onChange={(l) => setLevel(Number(l) as 0 | 1 | 2 | 3)} options={[
-              { value: '0', label: 'All urgencies', count: inKind.length },
+          <Field label="Priority">
+            <Choice label="Priority" value={String(level)} onChange={(l) => setLevel(Number(l) as 0 | 1 | 2 | 3)} options={[
+              { value: '0', label: 'All priorities', count: inKind.length },
               ...([1, 2, 3] as const).map((l) => ({ value: String(l), label: LEVEL[l].label, count: count(l), dot: LEVEL[l].color }))]} />
           </Field>
         </div>
@@ -241,7 +241,7 @@ function FixCards() {
           )}
         </div>
       </Panel>
-      <RunBanner filter={agentFilter} what="app fixes" />
+      <RunBanner filter={agentFilter} what="software remediations" />
 
       {apps.length ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
@@ -252,7 +252,7 @@ function FixCards() {
               agent={agentFilter.agent} newsSplit={agentFilter.agent === 'uc1' ? matchCounts?.split?.[softwareOf(a)] ?? [0, 0] : undefined} />
           ))}
         </div>
-      ) : <Empty text={agentFilter.agent ? 'No remediations from this agent match these filters.' : kind === 'none' ? 'No items: every vulnerability has a vendor fix.' : kind === 'os' ? 'No Windows updates needed: Defender found no vulnerabilities in Windows itself.' : 'No apps match this filter.'} />}
+      ) : <Empty text={agentFilter.agent ? 'No remediations from this agent match these filters.' : kind === 'none' ? 'No items: a security update is available for every vulnerability.' : kind === 'os' ? 'No Windows updates needed: Defender found no vulnerabilities in Windows itself.' : 'No apps match this filter.'} />}
 
       {listApp && (
         <VulnList app={listApp} software={softwareOf(listApp)} data={data} fixRows={v?.rows ?? []} engine={!!v} onClose={closeList}
@@ -276,8 +276,8 @@ function Banner({ v, down, urgentApps, onUrgent, auto }: {
       <Panel className="flex flex-wrap items-center gap-4 p-5">
         <span className="grid size-11 place-items-center rounded-xl bg-well"><Zap className="size-5 text-ink-3" /></span>
         <div className="min-w-0 flex-1">
-          <div className="font-semibold">Automatic fixing</div>
-          <GettingReady what="automatic fixing" {...auto} off="Automated remediation is disabled. Commands below can still be copied and run manually."
+          <div className="font-semibold">Automated remediation</div>
+          <GettingReady what="automated remediation" {...auto} off="Automated remediation is disabled. Commands below can still be copied and run manually."
             retryLabel="Enable automated remediation" className="mt-1" />
         </div>
       </Panel>
@@ -298,7 +298,7 @@ function Banner({ v, down, urgentApps, onUrgent, auto }: {
         <div className="flex flex-wrap gap-2">
           <button onClick={() => setHow(!how)} className="rounded-lg border border-hairline bg-panel px-3 py-2 text-sm font-medium hover:bg-well" aria-expanded={how}>How it works</button>
           <button onClick={onUrgent} disabled={!urgentApps} className="inline-flex items-center gap-2 rounded-lg btn-blue px-4 py-2 text-sm font-medium text-white disabled:opacity-40">
-            <Zap className="size-4" /> Remediate {urgentApps} urgent apps
+            <Zap className="size-4" /> Remediate {urgentApps} high-priority apps
           </button>
         </div>
       </div>
@@ -306,9 +306,9 @@ function Banner({ v, down, urgentApps, onUrgent, auto }: {
         <ol className="grid gap-px border-t border-signal/20 bg-signal/10 text-sm sm:grid-cols-5 animate-in fade-in duration-200">
           {[
             ['Found', 'Defender identifies an application with known vulnerabilities'],
-            ['Explained', 'Each card shows the issue, its urgency and the remediation'],
+            ['Explained', 'Each card shows the issue, its priority and the remediation'],
             ['Approved', 'You select ⚡ Remediate (it can be removed from the queue)'],
-            ['Fixed', 'You select Execute remediation: the application is updated or removed'],
+            ['Remediated', 'You select Execute remediation: the application is updated or removed'],
             ['Verified ✓', 'Defender rescans (2–6 h) and confirms resolution'],
           ].map(([t, d], i) => (
             <li key={t} className="bg-panel/80 p-4">
@@ -324,7 +324,7 @@ function Banner({ v, down, urgentApps, onUrgent, auto }: {
           {devices.map(([d, p]) => (
             <span key={d} className="flex items-center gap-1.5">
               <span className="size-1.5 rounded-full" style={{ background: !p.error ? statusColor.good : p.error.includes('switched off') ? statusColor.warning : statusColor.critical }} />
-              <b className="font-medium text-ink-2">{d}</b> {!p.error ? 'reachable' : p.error.includes('switched off') ? 'switched off (a fix run switches it on)' : 'not reachable'}
+              <b className="font-medium text-ink-2">{d}</b> {!p.error ? 'reachable' : p.error.includes('switched off') ? 'switched off (a remediation run switches it on)' : 'not reachable'}
             </span>
           ))}
         </div>
@@ -335,7 +335,7 @@ function Banner({ v, down, urgentApps, onUrgent, auto }: {
 
 /* ───────── one app: advice + parcel tracker + a fix button per computer ───────── */
 
-const TRACK = ['Found', 'Explained', 'Approved', 'Fixed', 'Verified'] as const
+const TRACK = ['Found', 'Explained', 'Approved', 'Remediated', 'Verified'] as const
 
 /** How far one computer got: 1 found, 2 explained, 3 approved (or tried and failed), 4 fixed, 5 verified by Defender. */
 function rowStep(r: FixRow, explained: boolean): number {
@@ -419,12 +419,12 @@ function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw
             {/* what kind of fix and the deadline, in one plain line */}
             <p className="mt-1 text-xs text-ink-3">
               <span title={kind?.[2]} style={{ color: kindOf === 'none' ? statusColor.warning : undefined }}>{kind?.[1]}</span>
-              {a.fix_by && <span title="Latest date permitted by the patching SLA. Immediate items should be remediated now."> · fix by {shortDate(a.fix_by)}</span>}
+              {a.fix_by && <span title="Latest date permitted by the patching SLA. High-priority items should be remediated now."> · due {shortDate(a.fix_by)}</span>}
             </p>
           </div>
           <span className="flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
             style={{ color: lv.color, background: `color-mix(in oklab, ${lv.color} 12%, transparent)` }}>
-            {a.urgency.level === 1 && <AlertTriangle className="size-3.5" />}{a.urgency.label.split(':')[0]}
+            {a.urgency.level === 1 && <AlertTriangle className="size-3.5" />}{lv.label} priority
           </span>
         </div>
 
@@ -439,8 +439,8 @@ function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw
               )}
               <div className="grid grid-cols-3 gap-2">
                 <Stat n={total} label="Found" />
-                <Stat n={open} label="Need fixing" color={open ? statusColor.critical : undefined} />
-                <Stat n={fixed} label="Fixed" color={fixed ? statusColor.good : undefined} />
+                <Stat n={open} label="Open" color={open ? statusColor.critical : undefined} />
+                <Stat n={fixed} label="Remediated" color={fixed ? statusColor.good : undefined} />
               </div>
             </div>
             <AgentTags rows={rows} inNews={inNews} />
@@ -455,13 +455,13 @@ function FixCard({ a, rank, rows, engine, busy, highlight, onApprove, onWithdraw
 
         {(ended.length > 0 || ending.length > 0 || noPatch.length > 0) && (
           <ul className="space-y-1 rounded-xl bg-well px-3.5 py-2.5 text-xs text-ink-2">
-            {ended.length > 0 && <li><b className="text-ink">Support ended:</b> {eosList(ended)}. The vendor no longer fixes these versions, so updating within them is not enough.</li>}
+            {ended.length > 0 && <li><b className="text-ink">Support ended:</b> {eosList(ended)}. The vendor no longer issues security updates for these versions, so updating within them is not enough.</li>}
             {ending.length > 0 && <li><b className="text-ink">Support ends soon:</b> {eosList(ending)}. Plan the move to a supported version.</li>}
             {noPatch.length > 0 && (
               <li title={noPatch.join(', ')}>
-                <b style={{ color: statusColor.warning }}>No fix from the vendor yet:</b>{' '}
-                {noPatch.length >= a.cves ? 'for any of its vulnerabilities' : `for ${num(noPatch.length)} of its ${num(a.cves)} vulnerabilities (updating fixes the others)`}.
-                Apply compensating controls until a fix is released.
+                <b style={{ color: statusColor.warning }}>No security update available:</b>{' '}
+                {noPatch.length >= a.cves ? 'for any of its vulnerabilities' : `for ${num(noPatch.length)} of its ${num(a.cves)} vulnerabilities (updating remediates the others)`}.
+                Apply compensating controls until a security update is released.
               </li>
             )}
           </ul>
@@ -547,7 +547,7 @@ function FixedSoFar({ rows }: { rows: FixRow[] }) {
   const gone = done.reduce((s, r) => s + r.findings, 0)
   return (
     <span className="tabular text-ink-3">
-      <b className={done.length ? 'text-ink' : undefined}>{done.length} of {fixable.length}</b> computers fixed
+      <b className={done.length ? 'text-ink' : undefined}>{done.length} of {fixable.length}</b> computers remediated
       {vulns > 0 && <> · <b className={gone ? 'text-ink' : undefined}>{num(gone)} of {num(vulns)}</b> vulnerabilities gone</>}
     </span>
   )
@@ -561,7 +561,7 @@ function ComputerRow({ r, busy, onApprove, onWithdraw, fresh }: { r: FixRow; bus
         <div className="text-sm font-medium">{r.device_name} {r.version && <span className="font-normal text-ink-3">· {r.version}</span>}</div>
         {!isSetting(r) && r.findings > 0 && (
           <div className="mt-0.5 text-xs text-ink-3">
-            {num(r.findings)} vulnerabilit{r.findings === 1 ? 'y' : 'ies'}{cleared(r) ? ' fixed' : ' on this computer'}
+            {num(r.findings)} vulnerabilit{r.findings === 1 ? 'y' : 'ies'}{cleared(r) ? ' remediated' : ' on this computer'}
           </div>
         )}
         <div className="mt-0.5"><StatusPill r={r} /></div>
@@ -670,7 +670,7 @@ function SettingsCards() {
             <button onClick={() => approve(ready.map((r) => r.fix_id))} disabled={act.isPending}
               title="Adds every automatable setting shown here to the remediation queue. Nothing runs until you select Execute remediation."
               className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50">
-              <Zap className="size-4" /> Fix all {ready.length} for me
+              <Zap className="size-4" /> Remediate all ({ready.length})
             </button>
           )}
           <label className="flex items-center gap-2 rounded-lg border border-hairline-strong bg-field px-3 py-1.5 text-sm transition-[border-color,box-shadow] focus-within:border-blue/60 focus-within:ring-3 focus-within:ring-blue/15">
@@ -718,7 +718,7 @@ function SettingCard({ s, rows, engine, busy, onApprove, onWithdraw, isNew }: {
             </div>
             <div className="mt-1.5"><AgentTags rows={rows} /></div>
           </div>
-          <span className="shrink-0 text-xs font-medium" style={{ color: lv.color }}>{s.urgency.label.split(':')[0]}</span>
+          <span className="shrink-0 text-xs font-medium" style={{ color: lv.color }}>{lv.label} priority</span>
         </div>
 
         {(txt.what_is_wrong || s.microsoft.risk) && <p className="text-sm leading-relaxed text-ink-2">{txt.what_is_wrong ?? s.microsoft.risk}</p>}
@@ -787,14 +787,19 @@ function SettingCard({ s, rows, engine, busy, onApprove, onWithdraw, isNew }: {
 
 /* ───────── basket bar: approved fixes waiting to run, and live progress while they run ───────── */
 
-export function BasketBar({ v }: { v: FixView }) {
+/** scope (a run page): only that run's fixes count and run; anything approved earlier stays queued for Remediation. */
+export function BasketBar({ v, scope }: { v: FixView; scope?: string[] }) {
   const act = useFixAction()
   const [review, setReview] = useState(false)
   const navigate = useNavigate()
   const watch = () => navigate('/fixes/progress')
   const [confirm, setConfirm] = useState(false)
   const [hideDone, setHideDone] = useState('')
-  const approved = v.rows.filter((r) => r.status === 'approved')
+  const queued = v.rows.filter((r) => r.status === 'approved')
+  const inScope = scope && new Set(scope)
+  const approved = inScope ? queued.filter((r) => inScope.has(r.fix_id)) : queued
+  const earlier = queued.length - approved.length
+  const earlierNote = earlier ? `${earlier} remediation${earlier === 1 ? '' : 's'} approved earlier stay${earlier === 1 ? 's' : ''} in the queue and do${earlier === 1 ? 'es' : ''} not run from here.` : ''
   const approvedSettings = approved.filter(isSetting).length
   const approvedResponses = approved.filter((r) => r.action === 'respond').length
   const inFlight = v.rows.filter((r) => r.status === 'queued' || r.status === 'running')
@@ -828,9 +833,10 @@ export function BasketBar({ v }: { v: FixView }) {
               <>
                 <span className="grid size-10 place-items-center rounded-xl bg-signal/15"><ShoppingBasket className="size-5 text-signal" /></span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold">{approved.length} remediation{approved.length === 1 ? '' : 's'} queued</div>
-                  <div className="truncate text-xs text-ink-3">
+                  <div className="text-sm font-semibold">{approved.length} remediation{approved.length === 1 ? '' : 's'} queued{scope ? ' from this run' : ''}</div>
+                  <div className="truncate text-xs text-ink-3" title={earlierNote || undefined}>
                     {byDevice.map(([d, rs]) => `${d}: ${rs.length}`).join(' · ')} · clears {num(approved.reduce((n, r) => n + r.findings, 0))} findings{approvedSettings ? `, ${approvedSettings} security setting${approvedSettings === 1 ? '' : 's'}` : ''}
+                    {earlier > 0 && <> · <b className="text-ink-2">{earlier} approved earlier not included</b></>}
                   </div>
                 </div>
                 <button onClick={() => setReview(true)} className="rounded-lg border border-hairline px-3 py-2 text-sm font-medium hover:bg-well">Review</button>
@@ -878,10 +884,10 @@ export function BasketBar({ v }: { v: FixView }) {
       <ConfirmDialog
         open={confirm}
         onClose={() => setConfirm(false)}
-        title={`Execute ${approved.length} remediation${approved.length === 1 ? '' : 's'} now?`}
-        body={`${byDevice.map(([d, rs]) => `${d}: ${rs.length}`).join(', ')}. The agent powers on each device if needed, closes the applications and updates or removes them${approvedSettings ? ', and changes the chosen security settings' : ''}${approvedResponses ? ', and scans devices with detections and removes what Defender finds' : ''}. This changes the devices and the figures on every page. Keep powered-on VMs running for about 6 hours so Defender can verify the changes.`}
+        title={`Execute ${scope ? "this run's " : ''}${approved.length} remediation${approved.length === 1 ? '' : 's'} now?`}
+        body={`${byDevice.map(([d, rs]) => `${d}: ${rs.length}`).join(', ')}. The agent powers on each device if needed, closes the applications and updates or removes them${approvedSettings ? ', and changes the chosen security settings' : ''}${approvedResponses ? ', and scans devices with detections and removes what Defender finds' : ''}. This changes the devices and the figures on every page. Keep powered-on VMs running for about 6 hours so Defender can verify the changes.${earlierNote ? ` ${earlierNote}` : ''}`}
         confirmLabel="Execute remediation"
-        onConfirm={() => { act.mutate({ action: 'run' }); setConfirm(false); watch() }}
+        onConfirm={() => { act.mutate({ action: 'run', ids: scope ? approved.map((r) => r.fix_id) : undefined }); setConfirm(false); watch() }}
       />
     </>
   )
@@ -897,9 +903,9 @@ function UrgentChooser({ open, onClose, rows, onApprove }: { open: boolean; onCl
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md border-hairline bg-panel">
-        <DialogTitle className="flex items-center gap-2"><Zap className="size-5 text-signal" /> Remediate all urgent apps</DialogTitle>
+        <DialogTitle className="flex items-center gap-2"><Zap className="size-5 text-signal" /> Remediate all high-priority apps</DialogTitle>
         <DialogDescription className="text-sm leading-relaxed text-ink-2">
-          Urgent: the applications prioritised by the remediation plan. Select devices to add their urgent remediations to the queue. Nothing runs until approved.
+          High priority: the applications prioritised by the remediation plan. Select devices to add their high-priority remediations to the queue. Nothing runs until approved.
         </DialogDescription>
         <ul className="flex flex-col gap-2">
           {devices.map((d) => {
@@ -918,7 +924,7 @@ function UrgentChooser({ open, onClose, rows, onApprove }: { open: boolean; onCl
               </li>
             )
           })}
-          {!devices.length && <li className="text-sm text-ink-3">Every urgent remediation is already queued or complete.</li>}
+          {!devices.length && <li className="text-sm text-ink-3">Every high-priority remediation is already queued or complete.</li>}
         </ul>
         <div className="mt-1 flex justify-end gap-2">
           <button onClick={onClose} className="rounded-lg border border-hairline px-4 py-2 text-sm hover:bg-well">Cancel</button>

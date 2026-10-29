@@ -149,14 +149,14 @@ def _fixes(ctx) -> list[dict]:
     fixes = (UC3(ctx.settings.uc3_dir).dashboard() or {}).get("fixes") or {}
     apps = fixes.get("apps") or []
     if not apps:
-        msg = "The fix list isn't built yet. Run the Vulnerability Agent from Agents."
+        msg = "The remediation list isn't built yet. Run the Vulnerability Agent from Agents."
         return [qa("How many apps need updating?", msg), qa("Which app should I update first?", msg)]
     now = [a for a in apps if (a.get("urgency") or {}).get("level") == 1]
     top = (now or apps)[0]
     devices = listing([d.get("name") for d in top.get("devices") or []])
     return [
         qa("How many apps need updating?",
-           f"{plural(len(apps), 'app')}. {n(len(now))} are marked \"Fix now\"."),
+           f"{plural(len(apps), 'app')}. {n(len(now))} are marked High priority."),
         qa("Which app should I update first?",
            f"{top['app']}: {n(top.get('cves'))} CVEs"
            + (f", fix by {day(top['fix_by'])}" if top.get("fix_by") else "") + f". It is on {devices}.",

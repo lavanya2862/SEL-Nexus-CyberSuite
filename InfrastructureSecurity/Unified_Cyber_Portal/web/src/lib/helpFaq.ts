@@ -50,7 +50,7 @@ export const SCREENS: Record<ScreenKey, Screen> = {
   },
   weak: {
     name: 'Vulnerabilities',
-    placeholder: 'For example: how many did we fix since last time?',
+    placeholder: 'For example: how many were remediated since last time?',
     questions: ['How many vulnerabilities do we have?', 'Which VM has the most?'],
   },
   quality: {
@@ -59,14 +59,14 @@ export const SCREENS: Record<ScreenKey, Screen> = {
     questions: ['Can I trust today’s numbers?', 'When was the data last refreshed?'],
   },
   fixes: {
-    name: 'Fix',
-    placeholder: 'For example: which fix is due soonest?',
+    name: 'Remediation',
+    placeholder: 'For example: which remediation is due soonest?',
     questions: ['How many apps need updating?', 'Which app should I update first?'],
   },
   progress: {
-    name: 'Fix progress',
-    placeholder: 'For example: which computer has the most fixes waiting?',
-    questions: ['How many fixes are done?', 'Did any fix fail?'],
+    name: 'Remediation progress',
+    placeholder: 'For example: which computer has the most pending remediations?',
+    questions: ['How many remediations are complete?', 'Did any remediation fail?'],
   },
   respond: {
     name: 'Alert triage',

@@ -272,7 +272,7 @@ function AffectDetail({ e, story }: { e: ExplorerRow; story: Story | null }) {
       <section>
         {resolution ? <Resolve r={resolution} /> : (
           <>
-            <h3 className="flex items-center gap-2 text-sm font-semibold">How to fix {t.ai_status === 'done' && <AiChip origin="ai" />}</h3>
+            <h3 className="flex items-center gap-2 text-sm font-semibold">Remediation {t.ai_status === 'done' && <AiChip origin="ai" />}</h3>
             {t.actions.length
               ? <ol className="mt-1.5 list-decimal space-y-1 pl-5 text-sm text-ink-2 marker:text-ink-3">{t.actions.map((a) => <li key={a}>{a}</li>)}</ol>
               : <p className="mt-1.5 text-sm text-ink-3">No steps available yet; they will be generated in the next Threat Intel run.</p>}
@@ -282,7 +282,7 @@ function AffectDetail({ e, story }: { e: ExplorerRow; story: Story | null }) {
         <div className="mt-3 flex flex-wrap gap-2">
           {fixApp && (
             <Link to={`/fixes?sw=${encodeURIComponent(fixApp)}`} title="Open in Remediation" className="inline-flex items-center gap-1 rounded-md bg-blue/15 px-2.5 py-1.5 text-xs font-semibold text-sky transition-colors hover:bg-blue/25">
-              <Zap className="size-3" /> Fix it
+              <Zap className="size-3" /> Remediate
             </Link>
           )}
           <Link to={threatHref(e.id)} className="inline-flex items-center gap-1 rounded-md border border-hairline px-2.5 py-1.5 text-xs font-medium hover:bg-well">Full details <ArrowRight className="size-3" /></Link>

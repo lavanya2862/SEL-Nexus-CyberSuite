@@ -134,8 +134,8 @@ function ToDo({ c }: { c: Uc4Case }) {
 /* ───────── basis for the classification ───────── */
 
 const INVESTIGATION_WORDS: Record<string, string> = {
-  pendingApproval: 'waiting for approval', running: 'running', successfullyRemediated: 'fixed by Defender', benign: 'found nothing harmful',
-  failed: 'failed', partiallyRemediated: 'partly fixed by Defender', terminatedByUser: 'stopped by a person', queued: 'queued',
+  pendingApproval: 'waiting for approval', running: 'running', successfullyRemediated: 'remediated by Defender', benign: 'found nothing harmful',
+  failed: 'failed', partiallyRemediated: 'partially remediated by Defender', terminatedByUser: 'stopped by a person', queued: 'queued',
   partiallyInvestigated: 'partly investigated', terminatedBySystem: 'stopped by Defender', innerFailure: 'failed',
 }
 const VERDICT_TONE: Record<string, 'bad' | 'warn' | undefined> = { malicious: 'bad', suspicious: 'warn' }

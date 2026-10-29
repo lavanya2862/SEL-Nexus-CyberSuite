@@ -20,7 +20,7 @@ from uc1.config import Settings, read_csv
 from uc1.fix.state import FixState, event
 from uc1.store import Store, utcnow
 
-STAGES = {1: "Urgent", 2: "End-of-life", 3: "Other updates", 4: "No action needed"}
+STAGES = {1: "High priority", 2: "End of support", 3: "Routine update", 4: "No action needed"}
 ACTIONS = {"upgrade", "remove", "replace", "none"}
 PACKAGE_ID = re.compile(r"^[A-Za-z0-9.+_-]{1,80}$")
 PATTERN = re.compile(r"^[A-Za-z0-9 .+_()*{}-]{1,60}$")
@@ -227,7 +227,7 @@ def compute(store: Store, settings: Settings, catalog: dict[str, dict] | None = 
                         stage=cat["stage"], note=cat.get("note", ""))
         else:
             item.update(app=r["software_name"], action="none", winget_id="", choco_id="", match="", processes=[],
-                        stage=4, note="Not in config/fix_catalog.csv yet: add a row to make it fixable")
+                        stage=4, note="No remediation defined yet: add a row to config/fix_catalog.csv to enable automated remediation")
         if item["action"] != "none" and item["kev"] and item["stage"] > 1:
             item["stage"] = 1                                     # anything on the CISA KEV list is urgent
         items.append(item)
@@ -287,13 +287,13 @@ def verify(state: FixState, current_ids: set[str], inventory_at: datetime | None
                 counts["verified"] += 1
             elif fid not in current_ids and status in ("approved", "saved") and after(decided_at) and seen_since(f, decided_at):
                 f.update(status="gone", verified_at=now.isoformat())
-                event(data, f"{_label(f)} disappeared from Defender before UC1 fixed it", fid)
+                event(data, f"{_label(f)} no longer reported by Defender before the Threat Intel Agent remediated it", fid)
                 counts["gone"] += 1
             elif fid in current_ids and status == "done" and (f.get("item") or {}).get("kind") != "response" \
                     and after(done_at) and seen_since(f, done_at) and \
                     now - datetime.fromisoformat(done_at) > STILL_THERE_AFTER:
                 f["status"] = "still_there"
-                event(data, f"Still listed by Defender 24 h after the fix: {_label(f)}", fid)
+                event(data, f"Still reported by Defender 24 h after remediation: {_label(f)}", fid)
                 counts["still_there"] += 1
     return counts
 
@@ -324,6 +324,9 @@ def refresh(store: Store, settings: Settings, source: str | None = None) -> dict
     Every row keeps found_by = {agent: when that agent's run first flagged it} (None = before this was recorded).
     New fixes for this run = fixable rows in the agent's domain (DOMAINS) that this agent had not flagged yet and
     nobody has decided on (plan["new_ids"]); the agent's Fix stage shows them as cards to fix or save for later.
+    A fix is one app version on one computer, so new vulnerabilities in a version already flagged join that earlier
+    fix instead of making a new one: seen = {agent: vulnerabilities on the fix when that agent last looked}, and the
+    fixes that gained some since are "grew" ({fix_id: how many more}); the run page lists them apart from the new ones.
     A manual `fix-plan` (no source) flags nothing.
     """
     settings.fix_dir.mkdir(parents=True, exist_ok=True)
@@ -354,20 +357,31 @@ def refresh(store: Store, settings: Settings, source: str | None = None) -> dict
                 if belongs(item):
                     found.setdefault(agent, None)
         item["found_by"] = found
-    new_ids = []
+        item["seen"] = dict((old or {}).get("seen") or {})
+    new_ids, grew = [], {}
     if source:
         for item in fixable:
-            if DOMAINS[source](item) and source not in item["found_by"]:
+            if not DOMAINS[source](item):
+                continue
+            if source not in item["found_by"]:
                 item["found_by"][source] = now
                 if item["fix_id"] not in decided:
                     new_ids.append(item["fix_id"])
+            else:
+                old = previous.get(item["fix_id"]) or {}
+                before = item["seen"].get(source, old.get("findings"))   # plans from before "seen": the last plan's count
+                if before is not None and (item.get("findings") or 0) > before:
+                    grew[item["fix_id"]] = item["findings"] - before
+            item["seen"][source] = item.get("findings") or 0
     plan = {"generated_at": now, "inventory_at": inventory_at.isoformat() if inventory_at else None,
-            "stages": STAGES, "items": items, "new_ids": new_ids}
+            "stages": STAGES, "items": items, "new_ids": new_ids, "grew": grew}
     (settings.fix_dir / "plan.json").write_text(json.dumps(plan, default=str, ensure_ascii=False), encoding="utf-8")
     waiting = sum(1 for i in fixable if i["fix_id"] not in decided and i["fix_id"] not in new_ids)
     saved = sum(1 for f in decided.values() if f.get("status") == "saved")
     return {"items": len(items), "fixable": len(fixable), "urgent": sum(1 for i in fixable if i["stage"] == 1),
             "new": len(new_ids), "new_ids": new_ids[:200], "waiting": waiting, "saved": saved,
+            # earlier fixes with new vulnerabilities from this run, most added first
+            "grew": dict(sorted(grew.items(), key=lambda kv: -kv[1])[:200]), "grew_vulns": sum(grew.values()),
             # what kind of fixes are new, so the run page links to the right Fix & protect tab
             "new_settings": sum(1 for i in fixable if i["fix_id"] in new_ids and i.get("kind") == "setting"),
             "new_apps": sum(1 for i in fixable if i["fix_id"] in new_ids and not i.get("kind")), **checked}

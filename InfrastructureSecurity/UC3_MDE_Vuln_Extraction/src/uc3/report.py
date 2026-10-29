@@ -174,8 +174,8 @@ def summary_tiles(t: dict) -> list[tuple]:
         (f"{t['unique']:,}", "Vulnerabilities in Defender", f"found on {t['machines']} computers", ds.BLUE),
         (f"{t['new']:,}", "New in this run", "not there in the last run", ds.SERIOUS),
         (f"{t['fixed']:,}", "Fixed since the last run", "no longer found by Defender", ds.GOOD),
-        (f"{t['critical']:,}", "Critical vulnerabilities", "most dangerous: fix these first", ds.BAD),
-        (f"{t['high']:,}", "High vulnerabilities", "fix after the critical ones", ds.SERIOUS),
+        (f"{t['critical']:,}", "Critical vulnerabilities", "most dangerous: remediate these first", ds.BAD),
+        (f"{t['high']:,}", "High vulnerabilities", "remediate after the critical ones", ds.SERIOUS),
         (t["quality"], "Data quality", {"PASS": "every automatic check passed", "WARN": "some checks need a look",
                                         "FAIL": "a check failed"}.get(t["quality"], ""),
          {"PASS": ds.GOOD, "WARN": ds.WARN, "FAIL": ds.BAD}.get(t["quality"], ds.INK_3)),
@@ -186,7 +186,7 @@ def guide_sections(g: dict) -> list[tuple]:
     ai, fix = g.get("ai") or {}, g.get("fix") or {}
     cmd = fix.get("command")
     return [("What is wrong", ai.get("what_is_wrong")), ("Worst case", ai.get("worst_case")),
-            ("Why now", ai.get("why_now")), ("Fix", fix.get("action")), ("Steps", ai.get("steps") or []),
+            ("Why now", ai.get("why_now")), ("Remediation", fix.get("action")), ("Steps", ai.get("steps") or []),
             ("Command", ("code", cmd) if cmd else None), ("How to check it worked", ai.get("verify")),
             ("Side effects", ai.get("side_effects"))]
 
@@ -207,11 +207,11 @@ def build_report(settings: Settings, d: dict | None = None) -> dict:
     # 1. Summary
     r.h1("1. Summary")
     r.tiles(summary_tiles(t))
-    r.tiles([(f"{t['overdue']:,}", "Overdue", "past their fix-by date", ds.BAD),
-             (f"{t['p1']:,}", "Priority P1", "fix first (see appendix)", ds.SERIOUS),
+    r.tiles([(f"{t['overdue']:,}", "Overdue", "past their due date", ds.BAD),
+             (f"{t['p1']:,}", "Priority P1", "remediate first (see appendix)", ds.SERIOUS),
              (f"{t['app_versions']:,}", "App versions to update", "each clears several findings", ds.BLUE)])
     r.para(f"This scan found {t['unique']:,} vulnerabilities on {t['machines']} computers. "
-           f"{t['critical']:,} are Critical and {t['high']:,} High; {t['overdue']:,} are past their fix-by date. "
+           f"{t['critical']:,} are Critical and {t['high']:,} High; {t['overdue']:,} are past their due date. "
            f"Since the last scan, {t['new']:,} appeared and {t['fixed']:,} were fixed.")
     sev_names = [*SEVS, "Unrated"]
     sev_vals = [d["sev"].get(s, 0) for s in sev_names]
@@ -219,7 +219,7 @@ def build_report(settings: Settings, d: dict | None = None) -> dict:
     r.images_side_by_side([
         ds.donut(sev_names, sev_vals, [ds.SEVERITY[s] for s in sev_names], f"{sum(sev_vals):,}", "by severity"),
         ds.donut(list(prio_names), [d["prio"].get(p, 0) for p in prio_names], [ds.BAD, ds.SERIOUS, ds.WARN, "16A34A"],
-                 f"{t['p1']:,}", "P1 to fix first")])
+                 f"{t['p1']:,}", "P1 to remediate first")])
     if d["by_opco"]:
         r.image(ds.stacked([o["opco"] for o in d["by_opco"]], {s: [o[s.lower()] for o in d["by_opco"]] for s in SEVS},
                            ds.SEVERITY, "Vulnerabilities by OpCo and severity", height=2.4))
@@ -228,21 +228,21 @@ def build_report(settings: Settings, d: dict | None = None) -> dict:
                         ds.SEVERITY, "Open vulnerabilities per scan"))
 
     # 2. Fix these first
-    r.h1("2. Fix these first")
-    r.para("One update or setting change clears many findings at once. These are ordered by urgency, then by how many "
-           "findings each fix clears.")
+    r.h1("2. Remediate these first")
+    r.para("One update or setting change clears many findings at once. These are ordered by priority, then by how many "
+           "findings each remediation clears.")
     apps = sorted(d["fixes"].get("apps", []), key=lambda a: (a["urgency"]["level"], -a["findings"]))
     if apps:
         top = apps[:10]
         r.image(ds.hbar([a["app"][:40] for a in top], [a["findings"] for a in top],
                         [URGENCY_COLOURS.get(a["urgency"]["level"], ds.BLUE) for a in top],
-                        "Findings each fix clears (top 10)"))
-        r.table(["App", "Urgency", "Fix", "Findings", "Critical", "High", "Fix by"],
+                        "Findings each remediation clears (top 10)"))
+        r.table(["App", "Priority", "Remediation", "Findings", "Critical", "High", "Due date"],
                 [[a["app"], a["urgency"]["label"], (a.get("fix") or {}).get("action"), f"{a['findings']:,}", a["critical"],
                   a["high"], fmt_date(a.get("fix_by"))] for a in apps[:20]],
                 [4, 4, 5, 1.6, 1.5, 1.4, 2.2])
     else:
-        r.note("The fix guide has not been built for this scan.")
+        r.note("The remediation guide has not been built for this scan.")
 
     # 3. Where the risk is
     r.h1("3. Where the risk is")
@@ -260,11 +260,11 @@ def build_report(settings: Settings, d: dict | None = None) -> dict:
     r.h1("4. Deadlines and the oldest findings")
     r.image(ds.stacked(list(AGES), {s: [(d["ages"].get(a) or {}).get(s.lower(), 0) for a in AGES] for s in SEVS},
                        ds.SEVERITY, "How long findings have been open (days)", height=2.3))
-    r.table(["Severity", "Fix within (days)", "Open", "Overdue"],
+    r.table(["Severity", "Remediation SLA (days)", "Open", "Overdue"],
             [[s["severity"], s["days"] if s["days"] is not None else "no deadline", f"{s['open']:,}", f"{s['overdue']:,}"]
              for s in d["sla"]], [3, 3, 2.5, 2.5], severity_col=0)
     r.h2("Oldest Critical and High findings")
-    r.table(["CVE", "App", "Computer", "Severity", "Open (days)", "Fix by", "Overdue"],
+    r.table(["CVE", "App", "Computer", "Severity", "Open (days)", "Due date", "Overdue"],
             [[v["cve_id"], f"{v['software_name']} {v['software_version']}", v["device_name"], v["severity"], v["age_days"],
               fmt_date(v["fix_by"]), "Yes" if v["sla_breached"] else ""] for v in d["oldest"]],
             [3, 4, 2.6, 1.8, 1.6, 2.2, 1.4], severity_col=3, colour_cols={6: {"Yes": ds.BAD}})
@@ -278,19 +278,19 @@ def build_report(settings: Settings, d: dict | None = None) -> dict:
     if ch["New"] or ch["Fixed"]:
         r.image(ds.stacked(["New", "Fixed"], {s: [sum(x["severity"] == s for x in ch["New"]),
                                                    sum(x["severity"] == s for x in ch["Fixed"])] for s in SEVS},
-                           ds.SEVERITY, "New and fixed by severity", horizontal=True, height=1.7))
+                           ds.SEVERITY, "New and remediated by severity", horizontal=True, height=1.7))
     r.h2("New Critical and High vulnerabilities")
     new_top = [x for x in ch["New"] if x["severity"] in ("Critical", "High")]
     r.table(["CVE", "App", "Version", "Computer", "Severity", "CVSS", "Exploit"],
             [[x["cve"], x["app"], x["version"], x["device"], x["severity"], x["cvss"], x["exploit"]] for x in new_top[:40]],
             [3, 3.5, 2.5, 2.5, 1.7, 1.2, 2.4], severity_col=4)
     if len(new_top) > 40:
-        r.note(f"Showing 40 of {len(new_top):,}. The Excel workbook lists every new and fixed vulnerability.")
-    r.h2("Fixed, by app")
+        r.note(f"Showing 40 of {len(new_top):,}. The Excel workbook lists every new and remediated vulnerability.")
+    r.h2("Remediated, by app")
     fixed_apps: dict[str, list] = {}
     for x in ch["Fixed"]:
         fixed_apps.setdefault(f"{x['app']} {x['version']}", []).append(x)
-    r.table(["App and version", "Fixed", "Critical", "High", "Computers"],
+    r.table(["App and version", "Remediated", "Critical", "High", "Computers"],
             [[k, len(v), sum(x["severity"] == "Critical" for x in v), sum(x["severity"] == "High" for x in v),
               ", ".join(sorted({x["device"] for x in v}))] for k, v in sorted(fixed_apps.items(), key=lambda kv: -len(kv[1]))[:30]],
             [6, 1.6, 1.6, 1.6, 4])
@@ -303,7 +303,7 @@ def build_report(settings: Settings, d: dict | None = None) -> dict:
 
     # 7. Fix guides
     r.page_break()
-    r.h1("7. How to fix each one (AI fix guides)")
+    r.h1("7. Remediation for each one (AI remediation guides)")
     r.para("One guide per vulnerable app and per weak security setting. Versions, CVEs, computers, deadlines and commands "
            "come from the data; the AI explains them in plain words. Check the steps before acting.")
     r.h2(f"Apps ({len(apps)})")
@@ -339,9 +339,9 @@ def build_report(settings: Settings, d: dict | None = None) -> dict:
         "A brand-new CVE Microsoft has not rated yet is shown as Unrated.",
         "Priority adds whether a working exploit exists: P1 = Critical, or High with a verified exploit or one in attack "
         "kits; P2 = High, or Medium with such an exploit; P3 = Medium or Unrated; P4 = Low.",
-        "Fix-by date = the day Defender first saw it + the deadline for its severity: Critical 15 days, High 30, "
+        "Due date = the day Defender first saw it + the deadline for its severity: Critical 15 days, High 30, "
         "Medium 90, Low 180. After that it is overdue.",
-        "New and Fixed come from Defender's own change list for this scan.",
+        "New and Remediated come from Defender's own change list for this scan.",
     ])
     out = settings.reporting_dir / f"Vulnerability_Report_{d['snapshot']}.docx"
     return r.save(out)

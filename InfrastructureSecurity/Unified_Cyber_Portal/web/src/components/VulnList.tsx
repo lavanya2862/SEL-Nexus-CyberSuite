@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils'
 type Status = 'open' | 'nofix' | 'waiting' | 'approved' | 'running' | 'failed' | 'checking' | 'fixed'
 const STATUS: Record<Status, { label: string; color: string }> = {
   open: { label: 'Open', color: statusColor.critical },
-  nofix: { label: 'No fix from the vendor yet', color: statusColor.warning },
+  nofix: { label: 'No security update available', color: statusColor.warning },
   waiting: { label: 'Waiting for approval', color: statusColor.critical },
   approved: { label: 'Remediation approved', color: 'var(--blue)' },
   running: { label: 'Remediation running', color: 'var(--blue)' },
@@ -135,8 +135,10 @@ const PAGE = 50
 const WHEN: [string, string][] = [['', 'Found: any time'], ['7', 'Found: last 7 days'], ['30', 'Found: last 30 days'], ['90', 'Found: last 90 days'], ['pick', 'Found: pick dates…']]
 const isoDaysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10)
 
-export function VulnList({ app, software, data, fixRows, engine, startAgent, onClose, prev, next }: {
+export function VulnList({ app, software, data, fixRows, engine, startAgent, startDevice, onClose, prev, next }: {
   app: Uc3FixApp; software: string; data: Uc3Data; fixRows: FixRow[]; engine: boolean; startAgent?: 'uc3' | 'uc1' | null
+  /** open on one computer (a run page's card) */
+  startDevice?: string
   onClose: () => void; prev?: { name: string; go: () => void }; next?: { name: string; go: () => void }
 }) {
   const shown = useShownName()
@@ -151,13 +153,13 @@ export function VulnList({ app, software, data, fixRows, engine, startAgent, onC
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [status, setStatus] = useState('')
-  const [device, setDevice] = useState('')
+  const [device, setDevice] = useState(startDevice ?? '')
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null)
   const [page, setPage] = useState(0)
   const [openKey, setOpenKey] = useState<string | null>(null)
   useEffect(() => { setPage(0) }, [st, ag, q, sev, when, from, to, status, device, sort, software])
   // another app: keep the four quick filters, drop what only fits the last app (its CVEs, computers, dates)
-  useEffect(() => { setOpenKey(null); setQ(''); setSev(''); setWhen(''); setFrom(''); setTo(''); setStatus(''); setDevice('') }, [software])
+  useEffect(() => { setOpenKey(null); setQ(''); setSev(''); setWhen(''); setFrom(''); setTo(''); setStatus(''); setDevice(startDevice ?? '') }, [software, startDevice])
 
   const devices = useMemo(() => [...new Set(rows.map((r) => r.device))].sort(), [rows])
   const statuses = useMemo(() => ORDER.filter((s) => rows.some((r) => r.status === s)), [rows])
@@ -189,7 +191,7 @@ export function VulnList({ app, software, data, fixRows, engine, startAgent, onC
           <div className="w-full min-w-0 sm:w-auto sm:flex-1">
             <DialogTitle className="text-lg font-semibold">{app.app}: every vulnerability</DialogTitle>
             <DialogDescription className="text-sm text-ink-3">
-              {computers} computer{computers === 1 ? '' : 's'} · {num(fixedTotal)} of {num(rows.length)} fixed · {app.fix.action}
+              {computers} computer{computers === 1 ? '' : 's'} · {num(fixedTotal)} of {num(rows.length)} remediated · {app.fix.action}
             </DialogDescription>
           </div>
           <div className="flex items-center gap-1.5">
@@ -334,7 +336,7 @@ function Row({ r, n, app, shown, open, onToggle, newsLoading }: {
                 <p className="flex gap-2">
                   <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', UC_DOT.uc3)} />
                   <span><b className="font-semibold">{r.vulnFound ? longDate(r.vulnFound) : 'Date not recorded'}</b>: the {UC_NAME.uc3} found it in Defender's scan of {shown(r.device)} ({app.app} {r.versions.join(', ')}).
-                    {r.status === 'fixed' && r.fixedOn && <> Defender stopped listing it on {longDate(r.fixedOn)}, so it is fixed.</>}</span>
+                    {r.status === 'fixed' && r.fixedOn && <> Defender stopped listing it on {longDate(r.fixedOn)}, so it is remediated.</>}</span>
                 </p>
                 {r.news.length ? r.news.slice(0, 4).map((t) => (
                   <p key={t.id} className="mt-2 flex gap-2">
@@ -355,7 +357,7 @@ function Row({ r, n, app, shown, open, onToggle, newsLoading }: {
                 <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-3">Remediation</h4>
                 <p>{app.fix.action}{r.advisory && <span className="text-ink-3"> (vendor advisory {r.advisory})</span>}.</p>
                 {r.fixedElsewhere.map((f) => (
-                  <p key={f.version} className="mt-1.5 text-xs text-ink-3">Already fixed for {app.app} {f.version} on this computer on {longDate(f.on)}; {app.app} {r.versions.join(', ')} still has it.</p>
+                  <p key={f.version} className="mt-1.5 text-xs text-ink-3">Already remediated for {app.app} {f.version} on this computer on {longDate(f.on)}; {app.app} {r.versions.join(', ')} still has it.</p>
                 ))}
               </div>
               <div>

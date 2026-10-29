@@ -40,8 +40,8 @@ export function AttackResponses() {
   if (!v) {
     return (
       <Panel className="p-6">
-        {down ? <GettingReady what="The fix engine" {...auto} /> : view.error
-          ? <p className="text-sm" style={{ color: statusColor.critical }}>Could not load the fixes: {(view.error as Error).message}</p>
+        {down ? <GettingReady what="The remediation engine" {...auto} /> : view.error
+          ? <p className="text-sm" style={{ color: statusColor.critical }}>Could not load remediation tasks: {(view.error as Error).message}</p>
           : <div className="h-40 animate-pulse" />}
       </Panel>
     )
@@ -123,7 +123,7 @@ export function AttackResponses() {
                 </Link>
                 {fixable.length > 0 && (
                   <button onClick={() => approve(fixable.map((r) => r.fix_id))} disabled={busy} className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
-                    <Zap className="size-3.5" /> Fix all {fixable.length}
+                    <Zap className="size-3.5" /> Remediate all ({fixable.length})
                   </button>
                 )}
               </div>

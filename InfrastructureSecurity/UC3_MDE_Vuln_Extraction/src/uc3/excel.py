@@ -1,8 +1,8 @@
 """Vulnerability Report workbook for one scan (opens in Excel).
 
 data/reporting/Vulnerability_Report_<snapshot>.xlsx. Same numbers as the Word/PDF report (report.gather):
-Summary (number tiles + charts), Vulnerabilities (every one, with its fix beside it), Fix plan (AI), New this scan,
-Fixed this scan, Computers, Top CVEs, Apps to update, Deadlines, Trend, Data quality, How ratings work.
+Summary (number tiles + charts), Vulnerabilities (every one, with its remediation beside it), Remediation plan (AI), New this scan,
+Remediated this scan, Computers, Top CVEs, Apps to update, Deadlines, Trend, Data quality, How ratings work.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from uc3.report import AGES, EXPLOIT_WORDS, SEVS, URGENCY_COLOURS, gather, run_l
 
 WHITE = "FFFFFF"
 STATUS = {"PASS": ds.GOOD, "WARN": ds.WARN, "FAIL": ds.BAD, "INFO": ds.BLUE}
-FIX_SHEET = "Fix plan (AI)"
+FIX_SHEET = "Remediation plan (AI)"
 
 
 def _fill(colour: str) -> PatternFill:
@@ -165,16 +165,16 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
     for col in range(1, 13):
         ws.column_dimensions[get_column_letter(col)].width = 14
     row = _tiles(ws, 4, summary_tiles(t))
-    row = _tiles(ws, row, [(f"{t['overdue']:,}", "Overdue", "past their fix-by date", ds.BAD),
-                           (f"{t['p1']:,}", "Priority P1", "fix first", ds.SERIOUS),
+    row = _tiles(ws, row, [(f"{t['overdue']:,}", "Overdue", "past their due date", ds.BAD),
+                           (f"{t['p1']:,}", "Priority P1", "remediate first", ds.SERIOUS),
                            (f"{t['app_versions']:,}", "App versions to update", "each clears several findings", ds.BLUE),
-                           (f"{len(apps) + len(settings_cards):,}", "Fix guides", "one per app or setting", ds.BLUE)])
+                           (f"{len(apps) + len(settings_cards):,}", "Remediation guides", "one per app or setting", ds.BLUE)])
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=12)
     c = ws.cell(row=row, column=1, value=(
         f"This scan found {t['unique']:,} vulnerabilities on {t['machines']} computers. "
         f"{t['critical']:,} are Critical and {t['high']:,} High; "
         f"{t['overdue']:,} are past their fix-by date. Since the last scan, {t['new']:,} appeared and {t['fixed']:,} were fixed. "
-        f"Every vulnerability is listed on the 'Vulnerabilities' sheet with its fix."))
+        f"Every vulnerability is listed on the 'Vulnerabilities' sheet with its remediation."))
     c.alignment, c.font = Alignment(wrap_text=True, vertical="top"), Font(size=10, color=ds.INK)
     ws.row_dimensions[row].height = 44
     row += 2
@@ -221,11 +221,11 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
     # ---- Vulnerabilities: every one, with its fix
     ws = wb.create_sheet("Vulnerabilities")
     headers = ["Computer", "OpCo", "App", "Version", "CVE", "Severity", "CVSS", "Priority", "Exploit",
-               "First seen", "Open (days)", "Fix within (days)", "Fix by", "Overdue",
-               "Recommended update", "Update available", "Urgency", "Fix", "Command", "What is wrong", "Steps",
-               "How to check", "Fix guide"]
-    _band(ws, f"All vulnerabilities in this scan ({len(d['vulns']):,})", subtitle + "  ·  each row carries its fix; "
-          "'Fix guide' opens the full guide", len(headers))
+               "First seen", "Open (days)", "Remediation SLA (days)", "Due date", "Overdue",
+               "Recommended update", "Update available", "Priority", "Remediation", "Command", "What is wrong", "Steps",
+               "How to check", "Remediation guide"]
+    _band(ws, f"All vulnerabilities in this scan ({len(d['vulns']):,})", subtitle + "  ·  each row carries its remediation; "
+          "'Remediation guide' opens the full guide", len(headers))
     rows = []
     for v in d["vulns"]:
         g = v["guide"] or {}
@@ -251,12 +251,12 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
             c.font = Font(color=ds.BLUE, underline="single")
     ws.freeze_panes = "F5"
 
-    # ---- Fix plan (AI)
+    # ---- Remediation plan (AI)
     ws = wb.create_sheet(FIX_SHEET)
-    headers = ["#", "Kind", "Urgency", "App / setting", "Versions / category", "Fix type", "Fix by", "Computers", "CVEs",
-               "Critical", "High", "Fix", "Command", "What is wrong", "Worst case", "Why now", "Steps",
+    headers = ["#", "Kind", "Priority", "App / setting", "Versions / category", "Remediation type", "Due date", "Computers", "CVEs",
+               "Critical", "High", "Remediation", "Command", "What is wrong", "Worst case", "Why now", "Steps",
                "How to check", "Side effects", "Written by"]
-    _band(ws, f"Fix plan: {len(apps)} apps and {len(settings_cards)} security settings",
+    _band(ws, f"Remediation plan: {len(apps)} apps and {len(settings_cards)} security settings",
           "Facts, versions, deadlines and commands come from the data; the AI explains them. Check before acting.", len(headers))
 
     def by(g: dict) -> str:
@@ -282,7 +282,7 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
     ws.freeze_panes = "E5"
 
     # ---- New / Fixed this scan
-    for status, title, table_name in (("New", "New in this scan", "NewThisScan"), ("Fixed", "Fixed in this scan", "FixedThisScan")):
+    for status, title, table_name in (("New", "New in this scan", "NewThisScan"), ("Fixed", "Remediated in this scan", "FixedThisScan")):
         ws = wb.create_sheet(title)
         items = d["changes"][status]
         headers = ["Computer", "OpCo", "App", "Version", "CVE", "Severity", "CVSS", "Exploit", "Recommended update",
@@ -322,7 +322,7 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
     # ---- Apps to update
     ws = wb.create_sheet("Apps to update")
     guides = {a["key"]: a for a in apps}
-    headers = ["App", "Version", *SEVS, "Findings cleared", "Computers", "Urgency", "Fix", "Command", "Recommended update"]
+    headers = ["App", "Version", *SEVS, "Findings cleared", "Computers", "Priority", "Remediation", "Command", "Recommended update"]
     _band(ws, f"App versions to update ({len(d['apps'])})", "Updating one app version clears all of its findings", len(headers))
     rows = []
     for a in d["apps"]:
@@ -344,8 +344,8 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
 
     # ---- Deadlines
     ws = wb.create_sheet("Deadlines")
-    _band(ws, "Deadlines and age", "Fix-by date = first seen + the deadline for its severity", 10)
-    nxt = _table(ws, 4, "Deadlines", ["Severity", "Fix within (days)", "Open", "Overdue"],
+    _band(ws, "Deadlines and age", "Due date = first seen + the deadline for its severity", 10)
+    nxt = _table(ws, 4, "Deadlines", ["Severity", "Remediation SLA (days)", "Open", "Overdue"],
                  [[s["severity"], s["days"] if s["days"] is not None else "no deadline", s["open"], s["overdue"]] for s in d["sla"]],
                  [16, 16, 12, 12], {0: sev_colours}, freeze=False)
     age_top = nxt + 1
@@ -355,7 +355,7 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
           Reference(ws, min_col=1, min_row=age_top + 1, max_row=age_top + 4), [ds.SEVERITY[s] for s in SEVS], "G4")
     old_top = age_top + 8
     ws.cell(row=old_top - 1, column=1, value="Oldest Critical and High findings").font = Font(bold=True, size=11, color=ds.NAVY)
-    _table(ws, old_top, "Oldest", ["CVE", "App", "Computer", "Severity", "Open (days)", "Fix by", "Overdue"],
+    _table(ws, old_top, "Oldest", ["CVE", "App", "Computer", "Severity", "Open (days)", "Due date", "Overdue"],
            [[v["cve_id"], f"{v['software_name']} {v['software_version']}", v["device_name"], v["severity"], v["age_days"],
              v["fix_by"], _yes(v["sla_breached"])] for v in d["oldest"]],
            [16, 16, 12, 12, 12, 12, 10], {3: sev_colours, 6: {"Yes": ds.BAD}}, freeze=False)
@@ -399,11 +399,11 @@ def build_excel(settings: Settings, d: dict | None = None) -> Path:
         ("Priority P1", "Critical, or High with a verified exploit or one in attack kits."),
         ("Priority P2", "High, or Medium with such an exploit."),
         ("Priority P3 / P4", "P3 = Medium or Unrated; P4 = Low."),
-        ("Fix by", "The day Defender first saw it + the deadline for its severity: Critical 15 days, High 30, Medium 90, "
+        ("Due date", "The day Defender first saw it + the deadline for its severity: Critical 15 days, High 30, Medium 90, "
                    "Low 180. After that it is overdue."),
-        ("New / Fixed", "From Defender's own change list for this scan."),
+        ("New / Remediated", "From Defender's own change list for this scan."),
         ("Repeats", "Rows Defender sent twice in its export; counted once."),
-        ("Fix guides", "One per app and per weak setting. Versions, CVEs, computers and commands come from the data; the AI "
+        ("Remediation guides", "One per app and per weak setting. Versions, CVEs, computers and commands come from the data; the AI "
                        "only explains them."),
     ], 4):
         ws.cell(row=r, column=1, value=k).font = Font(bold=True, color=ds.NAVY)

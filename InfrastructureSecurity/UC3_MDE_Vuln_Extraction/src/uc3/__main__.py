@@ -262,7 +262,7 @@ def cmd_ai_fixes(args: argparse.Namespace) -> int:
         print(f"  {i:>2}. [{a['urgency']['label']}] {a['app']} ({', '.join(v['version'] for v in a['versions'])}): "
               f"{a['cves']} CVEs, {len(a['devices'])} device(s) - {a['source']}")
     print(f"\n  Portal data   : {build_dashboard(settings)}  (the portal's Fix page)")
-    print(f"  Excel summary : {build_excel(settings)}  (sheet 'Fix plan (AI)')")
+    print(f"  Excel summary : {build_excel(settings)}  (sheet 'Remediation plan (AI)')")
     return 0
 
 

@@ -105,7 +105,7 @@ export function Timeline({ s }: { s: Story }) {
       : s.match === 'early'
         ? { label: 'Defender', when: null, note: `not listed yet · waiting ${s.waiting} day${s.waiting === 1 ? '' : 's'}`, tone: 'warn' }
         : { label: 'Defender', when: null, note: 'not reported (14+ days)', tone: 'muted' },
-    s.fixed ? { label: 'Fixed', when: s.fixed, note: 'gone from Defender', tone: 'good' } : { label: 'Fixed', when: null, note: 'not yet', tone: 'muted' },
+    s.fixed ? { label: 'Remediated', when: s.fixed, note: 'gone from Defender', tone: 'good' } : { label: 'Remediated', when: null, note: 'not yet', tone: 'muted' },
   ]
   return (
     <div className="rounded-xl bg-well px-4 py-3">

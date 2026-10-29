@@ -1,11 +1,11 @@
 """AI Fix Guide: one fix card per vulnerable app AND per failing security setting, from real Defender data, explained by Gemini.
 
 Card kinds:
-- app      one per vulnerable app (all its versions). Fix type, first match wins:
-           "Upgrade to a supported version"      a version is past end of support (no more fixes will ever come)
-           "Install the Windows update"          the "app" is Windows itself: an OS update through Windows Update/WSUS/Intune
-           "No fix yet: protect it another way"  Defender says no security update exists for any of its CVEs
-           "Update the app"                      everything else
+- app      one per vulnerable app (all its versions). Remediation type (Defender's words), first match wins:
+           "Software upgrade"     a version is past end of support (no more security updates will ever come)
+           "OS security update"   the "app" is Windows itself: an OS update through Windows Update/WSUS/Intune
+           "Attention required"   Defender says no security update exists for any of its CVEs
+           "Software update"      everything else
            Software past (or near) end of support with no CVE today gets a card too.
 - setting  one per failing Defender security-configuration check (posture.py). Fix types: change a setting, turn on
            a protection, turn on an attack-protection rule, fix an account, fix a service path. Commands come from
@@ -52,7 +52,7 @@ KB_QUERY = """DeviceTvmSoftwareVulnerabilities
 | project CveId, PublishedDate, Description = substring(VulnerabilityDescription, 0, 700)"""
 KB_MAX_AGE = timedelta(hours=24)
 TOP_CVES = 12           # CVE descriptions per app sent to the AI (most urgent first)
-PROMPT_VERSION = 2      # bump to re-ask the AI for every card after changing the prompts
+PROMPT_VERSION = 3      # bump to re-ask the AI for every card after changing the prompts
 
 SYSTEM = """You help an IT support team fix vulnerable software on Windows PCs. The readers have NO security
 background: write short, calm, plain English, explain any technical word, never use acronyms without explaining them.
@@ -68,9 +68,11 @@ Rules:
   it must be replaced by a supported version (test the programs that depend on it first).
 - If cves_without_vendor_fix is given, that many weaknesses have NO update from the vendor yet: say so plainly, give
   steps that reduce the risk until the fix ships, and never promise that an update fixes them.
-- If fix_type is "Install the Windows update", the fix is a Windows (operating system) update installed through
+- If fix_type is "OS security update", the remediation is a Windows (operating system) update installed through
   Windows Update, WSUS or Intune, usually with a restart; it is not an app update.
-- Never say the problem is fixed or safe; the next Defender scan confirms it.
+- Use Microsoft Defender's wording: remediate, remediation, software update, software upgrade, security update,
+  configuration change. Do not use the words "fix" or "urgent".
+- Never say the problem is remediated or safe; the next Defender scan confirms it.
 - Never say a vulnerability is actively exploited or used by attackers."""
 
 SCHEMA = {
@@ -78,7 +80,7 @@ SCHEMA = {
     "properties": {
         "what_is_wrong": {"type": "STRING", "description": "2-3 plain sentences, max 60 words: what these weaknesses let an attacker do, based on the CVE descriptions"},
         "worst_case": {"type": "STRING", "description": "One sentence, max 30 words: the worst realistic outcome if nothing is done"},
-        "why_now": {"type": "STRING", "description": "One sentence, max 30 words, explaining the urgency label using the facts (attacker use list, P1, overdue)"},
+        "why_now": {"type": "STRING", "description": "One sentence, max 30 words, explaining the priority label using the facts (attacker use list, P1, overdue)"},
         "steps": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "3 to 6 short numbered-free steps for the IT person, max 25 words each"},
         "verify": {"type": "STRING", "description": "Max 35 words: how to check it worked (version on the PC, then the next Defender scan)"},
         "side_effects": {"type": "STRING", "description": "Max 30 words: what users notice (restart, closed app, compatibility to test)"},
@@ -97,8 +99,10 @@ Rules:
   Administrator) and add that many PCs are done centrally with Group Policy or Intune, as Microsoft's remediation
   text describes. If 'command' is empty, turn Microsoft's remediation text into simple steps.
 - If user_impact is true, or fix_note warns about side effects, tell them to test on a few PCs first.
-- If defender_details lists items (for example services), say the fix applies to each of them.
-- Never say the problem is fixed or safe; the next Defender scan confirms it.
+- If defender_details lists items (for example services), say the configuration change applies to each of them.
+- Use Microsoft Defender's wording: remediate, remediation, configuration change. Do not use the words "fix" or
+  "urgent".
+- Never say the problem is remediated or safe; the next Defender scan confirms it.
 - Never say a vulnerability is actively exploited or used by attackers."""
 
 SETTING_SCHEMA = {
@@ -106,7 +110,7 @@ SETTING_SCHEMA = {
     "properties": {
         "what_is_wrong": {"type": "STRING", "description": "2-3 plain sentences, max 60 words: what this setting is and how attackers abuse it when it is wrong (from Microsoft's risk text)"},
         "worst_case": {"type": "STRING", "description": "One sentence, max 30 words: the worst realistic outcome if nothing is done"},
-        "why_now": {"type": "STRING", "description": "One sentence, max 30 words, explaining the urgency label (Microsoft's impact score, how many PCs)"},
+        "why_now": {"type": "STRING", "description": "One sentence, max 30 words, explaining the priority label (Microsoft's impact score, how many PCs)"},
         "steps": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "3 to 6 short numbered-free steps for the IT person, max 30 words each"},
         "verify": {"type": "STRING", "description": "Max 35 words: how to check it worked (the setting on the PC, then Defender's next scan)"},
         "side_effects": {"type": "STRING", "description": "Max 30 words: what users or other systems may notice; say 'None expected' only if the facts give no reason"},
@@ -115,8 +119,8 @@ SETTING_SCHEMA = {
 }
 
 OS_RE = re.compile(r"^windows_(?:\d+|server_\w+)$")   # Defender's names for Windows itself: windows_11, windows_server_2022
-FIX_UPGRADE, FIX_OS, FIX_NONE, FIX_UPDATE = ("Upgrade to a supported version", "Install the Windows update",
-                                             "No fix yet: protect it another way", "Update the app")
+FIX_UPGRADE, FIX_OS, FIX_NONE, FIX_UPDATE = ("Software upgrade", "OS security update", "Attention required",
+                                             "Software update")
 
 PRETTY = {"acrobat_reader_dc": "Adobe Acrobat Reader", "visual_studio_code": "Visual Studio Code", "meetings": "Zoom",
           "vlc_media_player": "VLC media player", "edge_chromium-based": "Microsoft Edge"}
@@ -194,12 +198,12 @@ def refresh_kb(settings: Settings, client=None) -> dict:
 
 def urgency(kev: int, p1: int, critical_high: int) -> dict:
     if kev:
-        return {"level": 1, "label": "Fix now"}
+        return {"level": 1, "label": "High: remediate now"}
     if p1:
-        return {"level": 1, "label": "Fix now"}
+        return {"level": 1, "label": "High: remediate now"}
     if critical_high:
-        return {"level": 2, "label": "Fix this month"}
-    return {"level": 3, "label": "Plan in the next update cycle"}
+        return {"level": 2, "label": "Medium: remediate within 30 days"}
+    return {"level": 3, "label": "Low: next maintenance window"}
 
 
 def collect_apps(settings: Settings, kb: dict | None = None, catalog: dict | None = None) -> tuple[str, list[dict]]:
@@ -252,7 +256,7 @@ def collect_apps(settings: Settings, kb: dict | None = None, catalog: dict | Non
         default_action = {
             FIX_OS: "Install the latest Windows security update" + (f" ({', '.join(updates[:3])})" if updates else "")
                     + " through Windows Update, WSUS or Intune",
-            FIX_NONE: "No update exists yet: reduce the risk with the vendor's advice and watch for the fix",
+            FIX_NONE: "No security update available: apply the vendor's mitigations and watch for a security update",
         }.get(fix_type, f"Update {PRETTY.get(name, name)} to the latest version")
         out.append({
             "key": f"{vendor}:{name}", "kind": "app", "vendor": vendor, "software": name,
@@ -304,8 +308,8 @@ def collect_apps(settings: Settings, kb: dict | None = None, catalog: dict | Non
         card["opcos"] = sorted(set(card["opcos"]) | set(e["opcos"]))
         ended = any(v["eos"]["status"] == "EOS Version" for v in card["versions"])
         soonest = min((v["eos"]["date"] for v in card["versions"] if v["eos"]["date"]), default=None)
-        card["urgency"] = ({"level": 2, "label": "Fix this month: no more security fixes"} if ended
-                           else {"level": 3, "label": f"Plan: support ends {soonest}" if soonest else "Plan: support ends soon"})
+        card["urgency"] = ({"level": 2, "label": "Medium: end of support reached"} if ended
+                           else {"level": 3, "label": f"Low: end of support on {soonest}" if soonest else "Low: end of support soon"})
     out.sort(key=lambda a: (a["urgency"]["level"], -len(a["kev_cves"]), -a["p1"], -a["cves"]))
     return snapshot, out
 
@@ -313,22 +317,22 @@ def collect_apps(settings: Settings, kb: dict | None = None, catalog: dict | Non
 def setting_fix_type(name: str, category: str | None, subcategory: str | None) -> str:
     n = (name or "").lower()
     if "unquoted service path" in n:
-        return "Fix a service path"
+        return "Configuration change: service path"
     if category == "Accounts" or "account" in n or "laps" in n:
-        return "Fix an account"
+        return "Configuration change: account policy"
     if subcategory == "Attack Surface Reduction":
-        return "Turn on an attack-protection rule"
+        return "Enable ASR rule"
     if category == "Security controls":
-        return "Turn on a protection"
-    return "Change a setting"
+        return "Enable security control"
+    return "Configuration change"
 
 
 def setting_urgency(impact: float) -> dict:
     if impact >= 10:
-        return {"level": 1, "label": "Fix now"}
+        return {"level": 1, "label": "High: remediate now"}
     if impact >= 8:
-        return {"level": 2, "label": "Fix this month"}
-    return {"level": 3, "label": "Plan in the next update cycle"}
+        return {"level": 2, "label": "Medium: remediate within 30 days"}
+    return {"level": 3, "label": "Low: next maintenance window"}
 
 
 def collect_settings(settings: Settings, catalog: dict | None = None) -> list[dict]:
@@ -460,10 +464,10 @@ def rules_text(app: dict) -> dict:
         steps = ["Agree a restart time with the device users.", app["fix"]["action"] + ".", "Restart the PC.",
                  "Check the findings disappear after the next scan."]
     elif app["fix_type"] == FIX_NONE:
-        steps = ["The vendor has not released a fix for these weaknesses yet.",
+        steps = ["No security update is available for these weaknesses yet.",
                  "Follow the vendor's advice (Defender's security recommendation) to reduce the risk until then.",
                  "If nobody needs the app, remove it.",
-                 "Watch for the fix: this card changes to 'Update the app' once Defender sees one."]
+                 "Watch for a security update: this card changes to 'Software update' once Defender sees one."]
     else:
         steps = ["Tell the device users the app will close for a few minutes."]
         steps.append(f"Run the command on each affected device: {app['fix']['command']}" if app["fix"]["command"]
@@ -473,7 +477,7 @@ def rules_text(app: dict) -> dict:
         steps += ["Restart the app (or the PC if the installer asks).", "Check the findings disappear after the next scan."]
         if app.get("no_patch"):
             n = len(app["no_patch"])
-            steps.insert(0, f"{n} of these weaknesses {'has' if n == 1 else 'have'} no fix from the vendor yet; updating closes the others.")
+            steps.insert(0, f"{n} of these weaknesses {'has' if n == 1 else 'have'} no security update available; updating remediates the others.")
     return {
         "what_is_wrong": f"{app['app']} has {app['cves']} known security weaknesses on {len(app['devices'])} device(s)"
                          + ".",

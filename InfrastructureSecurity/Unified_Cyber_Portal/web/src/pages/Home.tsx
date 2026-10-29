@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Chart } from '@/components/Chart'
 import { Chip, Empty, InfoTip, Panel, Table, Tabs } from '@/components/kit'
 import { fetchSummary, type Health, type Summary } from '@/lib/api'
+import { PRIORITY } from '@/lib/uc3'
 import { useFilters, type WorkTab } from '@/lib/filters'
 import { ago, dateTime, num, shortDate } from '@/lib/format'
 import { chartTokens, statusColor, useTheme } from '@/lib/theme'
@@ -212,16 +213,16 @@ function FixedCard({ v }: { v: View }) {
   return (
     <Panel className="flex flex-col p-6">
       <div className="flex items-start justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm">Problems fixed <InfoTip text="Vulnerabilities Defender no longer reports on managed devices, counted since tracking began. The ring shows remediated against still open." /></h3>
+        <h3 className="flex items-center gap-1.5 text-sm">Vulnerabilities remediated <InfoTip text="Vulnerabilities Defender no longer reports on managed devices, counted since tracking began. The ring shows remediated against still open." /></h3>
         <Chip>{num(open)} still open</Chip>
       </div>
       <div className="mt-2 flex flex-1 items-end justify-between gap-4">
         <div className="flex min-w-0 flex-col">
           <div className="text-[34px] leading-none tracking-tight tabular" style={{ color: fixed ? statusColor.good : undefined }}>{num(fixed)}</div>
           {/* the start date needs the portal's newer summary; without it, show the count alone */}
-          {(fixedSince || !fixed) && <div className="mt-2 text-xs text-ink-3">{fixed ? `since ${shortDate(fixedSince!)}` : 'nothing fixed yet'}</div>}
+          {(fixedSince || !fixed) && <div className="mt-2 text-xs text-ink-3">{fixed ? `since ${shortDate(fixedSince!)}` : 'none remediated yet'}</div>}
           <ul className="mt-4 flex flex-col gap-1.5 text-xs text-ink-2">
-            <li className="flex items-center gap-1.5"><span className="size-1.5 rounded-full" style={{ background: statusColor.good }} />{pct}% of everything found is fixed</li>
+            <li className="flex items-center gap-1.5"><span className="size-1.5 rounded-full" style={{ background: statusColor.good }} />{pct}% of everything found is remediated</li>
             <li className="flex items-center gap-1.5"><span className="size-1.5 rounded-full" style={{ background: chartTokens[theme].axis }} />{100 - pct}% still to do</li>
           </ul>
         </div>
@@ -232,7 +233,7 @@ function FixedCard({ v }: { v: View }) {
               tooltip: { trigger: 'item', formatter: '{b}: {c}' },
               series: [{
                 type: 'pie', radius: ['78%', '96%'], padAngle: 3, itemStyle: { borderRadius: 4 }, label: { show: false },
-                data: [{ name: 'Fixed', value: fixed, itemStyle: { color: statusColor.good } },
+                data: [{ name: 'Remediated', value: fixed, itemStyle: { color: statusColor.good } },
                        { name: 'Still open', value: open, itemStyle: { color: tk.axis } }],
               }],
             })}
@@ -313,8 +314,8 @@ function WorkPanel({ s, v }: { s: Summary; v: View }) {
 }
 
 
-function UrgencyTag({ urgency }: { urgency: string }) {
-  return <span className="whitespace-nowrap text-ink-2">{urgency.split(':')[0]}</span>
+function PriorityTag({ level }: { level: number }) {
+  return <span className="whitespace-nowrap text-ink-2">{PRIORITY[level] ?? '–'}</span>
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -358,7 +359,7 @@ function FixesView({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'gr
               <span className="tabular text-xs text-ink-3">#{f.rank}</span>
             </div>
             <div className="mt-3 flex items-center justify-between text-sm">
-              <UrgencyTag urgency={f.urgency} />
+              <PriorityTag level={f.urgency_level} />
               <span className="tabular text-ink-2">{num(f.cves)} CVEs</span>
             </div>
             <div className="mt-3 flex items-center gap-2 border-t border-hairline pt-3 text-sm text-ink-2">
@@ -372,7 +373,7 @@ function FixesView({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'gr
     )
   return (
     <>
-      <Table head={[['#', 'left'], ['App', 'left'], ['Urgency', 'left'], ['CVEs', 'right'], ['Remediation', 'left']]}>
+      <Table head={[['#', 'left'], ['App', 'left'], ['Priority', 'left'], ['CVEs', 'right'], ['Remediation', 'left']]}>
         {v.fixes.map((f) => (
           <tr key={f.rank} className="hover:bg-well/60">
             <td className="tabular w-10 text-ink-3">{f.rank}</td>
@@ -382,7 +383,7 @@ function FixesView({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'gr
                 {f.devices} device{f.devices === 1 ? '' : 's'} · {f.installed_versions ?? 'security setting'}
               </div>
             </td>
-            <td><UrgencyTag urgency={f.urgency} /></td>
+            <td><PriorityTag level={f.urgency_level} /></td>
             <td className="tabular text-right">{num(f.cves)}</td>
             <td className="min-w-[180px]">
               <div className="flex flex-col items-start gap-1.5 text-ink-2">
@@ -667,7 +668,7 @@ function Uc1Panel({ s }: { s: Summary }) {
       <div className="grid grid-cols-3 gap-4 border-y border-hairline py-4">
         <Stat value={num(u.new_threats)} label="threats collected (30 days)" />
         <Stat value={num(u.affecting)} label="affect our devices" />
-        <Stat value={num(u.urgent)} label="urgent, remediate first" />
+        <Stat value={num(u.urgent)} label="high priority, remediate first" />
       </div>
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">

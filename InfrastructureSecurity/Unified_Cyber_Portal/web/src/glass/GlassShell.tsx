@@ -16,7 +16,7 @@ const RAIL = [
   { to: '/glass', label: 'Overview', icon: LayoutGrid, end: true },
   { to: '/glass/uc1', label: 'the assistant · Threat Intel & Hunting', icon: Crosshair },
   { to: '/glass/uc3', label: 'the assistant · Vulnerabilities', icon: ScanSearch },
-  { to: '/glass/fixes', label: 'Fix', icon: Wrench },
+  { to: '/glass/fixes', label: 'Remediation', icon: Wrench },
   { to: '/glass/reports', label: 'Reports', icon: FileText },
 ]
 
@@ -26,12 +26,12 @@ const MENU = [
   { to: '/glass/uc1/hunts', label: 'Hunting', tag: 'the assistant', tone: 'var(--g-violet)', icon: Radar },
   { to: '/glass/uc3', label: 'Vulnerabilities', tag: 'the assistant', tone: 'var(--g-sky)', icon: ScanSearch },
   { to: '/glass/uc3/quality', label: 'Data quality', tag: 'the assistant', tone: 'var(--g-sky)', icon: Database },
-  { to: '/glass/fixes', label: 'Fix', icon: Wrench },
+  { to: '/glass/fixes', label: 'Remediation', icon: Wrench },
 ]
 
 const SECTIONS: { id: string; label: string; tab?: WorkTab }[] = [
   { id: 'top', label: 'Overview' },
-  { id: 'work', label: 'Fix first', tab: 'fixes' },
+  { id: 'work', label: 'Top priorities', tab: 'fixes' },
   { id: 'work', label: 'Threats', tab: 'threats' },
   { id: 'work', label: 'Devices', tab: 'devices' },
   { id: 'pipelines', label: 'Pipelines' },

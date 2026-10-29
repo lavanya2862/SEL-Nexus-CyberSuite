@@ -30,17 +30,24 @@ export interface Uc3Run {
   vulnerability_rows: number; repeats?: number | null; vulnerabilities?: number | null; defender_count: number | null; coverage: number | null; change_rows: number; retries: number; quality: string | null
 }
 export interface Uc3Check { name: string; status: string; value: string; expected: string; message: string }
-/** How a card gets fixed (UC3 fixes.py decides; first match wins in that order). */
+/** How a card is remediated, in Defender's remediation-type words (UC3 fixes.py decides; first match wins in that order). */
 export const FIX_TYPES = {
-  upgrade: 'Upgrade to a supported version',
-  os: 'Install the Windows update',
-  none: 'No fix yet: protect it another way',
-  update: 'Update the app',
+  upgrade: 'Software upgrade',
+  os: 'OS security update',
+  none: 'Attention required',
+  update: 'Software update',
 } as const
 export type FixKind = keyof typeof FIX_TYPES
+/** The fix_type values cards carried before the Defender wording, so older runs still sort into the right type */
+const OLD_FIX_TYPES: Record<string, FixKind> = {
+  'Upgrade to a supported version': 'upgrade', 'Install the Windows update': 'os',
+  'No fix yet: protect it another way': 'none', 'Update the app': 'update',
+}
 /** Cards built before fix types existed have none: they were all app updates or upgrades. */
 export const fixKind = (a: Pick<Uc3FixApp, 'fix_type'>): FixKind =>
-  (Object.entries(FIX_TYPES).find(([, t]) => t === a.fix_type)?.[0] as FixKind | undefined) ?? 'update'
+  (Object.entries(FIX_TYPES).find(([, t]) => t === a.fix_type)?.[0] as FixKind | undefined) ?? OLD_FIX_TYPES[a.fix_type ?? ''] ?? 'update'
+/** Remediation priority by urgency level: shown instead of the run's stored label, so older runs read the same */
+export const PRIORITY: Record<number, string> = { 1: 'High', 2: 'Medium', 3: 'Low' }
 export const pastEos = (a: Uc3FixApp) => a.versions.filter((v) => v.eos?.status === 'EOS Version')
 export const nearEos = (a: Uc3FixApp) => a.versions.filter((v) => v.eos?.status === 'Upcoming EOS Version')
 

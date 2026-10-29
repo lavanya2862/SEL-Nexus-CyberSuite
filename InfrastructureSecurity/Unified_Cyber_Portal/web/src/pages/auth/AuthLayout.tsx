@@ -28,7 +28,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
             <span className="block text-sky">One Unified Platform.</span>
           </h2>
           <p className="mt-6 max-w-[34rem] text-lg leading-relaxed text-ink-2">
-            Threat intelligence, vulnerabilities, fixes and alert triage from Microsoft Defender, side by side.
+            Threat intelligence, vulnerabilities, remediation and alert triage from Microsoft Defender, side by side.
           </p>
           <ul className="mt-12 grid max-w-[38rem] grid-cols-2 gap-x-6 gap-y-7">
             {AREAS.map(({ icon: Icon, label, hint }) => (

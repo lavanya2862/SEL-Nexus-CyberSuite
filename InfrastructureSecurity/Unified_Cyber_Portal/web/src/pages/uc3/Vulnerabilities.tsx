@@ -211,7 +211,7 @@ function RunFound({ data, v }: { data: Uc3Data; v: Uc3View }) {
     {
       icon: Bug, to: '/fixes', value: v.rows.length, label: 'Software vulnerabilities',
       text: `Known vulnerabilities in ${num(new Set(v.rows.map((f) => f.u)).size)} software versions. Remediated by updating the application or Windows.`,
-      extra: noPatch ? `${num(noPatch)} have no fix from the vendor yet` : null,
+      extra: noPatch ? `${num(noPatch)} have no security update available` : null,
     },
     {
       icon: SlidersHorizontal, to: '/fixes/settings', value: settings.length, label: 'Weak security settings',
@@ -282,8 +282,8 @@ function AllVulns({ v, top: topAtStart, snap }: { v: Uc3View; top: boolean; snap
     <Card
       title={top ? 'Top risks' : 'All vulnerabilities'}
       description={top
-        ? 'Priority 1 findings. Most urgent first. Select a row for details.'
-        : 'Every vulnerability Defender found: one row per vulnerability, app version and computer. Most urgent first. Select a row for details.'}
+        ? 'Priority 1 findings. Sorted by priority. Select a row for details.'
+        : 'Every vulnerability Defender found: one row per vulnerability, app version and computer. Sorted by priority. Select a row for details.'}
       action={
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-xs">
@@ -372,7 +372,7 @@ function AgeSla({ data, v }: { data: Uc3Data; v: Uc3View }) {
           })}
         />
       </Card>
-      <Card className="xl:col-span-4" title="Within SLA vs breached" description={`${num(breached)} of ${num(rows.length)} findings are past their fix-by date`}>
+      <Card className="xl:col-span-4" title="Within SLA vs breached" description={`${num(breached)} of ${num(rows.length)} findings are past their due date`}>
         <Chart
           height={270}
           build={(tk) => ({
@@ -389,8 +389,8 @@ function AgeSla({ data, v }: { data: Uc3Data; v: Uc3View }) {
           })}
         />
       </Card>
-      <Card className="xl:col-span-6" title="SLA by severity" description="Allowed days to fix (config/sla_policy.csv) and what is due next">
-        <DTable head={[['Severity'], ['Fix within', 'right'], ['Open', 'right'], ['Breached', 'right'], ['Next due']]} minWidth={480}>
+      <Card className="xl:col-span-6" title="SLA by severity" description="Remediation SLA in days (config/sla_policy.csv) and what is due next">
+        <DTable head={[['Severity'], ['Remediation SLA (days)', 'right'], ['Open', 'right'], ['Breached', 'right'], ['Next due']]} minWidth={480}>
           {v.activeSevs.map((s) => {
             const fs = rows.filter((f) => f.sev === s)
             const open = fs.filter((f) => !f.br)
@@ -458,7 +458,7 @@ function Trends({ data, v }: { data: Uc3Data; v: Uc3View }) {
           })}
         />
       </Card>
-      <Card className="xl:col-span-8" title="New vs fixed" description="Change events from Defender's delta feed, per day">
+      <Card className="xl:col-span-8" title="New vs remediated" description="Change events from Defender's delta feed, per day">
         {days.length ? (
           <Chart
             height={280}
@@ -469,15 +469,15 @@ function Trends({ data, v }: { data: Uc3Data; v: Uc3View }) {
               xAxis: { type: 'category', data: days.map(shortDate), ...axisStyle(tk), splitLine: { show: false } },
               yAxis: { type: 'value', ...axisStyle(tk), axisLine: { show: false } },
               series: ([['New', tk.severity.High], ['Fixed', statusColor.good], ['Updated', tk.series[1]]] as const).map(([st, col]) => ({
-                name: st, type: 'bar', barMaxWidth: 26, itemStyle: { color: col, borderRadius: [4, 4, 0, 0] },
+                name: st === 'Fixed' ? 'Remediated' : st, type: 'bar', barMaxWidth: 26, itemStyle: { color: col, borderRadius: [4, 4, 0, 0] },
                 data: days.map((d) => sumBy(ch.filter((c) => String(c[0]) === d && c[2] === st), (c) => c[4])),
               })),
             })}
           />
         ) : <Empty text="No change events yet." />}
       </Card>
-      <Card className="xl:col-span-4" title="Time to fix" description="Average days from first seen to fixed">
-        <DTable head={[['Severity'], ['Fixed', 'right'], ['Avg days to fix', 'right']]} minWidth={300}>
+      <Card className="xl:col-span-4" title="Mean time to remediate" description="Average days from first seen to remediated">
+        <DTable head={[['Severity'], ['Remediated', 'right'], ['MTTR (days)', 'right']]} minWidth={300}>
           {v.activeSevs.map((s) => {
             const r = rem.filter((x) => x[2] === s)
             return (
@@ -564,7 +564,7 @@ function Computers({ data, v }: { data: Uc3Data; v: Uc3View }) {
                 <td>{r.u}</td>
                 <td className="tabular text-right">{num(r.t)}</td>
                 <td className="tabular text-right">{num(r.c)}</td>
-                <td><Link to={`/fixes?sw=${encodeURIComponent(r.sw)}`} title="Open in Remediation" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Fix</Link></td>
+                <td><Link to={`/fixes?sw=${encodeURIComponent(r.sw)}`} title="Open in Remediation" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Remediate</Link></td>
               </tr>
             ))}
           </DTable>

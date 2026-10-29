@@ -8,6 +8,7 @@ import {
 import ReactECharts from 'echarts-for-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { fetchSummary, type Health, type Summary } from '@/lib/api'
+import { PRIORITY } from '@/lib/uc3'
 import { useFilters, type WorkTab } from '@/lib/filters'
 import { ago, dateTime, num, shortDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -232,7 +233,7 @@ function Radar() {
 
 function EmberCta({ v }: { v: View }) {
   const { setWorkTab } = useFilters()
-  const kevFixes = v.fixes.filter((f) => f.urgency.startsWith('Fix now'))
+  const kevFixes = v.fixes.filter((f) => f.urgency_level === 1)
   const go = () => {
     setWorkTab('fixes')
     document.getElementById('work')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -242,10 +243,10 @@ function EmberCta({ v }: { v: View }) {
       <Radar />
       <div className="relative flex h-full flex-col">
         <h3 className="text-[22px] font-semibold leading-tight tracking-tight">
-          {kevFixes.length} updates clear every urgent vulnerability
+          {kevFixes.length} updates remediate every high-priority vulnerability
         </h3>
         <p className="mt-2 max-w-[24ch] text-sm text-[#2b1309]/80">
-          These apps are marked Fix now. Updating them takes the list to zero.
+          These apps are marked High priority. Updating them takes the list to zero.
         </p>
         <div className="mt-4 flex -space-x-2">
           {kevFixes.slice(0, 4).map((f) => (
@@ -259,7 +260,7 @@ function EmberCta({ v }: { v: View }) {
         </div>
         <div className="flex-1" />
         <button onClick={go} className="mt-6 w-full rounded-full bg-[#fff6f0] py-3 text-sm font-semibold text-[#1b0d06] shadow-[0_8px_20px_-8px_rgba(0,0,0,.5)] hover:bg-white">
-          Show the fixes
+          Show the remediations
         </button>
       </div>
     </section>
@@ -327,7 +328,7 @@ function ExposureColumn({ v }: { v: View }) {
     <section className="glass-panel flex flex-col gap-5 p-5 md:p-6 xl:col-span-4">
       <div className="grid grid-cols-2 gap-3">
         <button onClick={() => goTab('fixes')} className="flex items-center justify-center gap-2 rounded-xl border border-[var(--g-line-2)] bg-white/[0.06] py-3 text-sm font-medium hover:bg-white/10">
-          <ArrowDownRight className="size-4" /> Fix plan
+          <ArrowDownRight className="size-4" /> Remediation plan
         </button>
         <Link to="/glass/uc3" className="glass-btn-ember flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold">
           <ArrowUpRight className="size-4" /> Open the assistant
@@ -379,8 +380,8 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
-function Urgency({ urgency }: { urgency: string }) {
-  return <span className="whitespace-nowrap rounded-full border border-[var(--g-line)] px-2.5 py-1 text-xs text-[var(--g-ink-2)]">{urgency.split(':')[0]}</span>
+function Priority({ level }: { level: number }) {
+  return <span className="whitespace-nowrap rounded-full border border-[var(--g-line)] px-2.5 py-1 text-xs text-[var(--g-ink-2)]">{PRIORITY[level] ?? '–'}</span>
 }
 
 function GTable({ head, children }: { head: [string, 'left' | 'right'][]; children: ReactNode }) {
@@ -408,7 +409,7 @@ function WorkPanel({ s, v }: { s: Summary; v: View }) {
           <Seg<WorkTab>
             value={workTab}
             onChange={setWorkTab}
-            items={[['fixes', <>Fix first <b className="font-medium opacity-60">{v.fixes.length}</b></>], ['threats', <>Threats <b className="font-medium opacity-60">{v.threats.length}</b></>], ['devices', <>Devices <b className="font-medium opacity-60">{v.devices.length}</b></>]]}
+            items={[['fixes', <>Top priorities <b className="font-medium opacity-60">{v.fixes.length}</b></>], ['threats', <>Threats <b className="font-medium opacity-60">{v.threats.length}</b></>], ['devices', <>Devices <b className="font-medium opacity-60">{v.devices.length}</b></>]]}
           />
         </div>
         <Seg small value={layout} onChange={setLayout} items={[['list', <List key="l" className="size-3.5" aria-label="List view" />], ['grid', <LayoutGrid key="g" className="size-3.5" aria-label="Grid view" />]]} />
@@ -434,7 +435,7 @@ function Fixes({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'grid' 
           <Tile key={f.rank}>
             <div className="flex items-start justify-between gap-2"><div className="font-medium">{f.app}</div><span className="tabular text-xs text-[var(--g-ink-3)]">#{f.rank}</span></div>
             <div className="mt-1 truncate text-xs text-[var(--g-ink-3)]">{f.installed_versions}</div>
-            <div className="mt-3 flex items-center justify-between"><Urgency urgency={f.urgency} /><span className="tabular text-xs text-[var(--g-ink-2)]">{num(f.cves)} CVEs</span></div>
+            <div className="mt-3 flex items-center justify-between"><Priority level={f.urgency_level} /><span className="tabular text-xs text-[var(--g-ink-2)]">{num(f.cves)} CVEs</span></div>
             <div className="mt-3 flex items-center gap-2 border-t border-[var(--g-line)] pt-3 text-xs text-[var(--g-ink-2)]"><span className="flex-1">{f.fix_action}</span>{f.command && <CopyButton text={f.command} />}</div>
           </Tile>
         ))}
@@ -442,19 +443,19 @@ function Fixes({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'grid' 
     )
   return (
     <>
-      <GTable head={[['#', 'left'], ['App', 'left'], ['Urgency', 'left'], ['CVEs', 'right'], ['Devices', 'right'], ['Fix', 'left']]}>
+      <GTable head={[['#', 'left'], ['App', 'left'], ['Priority', 'left'], ['CVEs', 'right'], ['Devices', 'right'], ['Remediation', 'left']]}>
         {v.fixes.map((f) => (
           <tr key={f.rank} className="glass-row">
             <td className="tabular w-10 text-[var(--g-ink-3)]">{f.rank}</td>
             <td><div className="font-medium">{f.app}</div><div className="max-w-[220px] truncate text-xs text-[var(--g-ink-3)]">{f.installed_versions}</div></td>
-            <td><Urgency urgency={f.urgency} /></td>
+            <td><Priority level={f.urgency_level} /></td>
             <td className="tabular text-right">{num(f.cves)}</td>
             <td className="tabular text-right">{f.devices}</td>
             <td><div className="flex items-center gap-1 text-[var(--g-ink-2)]"><span>{f.fix_action}</span>{f.command && <CopyButton text={f.command} />}</div></td>
           </tr>
         ))}
       </GTable>
-      {s.uc3.ai_fixes?.model && <p className="mt-3 text-xs text-[var(--g-ink-3)]">Fix advice written by the AI assistant, checked against Defender data. Check before acting.</p>}
+      {s.uc3.ai_fixes?.model && <p className="mt-3 text-xs text-[var(--g-ink-3)]">Remediation guidance generated by AI and checked against Defender data. Review before acting.</p>}
     </>
   )
 }
@@ -584,7 +585,7 @@ function Uc1Panel({ s }: { s: Summary }) {
       <div className="grid grid-cols-3 gap-3">
         <Stat value={num(u.new_threats)} label="threats (30 days)" />
         <Stat value={num(u.affecting)} label="affect our devices" />
-        <Stat value={num(u.urgent)} label="urgent, fix these first" />
+        <Stat value={num(u.urgent)} label="high priority, remediate first" />
       </div>
       <div>
         <div className="flex flex-wrap gap-3 text-xs text-[var(--g-ink-3)]">

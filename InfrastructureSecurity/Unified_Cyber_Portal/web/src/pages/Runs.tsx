@@ -102,7 +102,7 @@ export function Runs() {
               className="inline-flex items-center gap-2 rounded-xl btn-blue px-5 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {waiting ? <Hand className="size-4" /> : <Play className="size-4" />}
-              {running ? 'Running…' : waiting ? 'Paused: decide the fixes first' : run ? 'Run again' : `Run ${UC_NAME[uc].toLowerCase()} now`}
+              {running ? 'Running…' : waiting ? 'Paused: awaiting remediation approval' : run ? 'Run again' : `Run ${UC_NAME[uc].toLowerCase()} now`}
             </button>
           </div>
         </div>

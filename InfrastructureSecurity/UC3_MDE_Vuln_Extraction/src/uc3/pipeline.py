@@ -127,8 +127,8 @@ def publish_all(settings: Settings) -> dict:
     return published
 
 
-FIX_RESULT_KEYS = ("new", "new_ids", "new_apps", "new_settings", "waiting", "saved", "fixable", "urgent", "verified",
-                   "still_there", "inventory")
+FIX_RESULT_KEYS = ("new", "new_ids", "new_apps", "new_settings", "grew", "grew_vulns", "waiting", "saved", "fixable", "urgent",
+                   "verified", "still_there", "inventory")
 
 
 def run_fix_stage(settings: Settings) -> dict | None:

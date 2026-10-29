@@ -158,9 +158,9 @@ function Detail({ t }: { t: T }) {
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <Card title="Affected devices" description="Where Microsoft Defender reports this, and the remediation"
-          action={fixSw(t) ? <Link to={`/fixes?sw=${encodeURIComponent(fixSw(t)!)}`} title="Open in Remediation" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Fix</Link> : undefined}>
+          action={fixSw(t) ? <Link to={`/fixes?sw=${encodeURIComponent(fixSw(t)!)}`} title="Open in Remediation" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Remediate</Link> : undefined}>
           {t.exposure.length ? (
-            <DTable head={[['Computer'], ['Source'], ['Fix']]} minWidth={440}>
+            <DTable head={[['Computer'], ['Source'], ['Remediation']]} minWidth={440}>
               {t.exposure.map((e, i) => (
                 <tr key={i}>
                   <td className="whitespace-nowrap font-medium">{e.device_name}</td>

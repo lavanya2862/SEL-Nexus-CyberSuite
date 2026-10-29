@@ -240,7 +240,7 @@ function WhereItFits() {
       {([
         [Wrench, 'Remediation', 'Prevent', 'Remediate vulnerable applications, unsupported software and weak settings before they are exploited. Planned work: days.', '/fixes'],
         [Radar, 'Attack detection', 'Hunt proactively', 'Identify attackers who gained access without triggering an alert.', '/uc1/hunts'],
-        [BellRing, 'Triage', 'Respond', 'Defender has raised an incident: classify and respond. Urgent work: minutes.', null],
+        [BellRing, 'Triage', 'Respond', 'Defender has raised an incident: classify and respond. High-severity incidents: respond within minutes.', null],
       ] as const).map(([Icon, title, role, text, to]) => (
         <Panel key={title} className="flex flex-col gap-2 p-5">
           <div className="flex items-center gap-2">

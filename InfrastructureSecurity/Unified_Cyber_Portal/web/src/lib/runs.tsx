@@ -32,6 +32,8 @@ export interface RunFix {
   new: number; new_ids: string[]; waiting: number; saved: number; fixable?: number; urgent?: number; verified?: number
   /** how many of the new ones are app updates / security settings (unknown for older runs) */
   new_apps?: number; new_settings?: number
+  /** earlier fixes (same app version, same computer) that gained vulnerabilities in this run: fix id → how many more */
+  grew?: Record<string, number>; grew_vulns?: number
   /** live, from the fix engine's decisions: new fixes still to decide, and decided ones */
   open?: number; to_fix?: number; saved_now?: number
 }

@@ -119,7 +119,8 @@ class Site(ThreadingHTTPServer):
                        "task": self.fix_task, "step": self.fix_step, "message": self.fix_message}
         return v
 
-    def start_fix(self, task: str, method: str | None = None) -> tuple[bool, str]:
+    def start_fix(self, task: str, method: str | None = None, ids: list[str] | None = None) -> tuple[bool, str]:
+        """Check the computers, or run the approved fixes: all of them, or only `ids` (a run page runs just its own)."""
         from uc1.fix.runner import FixRunner, fix_active
         if fix_active(self.settings) and not self.fix_running:
             return False, "Fixes are already running from the command line."
@@ -136,7 +137,7 @@ class Site(ThreadingHTTPServer):
                     bad = [d for d, r in out.items() if r.get("error")]
                     msg = f"Check finished: {len(out) - len(bad)} ok" + (f", problem on {', '.join(bad)}" if bad else "")
                 else:
-                    r = runner.run_approved()
+                    r = runner.run_approved(ids or None)
                     msg = f"Fix run finished: {r['done']} fixed, {r['failed']} failed"
             except Exception as exc:  # noqa: BLE001 - shown on the page; details in the log
                 log.exception("Fix task failed")
@@ -213,7 +214,7 @@ class _Handler(BaseHTTPRequestHandler):
             elif path == "/api/fix/unsave":
                 result = plan.unsave(s.settings, ids)
             elif path in ("/api/fix/run", "/api/fix/probe"):
-                started, message = s.start_fix("probe" if path.endswith("probe") else "run", method)
+                started, message = s.start_fix("probe" if path.endswith("probe") else "run", method, ids)
                 result = {"started": started, "message": message}
             else:
                 return self._json(404, {"error": "not found"})

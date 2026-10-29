@@ -41,7 +41,7 @@ SCREENS: dict[str, str] = {
     "hunts": "Attack hunting: searches through Microsoft Defender records for signs an attacker is already inside; hits are real or lab-test matches.",
     "weak": "Vulnerabilities: known software flaws (CVEs) Microsoft Defender found on our computers, by priority, VM, age/SLA, trends, devices.",
     "quality": "Data quality: automatic checks that the vulnerability data is complete and fresh (for example the row count matches Defender).",
-    "fixes": "Fix (Fix Centre): which apps and Windows updates to install, unsupported software to upgrade and security settings to change, most dangerous first; vulnerabilities with no vendor fix yet are marked 'No fix yet'; 'Fix it for me' adds a computer to the basket, Run updates it.",
+    "fixes": "Remediation (Remediation Centre): software updates, OS security updates, software upgrades for unsupported software and configuration changes, highest priority first; vulnerabilities with no security update available are marked 'Attention required'; 'Remediate' adds a computer to the queue, Execute remediation runs it.",
     "progress": "Fix progress: what the automatic fixing did on each computer and whether the update worked.",
     "respond": "Alert triage: Defender/Sentinel incidents, each with the assistant's verdict (true positive, false positive, needs review).",
     "case": "Incident page: one incident, its evidence, the assistant's verdict, what Defender did, agree/disagree buttons.",
