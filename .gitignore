@@ -4,6 +4,7 @@
 login/data/
 .env
 *.env
+.env.bak*
 *.key
 *.pem
 *.pfx

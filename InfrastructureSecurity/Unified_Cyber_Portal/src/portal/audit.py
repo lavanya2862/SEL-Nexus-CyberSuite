@@ -37,6 +37,7 @@ ACTIONS = {
     "triage.agree": "Agreed with triage verdict",
     "triage.disagree": "Disagreed with triage verdict",
     "triage.reopen": "Reopened incident",
+    "triage.decide": "Classified incident in Defender",
 }
 
 

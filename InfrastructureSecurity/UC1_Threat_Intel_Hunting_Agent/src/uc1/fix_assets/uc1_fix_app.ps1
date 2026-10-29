@@ -55,11 +55,12 @@ function Get-Apps($patterns) {
     foreach ($e in (Get-ItemProperty $keys -ErrorAction SilentlyContinue)) {
         $n = "$($e.DisplayName)"
         if (-not $n) { continue }
+        if ("$($e.PSPath)" -like '*HKEY_USERS\.DEFAULT\*') { continue }   # .DEFAULT is SYSTEM's profile again (S-1-5-18)
         foreach ($p in $patterns) {
             if ($n -like $p) {
                 $found += [pscustomobject]@{ name = $n; version = "$($e.DisplayVersion)"; quiet = "$($e.QuietUninstallString)";
                                             uninstall = "$($e.UninstallString)"; system = ($e.SystemComponent -eq 1); key = $e.PSChildName;
-                                            user = ("$($e.PSPath)" -like '*HKEY_USERS*') }
+                                            user = ("$($e.PSPath)" -like '*HKEY_USERS*'); bundle = "$($e.BundleCachePath)"; path = "$($e.PSPath)" }
                 break
             }
         }
@@ -86,9 +87,38 @@ function Find-Winget {
     return $null
 }
 
+# As SYSTEM (Run Command) winget.exe runs outside its app package and can't find the Visual C++ runtime it ships
+# against: exit -1073741515 (0xC0000135, DLL not found). Put the VCLibs framework folders on PATH; if that is not
+# enough, install Microsoft's Visual C++ 2015-2022 runtime once.
+$dllNotFound = -1073741515
+function Ready-Winget([string]$wg, [bool]$canInstall = $true) {
+    if ($script:wingetReady) { return $true }
+    Get-ChildItem "$env:ProgramFiles\WindowsApps" -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like 'Microsoft.VCLibs.140.00*_x64__8wekyb3d8bbwe' } |
+        ForEach-Object { if ($env:Path -notlike "*$($_.FullName)*") { $env:Path = "$($_.FullName);$env:Path" } }
+    $r = Run-Exe $wg '--version' 2
+    if ($r.code -eq $dllNotFound -and $canInstall) {
+        Say 'winget is missing the Visual C++ runtime - installing it'
+        $vc = Join-Path $env:TEMP 'vc_redist.x64.exe'
+        try {
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            (New-Object Net.WebClient).DownloadFile('https://aka.ms/vs/17/release/vc_redist.x64.exe', $vc)
+            $i = Run-Exe $vc '/install /quiet /norestart' 10
+            Say "Visual C++ runtime -> exit $($i.code)"
+        } catch { Say "Visual C++ runtime download failed: $($_.Exception.Message)" }
+        Remove-Item $vc -ErrorAction SilentlyContinue
+        $r = Run-Exe $wg '--version' 2
+    }
+    $script:wingetVersion = (Clean-Text $r.text | Select-Object -First 1)
+    $script:wingetReady = ($r.code -eq 0)
+    if (-not $script:wingetReady) { Say "winget can't start (exit $($r.code))" }
+    return $script:wingetReady
+}
+
 function Invoke-Winget([string]$verb, [string]$id) {
     $wg = Find-Winget
     if (-not $wg) { Say 'winget not available'; return $null }
+    if (-not (Ready-Winget $wg)) { return $null }
     $common = "--id $id --exact --silent --source winget --accept-package-agreements --accept-source-agreements --disable-interactivity"
     $scope = ''
     if ($s.scope_machine) { $scope = ' --scope machine' }
@@ -135,6 +165,7 @@ function Install-Current([string]$verb) {
 }
 
 function Uninstall-Entry($e) {
+    if ($e.bundle -and -not (Test-Path -LiteralPath $e.bundle)) { Say "remove $($e.name): its installer is gone from the Package Cache"; return -994 }
     $cmd = $e.quiet
     $isMsi = $e.key -match '^\{[0-9A-Fa-f-]{36}\}$'
     if (-not $cmd) {
@@ -165,6 +196,15 @@ function Remove-Matching($patterns) {
         if (-not $targets) { $targets = $apps }
         foreach ($e in $targets) { $null = Uninstall-Entry $e }
         Start-Sleep -Seconds 3
+    }
+    # A bundle (e.g. Python) installs nothing itself: its MSI parts hold the files. Once those are gone, a bundle whose
+    # own installer is missing from the Package Cache can never run again, so its uninstall entry is only a leftover.
+    $left = @(Get-Apps $patterns)
+    if (-not @($left | Where-Object { $_.system })) {
+        foreach ($e in @($left | Where-Object { $_.bundle -and -not (Test-Path -LiteralPath $_.bundle) })) {
+            Remove-Item -LiteralPath $e.path -Recurse -Force -ErrorAction SilentlyContinue
+            Say "removed the leftover entry for $($e.name) (its parts are uninstalled and its installer is gone)"
+        }
     }
 }
 
@@ -270,7 +310,7 @@ $result = @{ id = $s.id; action = $s.action; computer = $env:COMPUTERNAME }
 
 if ($s.action -eq 'probe') {
     $wgVersion = ''
-    if ($wg) { $wgVersion = ((Run-Exe $wg '--version' 2).text).Trim() }
+    if ($wg -and (Ready-Winget $wg $false)) { $wgVersion = $script:wingetVersion }   # read-only: no runtime install
     $result.winget = $wgVersion
     $result.winget_path = [bool]$wg
     $result.choco = Test-Path "$env:ProgramData\chocolatey\bin\choco.exe"

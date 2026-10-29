@@ -4,14 +4,13 @@ import { StatusPill } from '@/components/FixLoop'
 import { Card, DTable, Empty, Panel, SevTag, Tag } from '@/components/kit'
 import { METHOD_LABEL, isSetting, useFix, versionOf, type FixRow } from '@/lib/fix'
 import { useFilters } from '@/lib/filters'
-import { dateTime, num, shortDate } from '@/lib/format'
+import { dateTime, num, shortDate, utc } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { groupBy, pretty, sumBy, useFixedFindings, useGroupAfter, useUc3Data, type FixedFinding } from '@/lib/uc3'
 import { Uc3Loading } from './common'
 
 // the fix engine writes UTC times without a zone
-const utc = (s: string | null | undefined) => (s ? s.replace(' ', 'T') + (s.endsWith('Z') || s.includes('+') ? '' : 'Z') : null)
 const keyOf = (device: string, sw: string, ver: string) => `${device}|${sw}|${ver}`.toLowerCase()
 
 /** Fix › Fixed history: what the portal fixed (with the computer's own output) and everything Defender reported fixed. */
@@ -80,7 +79,7 @@ function RunCard({ r, cleared, events }: { r: FixRow; cleared: number; events: {
   const what = setting ? 'Changed setting:' : r.action === 'respond' ? 'Scanned and cleaned after:' : r.action === 'remove' ? 'Removed' : r.action === 'replace' ? 'Replaced' : 'Updated'
   const mine = events.filter((e) => e.fix_id === r.fix_id).sort((a, b) => a.at.localeCompare(b.at))
   const steps: [string, string | null, React.ReactNode][] = [
-    ['Approved', r.approved_at, <>by {r.approved_by ?? 'someone'}{r.method ? ` · ${METHOD_LABEL[r.method]}` : ''}</>],
+    ['Approved', r.approved_at, <>{r.approved_by ? `by ${r.approved_by}` : ''}{r.approved_by && r.method ? ' · ' : ''}{r.method ? METHOD_LABEL[r.method] : ''}</>],
     ['Executed on device', r.started_at, <>{r.device_name}</>],
     ['Device response', r.finished_at, r.message ?? (r.status === 'failed' ? 'Remediation failed' : '')],
     ['Verified by Defender', r.verified_at, r.verified_at

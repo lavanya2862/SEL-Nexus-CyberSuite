@@ -4,12 +4,17 @@ The portal relies on two background services: the fixing service (UC1's site, Fi
 service (UC4's site: agree/disagree, Ask, Reopen). `python -m portal serve` starts a watcher thread that starts
 either one when it is not answering, at start-up and then every CHECK_EVERY seconds. Each service is started with its
 own Python, handed to Windows so it keeps running on its own (see _launch); 127.0.0.1 only. Switch off with PORTAL_AUTOSTART=0.
+
+A service that holds its port but no longer answers its API (for example an old copy left running after a code
+update) is stopped and started again once it has failed STRIKES checks in a row; only a `<module> serve` process
+from that service's own folder is stopped, and never the fixing service while it is running remediations.
 """
 from __future__ import annotations
 
 import base64
 import logging
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -23,7 +28,9 @@ from portal import fixproxy, uc4proxy
 log = logging.getLogger("portal.services")
 
 CHECK_EVERY = 30
+STRIKES = 2          # failed API checks in a row before a stuck service is restarted
 _lock = threading.Lock()
+_strikes: dict[str, int] = {}
 
 
 def listening(base: str, timeout: float = 1.0) -> bool:
@@ -86,13 +93,83 @@ def _services(settings) -> dict:
 ERRORS = {"fixing": fixproxy.Uc1Unavailable, "triage": uc4proxy.Uc4Unavailable}
 
 
+def answering(name: str, base: str) -> bool:
+    """Does the service answer its own API? Listening is not enough: a stuck copy can hold the port and drop requests."""
+    if name == "fixing":
+        try:
+            fixproxy.get_fix(base)
+            return True
+        except fixproxy.Uc1Unavailable:
+            return False
+    return uc4proxy.site_up(base)
+
+
+def _port_owner(base: str) -> tuple[int, str] | None:
+    """(PID, command line) of the process listening on this site's port. Windows only; None when unknown."""
+    if sys.platform != "win32":
+        return None
+    port = urlparse(base).port or 80
+    script = (
+        f"$c = Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1;"
+        "if ($c) { $p = Get-CimInstance Win32_Process -Filter \"ProcessId=$($c.OwningProcess)\";"
+        " \"$($c.OwningProcess)`n$($p.CommandLine)\" }"
+    )
+    try:
+        done = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand",
+                               base64.b64encode(script.encode("utf-16-le")).decode()],
+                              capture_output=True, text=True, timeout=30, creationflags=0x08000000)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    pid, _, cmd = done.stdout.strip().partition("\n")
+    return (int(pid), cmd.strip()) if pid.strip().isdigit() else None
+
+
+def _fix_lock_pid(folder: Path) -> int | None:
+    """The PID in UC1's fix-run lock (data/fix/.fix.lock), if any: that process is remediating devices right now."""
+    try:
+        return int((folder / "data" / "fix" / ".fix.lock").read_text().strip() or 0) or None
+    except (OSError, ValueError):
+        return None
+
+
+def _stop_stuck(name: str, base: str, folder: Path, module: str) -> bool:
+    """Stop the stuck copy of this service so a fresh one can take its port. True once the port is free."""
+    owner = _port_owner(base)
+    if owner is None:
+        log.warning("The %s service is not answering, and the process holding its port could not be found", name)
+        return False
+    pid, cmd = owner
+    if f"-m {module} serve" not in cmd or str(folder).lower() not in cmd.lower():
+        log.warning("The %s service's port is held by another program (PID %s); leaving it running", name, pid)
+        return False
+    if name == "fixing" and _fix_lock_pid(folder) == pid:
+        log.warning("The %s service is not answering but is running remediations (PID %s); not restarting it", name, pid)
+        return False
+    log.warning("The %s service is not answering (PID %s); restarting it", name, pid)
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError as exc:
+        log.warning("Could not stop the %s service (PID %s): %s", name, pid, exc)
+        return False
+    deadline = time.monotonic() + 5
+    while listening(base) and time.monotonic() < deadline:
+        time.sleep(0.2)
+    return not listening(base)
+
+
 def start_one(settings, name: str, wait_s: float = 15) -> bool:
-    """Start one service if it isn't answering (one start at a time, so two pages can't start it twice).
-    Raises Uc1Unavailable / Uc4Unavailable when it can't be started at all."""
+    """Start one service if it isn't answering (one start at a time, so two pages can't start it twice), and restart
+    one that holds its port without answering. Raises Uc1Unavailable / Uc4Unavailable when it can't be started at all."""
     base, folder, module = _services(settings)[name]
     with _lock:
         if listening(base):
-            return True
+            if answering(name, base):
+                _strikes.pop(name, None)
+                return True
+            _strikes[name] = _strikes.get(name, 0) + 1
+            if _strikes[name] < STRIKES or not _stop_stuck(name, base, folder, module):
+                return False
+            _strikes.pop(name, None)
         python = _python(folder)
         if python is None:
             raise ERRORS[name](f"The {name} service has no Python environment in {folder}")

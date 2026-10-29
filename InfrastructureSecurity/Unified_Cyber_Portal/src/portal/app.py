@@ -6,8 +6,9 @@ pipeline run and needs the X-Portal: run header. /api/fix* forwards the Fix Cent
 (UC1's website API) and its POSTs need the X-Portal: fix header. /api/uc4/* reads UC4's triage exports; the
 analyst's agree/disagree click is forwarded to UC4's own website API and needs the X-Portal: feedback header.
 POST /api/help/ask (header X-Portal: help) answers the help chatbot's free questions from the portal's own read-only
-data with Gemini; it never acts. The portal itself never isolates a device or closes an incident; POST /api/uc4/reopen (X-Portal: reopen) lets a
-person undo an automatic close. (UC4 may close or escalate lab incidents by itself
+data with Gemini; it never acts. The portal itself never isolates a device; POST /api/uc4/decide (X-Portal: decide) writes an analyst's decision into
+Defender through UC4 (false positive closed, true positive in progress) and POST /api/uc4/reopen (X-Portal: reopen) lets
+a person undo an automatic close. (UC4 may close or escalate lab incidents by itself
 when its own UC4_AUTO_RESOLVE setting is on; the portal shows what it did and links to UC4's Reopen.)
 
 Sign-in (auth.py): every /api/* call except /api/health and /api/auth/* needs a valid portal_session cookie, or gets
@@ -190,7 +191,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/fix")
     def fix_view():
         try:
-            return fixproxy.get_fix(settings.uc1_site)
+            return fixproxy.named(fixproxy.get_fix(settings.uc1_site), audit_log.entries)
         except fixproxy.Uc1Unavailable as exc:
             return JSONResponse({"error": str(exc), "uc1_down": True}, status_code=503)
 
@@ -217,8 +218,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         logged = action in fixproxy.ACTIONS
         target = _fix_target(body["ids"] if isinstance(body.get("ids"), list) else []) if logged else ""
         method = f"Method: {body['method']}. " if body.get("method") in fixproxy.METHODS else ""
+        user = getattr(request.state, "user", None)
         try:
-            status, out = fixproxy.post_fix(settings.uc1_site, action, body)
+            status, out = fixproxy.post_fix(settings.uc1_site, action, body, audit.who(user)["name"] if user else None)
         except fixproxy.Uc1Unavailable as exc:
             if logged:
                 _record(request, f"fix.{action}", agent="Remediation", target=target, outcome="failed", detail=method + str(exc))
@@ -226,6 +228,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if logged:
             _record(request, f"fix.{action}", agent="Remediation", target=target, outcome="success" if status < 400 else "failed",
                     detail=method + (str(out.get("error") or "") if status >= 400 else ""))
+        if isinstance(out.get("view"), dict):
+            out = {**out, "view": fixproxy.named(out["view"], audit_log.entries)}
         return JSONResponse(out, status_code=status)
 
     # ---- Triage (UC4): read its exports; agree/disagree goes to UC4's own website API (see uc4proxy.py)
@@ -306,6 +310,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return JSONResponse({"error": str(exc), "uc4_down": True}, status_code=503)
         _record(request, "triage.reopen", agent=AGENT_NAMES["uc4"], target=target, outcome="success" if status < 400 else "failed",
                 detail=str(body.get("reason") or "Reopened from CyberSuite")[:300] if status < 400 else str(out.get("error") or ""))
+        return JSONResponse(out, status_code=status)
+
+    @app.post("/api/uc4/decide")
+    async def uc4_decide(request: Request, x_portal: str | None = Header(default=None)):
+        """An analyst's decision on an incident the agent could not classify. Forwarded to the triage service, which
+        writes it into Defender (false positive -> closed, true positive -> in progress) with a comment naming them."""
+        if x_portal != "decide":
+            return JSONResponse({"error": "missing header"}, status_code=403)
+        try:
+            body = await request.json()
+        except ValueError:
+            body = {}
+        body = body if isinstance(body, dict) else {}
+        target = f"Incident #{str(body.get('incident_id') or '?')[:80]}"
+        user = getattr(request.state, "user", None) or {}
+        by = str(user.get("name") or user.get("email") or "")
+        why = "; ".join(x for x in (f"Analyst verdict: {body.get('verdict')}", str(body.get("reason") or "")[:500]) if x)
+        try:
+            status, out = uc4proxy.post_decide(settings.uc4_site, body, by)
+        except uc4proxy.Uc4Unavailable as exc:
+            _record(request, "triage.decide", agent=AGENT_NAMES["uc4"], target=target, outcome="failed", detail=str(exc))
+            return JSONResponse({"error": str(exc), "uc4_down": True}, status_code=503)
+        _record(request, "triage.decide", agent=AGENT_NAMES["uc4"], target=target, outcome="success" if status < 400 else "failed",
+                detail=why if status < 400 else str(out.get("error") or ""))
         return JSONResponse(out, status_code=status)
 
     @app.post("/api/uc4/start-site")

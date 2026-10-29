@@ -204,15 +204,16 @@ class _Handler(BaseHTTPRequestHandler):
         s, body = self.server, self._body()
         ids = [str(i) for i in body.get("ids", []) if isinstance(i, str)][:200]
         method = body.get("method") if body.get("method") in ("runcommand", "liveresponse") else None
+        by = str(body.get("by") or "").strip()[:80] or None      # the portal's signed-in person
         try:
             if path == "/api/fix/approve":
-                result = plan.approve(s.settings, ids, method)
+                result = plan.approve(s.settings, ids, method, by)
             elif path == "/api/fix/unapprove":
-                result = plan.unapprove(s.settings, ids)
+                result = plan.unapprove(s.settings, ids, by)
             elif path == "/api/fix/save":
-                result = plan.save(s.settings, ids)
+                result = plan.save(s.settings, ids, by)
             elif path == "/api/fix/unsave":
-                result = plan.unsave(s.settings, ids)
+                result = plan.unsave(s.settings, ids, by)
             elif path in ("/api/fix/run", "/api/fix/probe"):
                 started, message = s.start_fix("probe" if path.endswith("probe") else "run", method, ids)
                 result = {"started": started, "message": message}

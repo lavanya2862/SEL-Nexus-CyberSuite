@@ -43,10 +43,13 @@ def test_remediation_action_is_recorded_with_who_and_what(tmp_path, monkeypatch)
     fix_dir = settings.uc1_dir / "data" / "fix"
     fix_dir.mkdir(parents=True)
     (fix_dir / "plan.json").write_text(json.dumps({"items": [{"fix_id": "fx_1", "app": "Mozilla Firefox", "device_name": "wks-01"}]}))
-    monkeypatch.setattr(fixproxy, "post_fix", lambda base, action, body: (200, {"ok": True}))
+    sent = []
+    monkeypatch.setattr(fixproxy, "post_fix", lambda base, action, body, by=None: (sent.append(by), (200, {"ok": True}))[1])
     client = TestClient(portal_app.create_app(settings))
 
-    assert client.post("/api/fix/approve", json={"ids": ["fx_1"], "method": "runcommand"}, headers={"X-Portal": "fix"}).status_code == 200
+    assert client.post("/api/fix/approve", json={"ids": ["fx_1"], "method": "runcommand", "by": "Mallory"},
+                       headers={"X-Portal": "fix"}).status_code == 200
+    assert sent == ["Local user"]   # the signed-in person goes to UC1, never a name the browser sends
     assert client.post("/api/fix/approve", json={"ids": ["fx_1"]}).status_code == 403   # no header: not an action, not logged
 
     assert AuditLog(settings.audit_dir).verify()["count"] == 1
@@ -102,6 +105,29 @@ def test_activity_log_includes_history_from_before_the_trail(tmp_path):
     finished = data["items"][1]
     assert finished["agent"] == "Threat Intel Agent" and finished["outcome"] == "failed" and finished["name"] == "Not recorded"
     approve = data["items"][-1]
-    assert approve["name"] == "2868006" and approve["target"] == "WinRAR on opca-wks-01" and approve["ts"].startswith("2026-10-06T05:52:38")
+    assert approve["name"] == "Not recorded" and approve["target"] == "WinRAR on opca-wks-01" and approve["ts"].startswith("2026-10-06T05:52:38")
     assert data["items"][3]["outcome"] == "success"
     assert activity.listing(trail.entries(), tmp_path / "runs", tmp_path / "uc1", action="fix")["total"] == 2
+
+
+def test_fix_view_shows_people_not_computer_accounts(tmp_path):
+    trail = AuditLog(tmp_path)
+    trail.record({"email": "lav@x.com", "name": "Lavanya"}, "fix.approve", target="PuTTY on wks-01")
+    at = trail.entries()[0]["at"][:19]   # UC1 writes UTC without a zone
+    view = {"rows": [{"fix_id": "fx_1", "approved_by": "2862390", "approved_at": at},
+                     {"fix_id": "fx_2", "saved_by": "2862390", "saved_at": "2026-01-01T00:00:00"},
+                     {"fix_id": "fx_3", "approved_by": "Bo", "approved_at": at}],
+            "events": [{"at": at, "fix_id": "fx_1", "text": "Approved by 2862390 (Azure Run Command): PuTTY 0.76 on wks-01"},
+                       {"at": "2026-01-01T00:00:00", "fix_id": "fx_2", "text": "Saved for later by 2862390: Disable Autoplay on wks-02"},
+                       {"at": at, "fix_id": "fx_3", "text": "Approved by Bo (Azure Run Command): WinRAR on wks-03"},
+                       {"at": at, "fix_id": "fx_1", "text": "wks-01: upgrade PuTTY 0.76 via runcommand"}]}
+
+    out = fixproxy.named(view, trail.entries)
+    assert [r.get("approved_by") or r.get("saved_by") for r in out["rows"]] == ["Lavanya", None, "Bo"]
+    assert [e["text"] for e in out["events"]] == [
+        "Approved by Lavanya (Azure Run Command): PuTTY 0.76 on wks-01",
+        "Saved for later: Disable Autoplay on wks-02",            # nobody recorded that long ago: no name, not the login
+        "Approved by Bo (Azure Run Command): WinRAR on wks-03",
+        "wks-01: upgrade PuTTY 0.76 via runcommand"]
+    clean = {"rows": [view["rows"][2]], "events": [view["events"][2]]}
+    assert fixproxy.named(clean, lambda: 1 / 0) == clean     # nothing to translate: the trail is not read

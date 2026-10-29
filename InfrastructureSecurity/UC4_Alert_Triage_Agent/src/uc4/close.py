@@ -64,19 +64,19 @@ def plan(verdict: str, determination: str | None) -> dict:
 
 
 def act(settings: Settings, graph, incident_id: str, verdict: str, determination: str | None, reason: str,
-        minutes: float | None = None) -> dict:
+        minutes: float | None = None, by: str | None = None) -> dict:
     if not settings.close:
         raise CloseError("Closing in Defender is switched off in the settings.")
     saved = _saved(settings, incident_id)
     ai_verdict = saved["verdict"].get("verdict")
     changes = plan(verdict, determination)
-    who = getpass.getuser()
+    who = (by or "").strip()[:80] or getpass.getuser()       # the portal passes the signed-in person's name
     try:
         graph.update_incident(incident_id, changes)
     except Exception as exc:  # noqa: BLE001
         add_action(settings, incident_id, "close_incident", incident_id, "failed", str(exc).splitlines()[0][:300])
         raise CloseError(f"Defender refused: {str(exc).splitlines()[0][:200]}") from exc
-    note = (f"Decided by {who} in Security Assistant: {LABEL[verdict]}"
+    note = (f"Decided by {who} in SEL Nexus CyberSuite: {LABEL[verdict]}"
             f" ({DETERMINATIONS[verdict][changes['determination']]}). "
             f"The assistant's AI had said: {label(ai_verdict)}. "
             + (f"Reason: {reason[:300]}" if reason else ""))

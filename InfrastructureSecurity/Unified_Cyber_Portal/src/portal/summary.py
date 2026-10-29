@@ -171,15 +171,15 @@ def _uc4_part(uc4: UC4, now: datetime) -> dict:
     queue = data.get("queue") or []
     auto = UC4.automation(last)["auto_resolve"]
     agent = [r for r in queue if not _uc4_needs_person(r, auto)]
-    open_rows = [r for r in queue if _uc4_needs_person(r, auto) and not r.get("feedback")]
+    open_rows = [r for r in queue if _uc4_needs_person(r, auto) and not r.get("decision")]
     escalated = sum(1 for r in agent if r.get("verdict") == "likely_true_positive")
     return {
         "health": health,
         "totals": {"incidents": len(queue), "escalate": escalated, "closed": len(agent) - escalated,
                    "awaiting_review": len(open_rows), "lab": sum(1 for r in queue if r.get("is_lab")),
-                   "by_verdict": data.get("by_verdict") or {}},
-        "latest": [{k: r.get(k) for k in ("incident_id", "title", "verdict", "confidence", "escalate", "is_lab",
-                                          "triaged_at", "devices")} for r in queue[:3]],
+                   "by_verdict": data.get("by_outcome") or data.get("by_verdict") or {}},
+        "latest": [{**{k: r.get(k) for k in ("incident_id", "title", "confidence", "escalate", "is_lab", "triaged_at",
+                                             "devices")}, "verdict": r.get("outcome") or r.get("verdict")} for r in queue[:3]],
     }
 
 

@@ -404,8 +404,12 @@ def view(settings: Settings) -> dict:
     total = {s: sum(1 for r in rows if r["status"] == s) for s in
              ("proposed", "saved", "approved", "queued", "running", "done", "failed", "verified", "still_there", "gone", "info")}
     fixed = [r for r in rows if r["status"] == "verified"]
+    # the newest 60, plus every event of a fix that has run: each remediation card shows its own history
+    ran = {r["fix_id"] for r in rows if r.get("started_at")}
+    recent = len(data["events"]) - 60
+    events = [e for i, e in enumerate(data["events"]) if i >= recent or e.get("fix_id") in ran]
     return {"generated_at": plan.get("generated_at"), "inventory_at": plan.get("inventory_at"), "stages": plan.get("stages", STAGES),
-            "rows": rows, "totals": total, "events": data["events"][-60:][::-1], "probes": data.get("probes", {}),
+            "rows": rows, "totals": total, "events": events[::-1], "probes": data.get("probes", {}),
             "default_method": settings.fix_method,
             "impact": {"findings_open": sum(r["findings"] for r in rows if r["status"] not in ("verified", "gone")),
                        "findings_cleared": sum(r["findings"] for r in fixed)}}
@@ -445,13 +449,13 @@ def approve(settings: Settings, ids: list[str], method: str | None = None, who: 
     return {"approved": done, "skipped": skipped}
 
 
-def unapprove(settings: Settings, ids: list[str]) -> dict:
+def unapprove(settings: Settings, ids: list[str], who: str | None = None) -> dict:
     removed = []
     with FixState(settings.fix_dir / "state.json").edit() as data:
         for fid in ids:
             if data["fixes"].get(fid, {}).get("status") in ("approved", "failed", "still_there"):
                 f = data["fixes"].pop(fid)
-                event(data, f"Approval withdrawn: {_label(f)}", fid)
+                event(data, f"Approval withdrawn{f' by {who}' if who else ''}: {_label(f)}", fid)
                 removed.append(fid)
     return {"withdrawn": removed}
 
@@ -472,14 +476,14 @@ def save(settings: Settings, ids: list[str], who: str | None = None) -> dict:
     return {"saved": saved}
 
 
-def unsave(settings: Settings, ids: list[str]) -> dict:
+def unsave(settings: Settings, ids: list[str], who: str | None = None) -> dict:
     """Undo Save for later: the fix is proposed again."""
     removed = []
     with FixState(settings.fix_dir / "state.json").edit() as data:
         for fid in ids:
             if data["fixes"].get(fid, {}).get("status") == "saved":
                 f = data["fixes"].pop(fid)
-                event(data, f"No longer saved for later: {_label(f)}", fid)
+                event(data, f"No longer saved for later{f' by {who}' if who else ''}: {_label(f)}", fid)
                 removed.append(fid)
     return {"unsaved": removed}
 

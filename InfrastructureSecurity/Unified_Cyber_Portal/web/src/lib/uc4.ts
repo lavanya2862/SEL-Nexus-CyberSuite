@@ -36,6 +36,52 @@ export const sourceNames = (s: string | string[] | null | undefined) =>
 
 export interface Feedback { agree: boolean; analyst_verdict: string | null }
 
+/** The final classification once one is made (portal sources.uc4_decision): an analyst's decision made in
+ *  CyberSuite (written into Defender), else the classification Defender holds. null while nobody has classified it.
+ *  status is Defender's: resolved = closed; active / inProgress = open. */
+export interface Decision {
+  outcome: Verdict
+  by: 'analyst' | 'defender'
+  who?: string
+  at?: string | null
+  classification: string | null
+  determination: string | null
+  status: string | null
+}
+
+// Defender's incident status values, as its incident list words them
+export const STATUS_WORDS: Record<string, string> = {
+  active: 'Active (not picked up yet)', inProgress: 'In progress', resolved: 'Resolved', redirected: 'Merged into another incident',
+}
+
+/** Defender's incident status in two words: resolved (or redirected into another incident) is closed, the rest open. */
+export const isClosed = (status: string | null | undefined) => ['resolved', 'redirected'].includes((status ?? '').toLowerCase())
+
+// What an analyst's decision does in Defender (UC4 close.plan) and the "why" Defender records with it
+export const DECISION_EFFECT: Record<'likely_true_positive' | 'likely_false_positive', { effect: string; button: string; reasons: [string, string][] }> = {
+  likely_true_positive: {
+    effect: 'Stays open in Defender as In progress, classified true positive, so the response can continue.',
+    button: 'Save: true positive, keep open in Defender',
+    reasons: [['other', 'Other'], ['malware', 'Malware'], ['compromisedAccount', 'Compromised account'], ['maliciousUserActivity', 'Malicious user activity']],
+  },
+  likely_false_positive: {
+    effect: 'Closed in Defender (Resolved), classified false positive.',
+    button: 'Save: false positive, close in Defender',
+    reasons: [['notMalicious', 'Not malicious'], ['notEnoughDataToValidate', 'Not enough data to validate']],
+  },
+}
+
+// Defender's classification and determination values, in its own words
+export const CLASSIFICATION_WORDS: Record<string, string> = {
+  truePositive: 'True positive', falsePositive: 'False positive', informationalExpectedActivity: 'Informational, expected activity',
+}
+export const DETERMINATION_WORDS: Record<string, string> = {
+  malware: 'Malware', compromisedAccount: 'Compromised account', maliciousUserActivity: 'Malicious user activity', other: 'Other',
+  notMalicious: 'Not malicious', notEnoughDataToValidate: 'Not enough data to validate', securityTesting: 'Security test',
+  confirmedUserActivity: 'Confirmed user activity', lineOfBusinessApplication: 'Line-of-business application',
+  phishing: 'Phishing', unwantedSoftware: 'Unwanted software', multiStagedAttack: 'Multi-staged attack',
+}
+
 export interface QueueRow {
   incident_id: string
   title: string
@@ -60,6 +106,11 @@ export interface QueueRow {
   seconds: number
   feedback: Feedback | null
   last_action?: { action: string; status: string; done_at: string | null } | null
+  classification?: string | null
+  determination?: string | null
+  decision: Decision | null
+  /** what the queue shows: the decision when there is one, else the agent's verdict */
+  outcome: Verdict
 }
 
 // The rules UC4 applies (UC4 config/guardrails.yaml). No rules of our own: it never overrules Microsoft, and it
@@ -96,6 +147,7 @@ export interface Uc4Queue {
   last_run: string | null
   totals: { incidents: number; escalate: number; lab: number }
   by_verdict: Record<string, number>
+  by_outcome: Record<string, number>
   queue: QueueRow[]
   last_run_detail: Uc4LastRun | null
   automation: Automation
@@ -154,6 +206,9 @@ export interface Uc4Case {
   feedback: { feedback_id: string; agree: boolean; analyst_verdict: string | null; reason: string; minutes: number | null; created_at: string }[]
   actions: { action_id?: string; action: string; target: string; status: string; detail?: string; requested_at: string; done_at?: string | null }[]
   questions?: Question[]
+  defender_state: { status: string | null; classification: string | null; determination: string | null }
+  decision: Decision | null
+  outcome: Verdict
   automation: Automation
   site_up: boolean
   site_url: string
@@ -194,6 +249,23 @@ export function useFeedback() {
   return useMutation({
     mutationFn: async (body: FeedbackInput) => {
       const res = await fetch('/api/uc4/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portal': 'feedback' }, body: JSON.stringify(body) })
+      const out = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(out.error ?? `CyberSuite could not complete the request (error ${res.status})`)
+      return out
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['uc4'] }),
+  })
+}
+
+export interface DecideInput { incident_id: string; verdict: 'likely_true_positive' | 'likely_false_positive'; determination: string; reason?: string }
+
+/** An analyst's decision, written into Defender by UC4 (X-Portal: decide): a false positive is closed, a true
+ *  positive stays open as in progress. Throws with UC4's or Defender's message. */
+export function useDecide() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (body: DecideInput) => {
+      const res = await fetch('/api/uc4/decide', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portal': 'decide' }, body: JSON.stringify(body) })
       const out = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(out.error ?? `CyberSuite could not complete the request (error ${res.status})`)
       return out

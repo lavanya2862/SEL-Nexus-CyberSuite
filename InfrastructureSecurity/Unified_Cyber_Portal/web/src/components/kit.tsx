@@ -116,9 +116,9 @@ export const legendStyle = (t: ChartTokens) => ({
   top: 0, right: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { color: t.ink2, fontSize: 11.5 },
 })
 
-export function Card({ title, description, children, className, action }: { title: ReactNode; description?: ReactNode; children: ReactNode; className?: string; action?: ReactNode }) {
+export function Card({ title, description, children, className, action, id }: { title: ReactNode; description?: ReactNode; children: ReactNode; className?: string; action?: ReactNode; id?: string }) {
   return (
-    <Panel className={cn('flex min-w-0 flex-col p-6', className)}>
+    <Panel id={id} className={cn('flex min-w-0 flex-col p-6', className)}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-base font-semibold tracking-[-0.01em]">{title}</h3>

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  AlertTriangle, ArrowLeft, Bot, Undo2, Zap, CheckCircle2, ExternalLink, Hand, Loader2, ScanSearch,
+  AlertTriangle, ArrowLeft, Bot, Undo2, Zap, CheckCircle2, CircleDot, ExternalLink, Hand, Loader2, ScanSearch,
 } from 'lucide-react'
 import { GettingReady, useAutoStart } from '@/lib/services'
 import { Card, Empty, Panel, Tabs, Tag } from '@/components/kit'
@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ago, dateTime } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
 import {
-  ACTION_WORDS, CONTAINMENT, NotFound, RULES, VERDICT, VERDICT_ORDER, mitreLink, needsPerson, ruleMeta, sourceNames, useAsk, useFeedback, useReopen, useUc4Case, utc, verdictMeta, type Uc4Case, type Verdict,
+  ACTION_WORDS, CLASSIFICATION_WORDS, CONTAINMENT, DECISION_EFFECT, DETERMINATION_WORDS, NotFound, RULES, STATUS_WORDS, VERDICT, isClosed, mitreLink, needsPerson, ruleMeta, sourceNames, useAsk, useDecide, useReopen, useUc4Case, utc, verdictMeta, type Uc4Case,
 } from '@/lib/uc4'
 import { cn } from '@/lib/utils'
 import { VerdictPill } from '@/pages/Respond'
@@ -37,7 +37,9 @@ export function RespondCase() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <VerdictPill verdict={v.verdict} large />
+            <VerdictPill verdict={data.outcome ?? v.verdict} large />
+            {data.decision && data.outcome !== v.verdict && <Tag>Agent said: {verdictMeta(v.verdict).short.toLowerCase()}</Tag>}
+            <DefenderStatus status={data.defender_state?.status ?? p.status} />
             <Tag>{v.confidence} confidence</Tag>
             {v.escalate && <Tag tone="bad">Escalate</Tag>}
           </div>
@@ -69,6 +71,14 @@ export function RespondCase() {
       </div>
     </div>
   )
+}
+
+/** Defender's status (open = still being worked on, closed = resolved), with Defender's own word on hover. */
+function DefenderStatus({ status }: { status: string | null | undefined }) {
+  const words = status ? STATUS_WORDS[status] ?? status : 'unknown'
+  return isClosed(status)
+    ? <span title={`Defender status: ${words}`}><Tag><CheckCircle2 className="size-3" /> Closed in Defender</Tag></span>
+    : <span title={`Defender status: ${words}`}><Tag><CircleDot className="size-3" /> Open in Defender · {words.toLowerCase()}</Tag></span>
 }
 
 function BackLink() {
@@ -281,16 +291,18 @@ function BasisHeading({ n, title, note }: { n: number; title: string; note: stri
 
 /* ───────── your decision ───────── */
 
+type Final = keyof typeof DECISION_EFFECT
+
 function Decide({ c }: { c: Uc4Case }) {
-  const fb = useFeedback()
+  const decide = useDecide()
   const auto = useAutoStart(!c.site_up, 'triage')
-  const [right, setRight] = useState<Verdict | null>(null)
+  const [right, setRight] = useState<Final | null>(null)
+  const [why, setWhy] = useState('')
   const [reason, setReason] = useState('')
-  const last = c.feedback[c.feedback.length - 1]
   const { packet: p, verdict: v } = c
   const reopened = c.actions.some((a) => a.action === 'reopen' && a.status === 'done')
-  const send = () =>
-    fb.mutate({ incident_id: p.incident_id, agree: right === v.verdict, analyst_verdict: right, reason }, { onSuccess: () => { setReason(''); setRight(null) } })
+  const pick = (x: Final) => { setRight(x); setWhy(DECISION_EFFECT[x].reasons[0][0]) }
+  const send = () => right && decide.mutate({ incident_id: p.incident_id, verdict: right, determination: why, reason })
 
   if (!needsPerson({ verdict: v.verdict, ai_status: v.ai_status, is_lab: p.is_lab }, c.automation.auto_resolve, reopened)) {
     const tp = v.verdict === 'likely_true_positive'
@@ -298,30 +310,24 @@ function Decide({ c }: { c: Uc4Case }) {
       <Panel className="flex flex-col gap-2 p-6">
         <h3 className="flex items-center gap-2 font-semibold tracking-tight"><Zap className="size-4" style={{ color: statusColor.warning }} /> Handled by the agent</h3>
         <p className="text-sm text-ink-3">
-          {tp ? 'The agent classified this as a true positive, so it was escalated in Defender. No analyst decision required.'
+          {tp ? 'The agent classified this as a true positive, so it was escalated: it is open in Defender as In progress for the response. No analyst decision required.'
             : `The agent classified this as ${verdictMeta(v.verdict).short.toLowerCase()}, so it was closed in Defender. No analyst decision required. If this is incorrect, reopen it below.`}
         </p>
       </Panel>
     )
   }
 
+  // classified already (here or in Defender): show the decision, never the choice again
+  if (c.decision) return <Decided c={c} />
+
   return (
     <Panel className="flex flex-col gap-4 p-6">
       <div>
         <h3 className="font-semibold tracking-tight">Analyst decision</h3>
         <p className="mt-1 text-sm text-ink-3">
-          {reopened ? 'This incident was reopened and is awaiting analyst review.' : v.ai_status !== 'ai' ? 'The agent model was not used for this verdict.' : 'The agent could not classify this incident.'} Select a classification.
+          {reopened ? 'This incident was reopened and is awaiting analyst review.' : v.ai_status !== 'ai' ? 'The agent model was not used for this verdict.' : 'The agent could not classify this incident.'} Your decision is written into Defender.
         </p>
       </div>
-      {last && (
-        <div className="flex items-start gap-2 rounded-xl bg-well p-3 text-sm">
-          <CheckCircle2 className="mt-0.5 size-4 shrink-0" style={{ color: statusColor.good }} />
-          <span className="text-ink-2">
-            You decided: {verdictMeta(last.analyst_verdict ?? v.verdict).short} · {ago(last.created_at)}
-            {last.reason && <span className="block text-xs text-ink-3">“{last.reason}”</span>}
-          </span>
-        </div>
-      )}
       {!c.site_up ? (
         <GettingReady what="the decision buttons" {...auto} className="rounded-xl bg-well p-3" />
       ) : (
@@ -329,26 +335,66 @@ function Decide({ c }: { c: Uc4Case }) {
           <fieldset>
             <legend className="sr-only">What is it?</legend>
             <div className="flex flex-col gap-1.5">
-              {VERDICT_ORDER.filter((x) => x !== 'needs_investigation').map((v) => (
-                <label key={v} className={cn('flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2 text-sm', right === v ? 'pill-on' : 'border-hairline hover:bg-well')}>
-                  <input type="radio" name="right" className="mt-1" checked={right === v} onChange={() => setRight(v)} />
-                  <span><span className="flex items-center gap-1.5 font-medium"><span className="size-2 rounded-full" style={{ background: VERDICT[v].color }} />{VERDICT[v].label}</span>
-                    <span className="block text-xs text-ink-3">{VERDICT[v].help}</span></span>
+              {(Object.keys(DECISION_EFFECT) as Final[]).map((x) => (
+                <label key={x} className={cn('flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2 text-sm', right === x ? 'pill-on' : 'border-hairline hover:bg-well')}>
+                  <input type="radio" name="right" className="mt-1" checked={right === x} onChange={() => pick(x)} />
+                  <span><span className="flex items-center gap-1.5 font-medium"><span className="size-2 rounded-full" style={{ background: VERDICT[x].color }} />{VERDICT[x].label}</span>
+                    <span className="block text-xs text-ink-3">{VERDICT[x].help}</span>
+                    <span className="mt-1 block text-xs font-medium text-ink-2">In Defender: {DECISION_EFFECT[x].effect}</span></span>
                 </label>
               ))}
             </div>
           </fieldset>
+          {right && (
+            <label className="text-sm">
+              <span className="font-medium">Determination <span className="font-normal text-ink-3">(recorded in Defender)</span></span>
+              <select value={why} onChange={(e) => setWhy(e.target.value)} className="mt-1 w-full rounded-lg border border-hairline bg-field px-3 py-2 text-sm outline-none focus:border-blue/60 focus:ring-3 focus:ring-blue/15">
+                {DECISION_EFFECT[right].reasons.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+              </select>
+            </label>
+          )}
           <label className="text-sm">
-            <span className="font-medium">Reason <span className="font-normal text-ink-3">(optional)</span></span>
+            <span className="font-medium">Reason <span className="font-normal text-ink-3">(optional, added as a comment in Defender)</span></span>
             <textarea value={reason} onChange={(e) => setReason(e.target.value.slice(0, 500))} rows={2} className="mt-1 w-full rounded-lg border border-hairline bg-field px-3 py-2 text-sm outline-none transition-[border-color,box-shadow] focus:border-blue/60 focus:ring-3 focus:ring-blue/15" placeholder="For example: authorised administrative activity" />
           </label>
-          <button onClick={send} disabled={!right || fb.isPending} className="inline-flex items-center justify-center gap-2 rounded-lg btn-blue px-3 py-2 text-sm font-medium text-white disabled:opacity-40">
-            {fb.isPending && <Loader2 className="size-4 animate-spin" />} Save my decision
+          <button onClick={send} disabled={!right || decide.isPending || decide.isSuccess} className="inline-flex items-center justify-center gap-2 rounded-lg btn-blue px-3 py-2 text-sm font-medium text-white disabled:opacity-40">
+            {decide.isPending && <Loader2 className="size-4 animate-spin" />}
+            {decide.isPending ? 'Writing to Defender…' : right ? DECISION_EFFECT[right].button : 'Save my decision'}
           </button>
         </div>
       )}
-      {fb.isError && <p className="text-xs" style={{ color: statusColor.critical }}>{(fb.error as Error).message}</p>}
-      {fb.isSuccess && <p className="flex items-center gap-1.5 text-xs text-ink-2"><CheckCircle2 className="size-3.5" style={{ color: statusColor.good }} /> Saved .</p>}
+      {decide.isError && <p className="text-xs" style={{ color: statusColor.critical }}>Not saved: {(decide.error as Error).message}</p>}
+      {decide.isSuccess && <p className="flex items-center gap-1.5 text-xs text-ink-2"><Loader2 className="size-3.5 animate-spin" /> Written to Defender. Updating…</p>}
+    </Panel>
+  )
+}
+
+/** The decision already made: by an analyst in CyberSuite (written into Defender), or the classification Defender holds. */
+function Decided({ c }: { c: Uc4Case }) {
+  const d = c.decision!
+  const closed = isClosed(d.status)
+  const note = [...c.feedback].reverse().find((f) => f.analyst_verdict)
+  const det = d.determination && d.determination !== 'unknown' ? ` (${DETERMINATION_WORDS[d.determination] ?? d.determination})` : ''
+  const rows: [string, ReactNode][] = [
+    ['Classification', <>{CLASSIFICATION_WORDS[d.classification ?? ''] ?? verdictMeta(d.outcome).label}{det}</>],
+    ['In Defender', <b className="font-medium text-ink">{closed ? 'Closed' : 'Open'}{d.status ? ` · ${STATUS_WORDS[d.status] ?? d.status}` : ''}</b>],
+    ['Decided', d.by === 'analyst' ? `by ${d.who || 'an analyst'} in CyberSuite${d.at ? `, ${ago(d.at)}` : ''}` : 'in Microsoft Defender'],
+    ['The agent had said', verdictMeta(c.verdict.verdict).label],
+  ]
+  return (
+    <Panel className="flex flex-col gap-3 p-6">
+      <h3 className="flex items-center gap-2 font-semibold tracking-tight">
+        <CheckCircle2 className="size-4" style={{ color: statusColor.good }} /> Reviewed · {closed ? 'closed' : 'open'} in Defender
+      </h3>
+      <div><VerdictPill verdict={d.outcome} large /></div>
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
+        {rows.map(([k, val]) => <Fragment key={k}><dt className="text-ink-3">{k}</dt><dd className="text-ink-2">{val}</dd></Fragment>)}
+      </dl>
+      {d.by === 'analyst' && note?.reason && <p className="rounded-xl bg-well p-3 text-sm text-ink-2">“{note.reason}”</p>}
+      <p className="text-xs text-ink-3">
+        {closed ? 'Nothing more to do.' : 'Continue the response in Defender; close the incident there when it is dealt with.'}
+        {' '}To change the classification, update the incident in Defender. CyberSuite picks it up on the next check.
+      </p>
     </Panel>
   )
 }

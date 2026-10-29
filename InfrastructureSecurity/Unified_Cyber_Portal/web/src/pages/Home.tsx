@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
-  AlertTriangle, ArrowRight, CheckCircle2, Clock, Copy, ExternalLink, Hand, HelpCircle, LayoutGrid, List, Play, SlidersHorizontal,
-  X, XCircle, Zap,
+  AlertTriangle, ArrowRight, CheckCircle2, Clock, ExternalLink, Hand, HelpCircle, Play, SlidersHorizontal,
+  X, XCircle,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -12,14 +12,13 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { UC_LABEL, useRuns, type UcKey } from '@/lib/runs'
 import { VERDICT, VERDICT_ORDER, sourceNames, useUc4Queue, utc } from '@/lib/uc4'
-import { attackType, threatHref, useUc1Data } from '@/lib/uc1'
+import { attackType, useUc1Data } from '@/lib/uc1'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Chart } from '@/components/Chart'
-import { Chip, Empty, InfoTip, Panel, Table, Tabs } from '@/components/kit'
+import { Chip, InfoTip, Panel, Tabs } from '@/components/kit'
 import { fetchSummary, type Health, type Summary } from '@/lib/api'
-import { PRIORITY } from '@/lib/uc3'
 import { qualityWord } from '@/lib/format'
-import { useFilters, type WorkTab } from '@/lib/filters'
+import { useFilters } from '@/lib/filters'
 import { ago, dateTime, num, shortDate } from '@/lib/format'
 import { chartTokens, statusColor, useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
@@ -81,18 +80,16 @@ export type View = ReturnType<typeof useView>
 /* ───────────────────────── page ───────────────────────── */
 
 // The page's own tab row (same look as the other pages): each tab jumps to its part of the page.
-type Section = 'summary' | WorkTab | 'agents'
-const SECTIONS: [Section, string][] = [['summary', 'Summary'], ['fixes', 'Priority remediations'], ['threats', 'Threats'], ['devices', 'Devices'], ['agents', 'Agents']]
-const SECTION_TARGET: Record<Section, string> = { summary: 'top', fixes: 'work', threats: 'work', devices: 'work', agents: 'pipelines' }
+type Section = 'summary' | 'risk' | 'agents'
+const SECTIONS: [Section, string][] = [['summary', 'Summary'], ['risk', 'Apps and VMs'], ['agents', 'Agents']]
+const SECTION_TARGET: Record<Section, string> = { summary: 'top', risk: 'work', agents: 'pipelines' }
 
 function HomeView({ s }: { s: Summary }) {
   const v = useView(s)
-  const { setWorkTab } = useFilters()
   const [section, setSection] = useState<Section>('summary')
   const attack = useAttackHealth()
   const goTo = (t: Section) => {
     setSection(t)
-    if (t === 'fixes' || t === 'threats' || t === 'devices') setWorkTab(t)
     document.getElementById(SECTION_TARGET[t])?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   return (
@@ -120,9 +117,9 @@ function HomeView({ s }: { s: Summary }) {
         <TrendCard v={v} />
       </div>
 
-      <div id="work" className="grid scroll-mt-32 grid-cols-1 gap-5 xl:grid-cols-3">
-        <WorkPanel s={s} v={v} />
-        <RankingPanel s={s} v={v} />
+      <div id="work" className="grid scroll-mt-32 grid-cols-1 gap-5 lg:grid-cols-2">
+        <AppsCard v={v} />
+        <VmCard s={s} v={v} />
       </div>
 
       <div id="pipelines" className="grid scroll-mt-32 grid-cols-1 gap-5 lg:grid-cols-2">
@@ -274,287 +271,76 @@ function TrendCard({ v }: { v: View }) {
   )
 }
 
-/* ───────────────────────── main work panel ───────────────────────── */
-
-function WorkPanel({ s, v }: { s: Summary; v: View }) {
-  const { workTab, setWorkTab } = useFilters()
-  const [layout, setLayout] = useState<'list' | 'grid'>('list')
-  return (
-    <Panel className="min-w-0 p-6 xl:col-span-2">
-      <div className="flex items-end gap-3">
-        <div className="min-w-0 flex-1 overflow-x-auto">
-          <Tabs<WorkTab>
-            value={workTab}
-            onChange={setWorkTab}
-            tabs={[['fixes', `Priority remediations · ${v.fixes.length}`], ['threats', `Applicable threats · ${v.threats.length}`], ['devices', `Affected devices · ${v.devices.length}`]]}
-          />
-        </div>
-        <div className="mb-2 flex shrink-0 rounded-lg bg-well p-0.5" role="group" aria-label="Layout">
-          {([['list', List], ['grid', LayoutGrid]] as const).map(([id, Icon]) => (
-            <button
-              key={id}
-              aria-label={`${id} view`}
-              aria-pressed={layout === id}
-              onClick={() => setLayout(id)}
-              className={cn('grid size-7 place-items-center rounded-md text-ink-3', layout === id && 'bg-blue text-white')}
-            >
-              <Icon className="size-3.5" />
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="mt-4">
-        {workTab === 'fixes' && <FixesView s={s} v={v} layout={layout} />}
-        {workTab === 'threats' && <ThreatsView v={v} layout={layout} />}
-        {workTab === 'devices' && <DevicesView v={v} layout={layout} />}
-      </div>
-    </Panel>
-  )
-}
-
-
-function PriorityTag({ level }: { level: number }) {
-  return <span className="whitespace-nowrap text-ink-2">{PRIORITY[level] ?? '–'}</span>
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [done, setDone] = useState(false)
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          className="grid size-7 shrink-0 place-items-center rounded-md text-ink-3 hover:bg-well hover:text-ink"
-          aria-label="Copy the update command"
-          onClick={() => {
-            navigator.clipboard?.writeText(text)
-            setDone(true)
-            setTimeout(() => setDone(false), 1400)
-          }}
-        >
-          {done ? <CheckCircle2 className="size-3.5" style={{ color: statusColor.good }} /> : <Copy className="size-3.5" />}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent className="font-mono text-xs">{done ? 'Copied' : text}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-/** App fixes open their card in Fix; security settings (no installed version) open the Security settings tab. */
-const fixHref = (f: { app: string; installed_versions: string | null }) =>
-  f.installed_versions ? `/fixes?app=${encodeURIComponent(f.app)}` : `/fixes/settings?q=${encodeURIComponent(f.app)}`
-
-function FixesView({ s, v, layout }: { s: Summary; v: View; layout: 'list' | 'grid' }) {
-  if (!v.fixes.length) return <Empty text="No remediations required for this filter." />
-  if (layout === 'grid')
-    return (
-      <div className="grid gap-3 sm:grid-cols-2">
-        {v.fixes.map((f) => (
-          <div key={f.rank} className="rounded-xl border border-hairline p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="font-medium">{f.app}</div>
-                <div className="text-xs text-ink-3">{f.installed_versions}</div>
-              </div>
-              <span className="tabular text-xs text-ink-3">#{f.rank}</span>
-            </div>
-            <div className="mt-3 flex items-center justify-between text-sm">
-              <PriorityTag level={f.urgency_level} />
-              <span className="tabular text-ink-2">{num(f.cves)} CVEs</span>
-            </div>
-            <div className="mt-3 flex items-center gap-2 border-t border-hairline pt-3 text-sm text-ink-2">
-              <span className="flex-1">{f.fix_action}</span>
-              {f.command && <CopyButton text={f.command} />}
-                <Link to={fixHref(f)} title="Open in Remediation" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Remediate</Link>
-            </div>
-          </div>
-        ))}
-      </div>
-    )
-  return (
-    <>
-      <Table head={[['#', 'left'], ['App', 'left'], ['Remediation priority', 'left'], ['CVEs', 'right'], ['Remediation', 'left']]}>
-        {v.fixes.map((f) => (
-          <tr key={f.rank} className="hover:bg-well/60">
-            <td className="tabular w-10 text-ink-3">{f.rank}</td>
-            <td>
-              <div className="font-medium leading-snug [text-wrap:pretty]">{f.app}</div>
-              <div className="max-w-[170px] truncate text-xs text-ink-3" title={f.installed_versions ?? undefined}>
-                {f.devices} device{f.devices === 1 ? '' : 's'} · {f.installed_versions ?? 'security setting'}
-              </div>
-            </td>
-            <td><PriorityTag level={f.urgency_level} /></td>
-            <td className="tabular text-right">{num(f.cves)}</td>
-            <td className="min-w-[180px]">
-              <div className="flex flex-col items-start gap-1.5 text-ink-2">
-                <span className="leading-snug [text-wrap:pretty]">{f.fix_action}</span>
-                <div className="flex items-center gap-1">
-                {f.command && <CopyButton text={f.command} />}
-                <Link to={fixHref(f)} title="Open in Remediation" className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue/15 px-2 py-1 text-[11px] font-semibold text-sky transition-colors hover:bg-blue/25"><Zap className="size-3" /> Remediate</Link>
-                </div>
-              </div>
-            </td>
-          </tr>
-        ))}
-      </Table>
-      {s.uc3.ai_fixes?.model && (
-        <p className="mt-3 text-xs text-ink-3">Agent-generated remediation guidance, validated against Defender data. Review before acting.</p>
-      )}
-    </>
-  )
-}
-
-function ThreatsView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
-  if (!v.threats.length) return <Empty text="No applicable threats for this VM." />
-  if (layout === 'grid')
-    return (
-      <div className="grid gap-3 sm:grid-cols-2">
-        {v.threats.map((t) => (
-          <div key={t.id} className="rounded-xl border border-hairline p-4">
-            <div className="flex items-start justify-between gap-3">
-              <Link to={threatHref(t.id)} className="text-sm font-medium leading-snug hover:underline">{t.title}</Link>
-              <span className="tabular rounded-md bg-well px-2 py-0.5 text-xs font-semibold">{t.score}</span>
-            </div>
-            <p className="mt-2 line-clamp-3 text-xs text-ink-3">{t.summary}</p>
-          </div>
-        ))}
-      </div>
-    )
-  return (
-    <Table head={[['Score', 'left'], ['Threat', 'left'], ['Source', 'left'], ['Exposed devices', 'left'], ['Action', 'left']]}>
-      {v.threats.map((t) => (
-        <tr key={t.id} className="hover:bg-well/60">
-          <td className="tabular w-16 font-semibold">{t.score}</td>
-          <td className="max-w-[300px]">
-            <Link to={threatHref(t.id)} className="font-medium leading-snug hover:underline">{t.title}</Link>
-            <div className="mt-1 flex flex-wrap gap-1">
-              {(t.chips ?? []).slice(1, 4).map((c) => <span key={c} className="rounded bg-well px-1.5 py-0.5 text-[11px] text-ink-2">{c}</span>)}
-            </div>
-          </td>
-          <td className="whitespace-nowrap text-ink-2">
-            {t.url ? (
-              <a href={t.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline-offset-4 hover:underline">
-                {t.source} <ExternalLink className="size-3" />
-              </a>
-            ) : t.source}
-          </td>
-          <td className="text-ink-2">{t.devices}</td>
-          <td className="max-w-[220px] text-ink-2">{t.action}</td>
-        </tr>
-      ))}
-    </Table>
-  )
-}
-
-function DevicesView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
-  const { includeTests } = useFilters()
-  if (!v.devices.length) return <Empty text="No affected devices for this filter." />
-  const seen = (d?: string) => (d ? dateTime(d.replace(' ', 'T') + 'Z') : '–')
-  if (layout === 'grid')
-    return (
-      <div className="grid gap-3 sm:grid-cols-2">
-        {v.devices.map((d) => (
-          <div key={d.name} className="rounded-xl border border-hairline p-4">
-            <div className="font-medium">{d.name}</div>
-            <div className="text-xs text-ink-3">last seen {seen(d.last_seen)}</div>
-            <div className="mt-3 grid grid-cols-3 text-sm">
-              <div><div className="tabular font-medium">{num(d.findings)}</div><div className="text-xs text-ink-3">findings</div></div>
-              <div><div className="tabular font-medium">{num(d.p1)}</div><div className="text-xs text-ink-3">P1</div></div>
-              <div><div className="tabular font-medium">{num(d.threats_exposed)}</div><div className="text-xs text-ink-3">threats</div></div>
-            </div>
-          </div>
-        ))}
-      </div>
-    )
-  return (
-    <Table head={[['Device', 'left'], ['Findings', 'right'], ['P1', 'right'], ['Applicable threats', 'right'], ['Hunt matches', 'right'], ['Last seen', 'left']]}>
-      {v.devices.map((d) => (
-        <tr key={d.name} className="hover:bg-well/60">
-          <td className="font-medium">{d.name}</td>
-          <td className="tabular text-right">{num(d.findings)}</td>
-          <td className="tabular text-right">{num(d.p1)}</td>
-          <td className="tabular text-right">{num(d.threats_exposed)}</td>
-          <td className="tabular text-right">
-            {num(d.hunt_hits)}
-            {d.test_hits && includeTests ? <span className="text-ink-3"> (+{d.test_hits} test)</span> : null}
-          </td>
-          <td className="whitespace-nowrap text-ink-3">{seen(d.last_seen)}</td>
-        </tr>
-      ))}
-    </Table>
-  )
-}
-
-
-/* ───────────────────────── ranking panel ───────────────────────── */
+/* ───────────────────────── apps and VMs ───────────────────────── */
 
 const SEVERITIES = ['Critical', 'High', 'Medium', 'Low'] as const
 
-function RankingPanel({ s, v }: { s: Summary; v: View }) {
-  const [tab, setTab] = useState<'apps' | 'opco'>('apps')
+function AppsCard({ v }: { v: View }) {
   const { theme } = useTheme()
   const t = chartTokens[theme]
   const top = v.apps.slice(0, 14)
   const max = top[0]?.findings ?? 1
+  return (
+    <Panel className="p-6">
+      <h3 className="font-semibold">Most vulnerable apps</h3>
+      <p className="mt-1 text-sm text-ink-3">Which apps cause the most vulnerabilities?</p>
+      <ul className="mt-5 flex flex-col gap-3.5">
+        {top.map((a, i) => (
+          <li key={a.app} className="grid grid-cols-[112px_1fr] items-center gap-3 text-xs">
+            <span className="truncate text-right text-ink-3" title={a.app}>{shortApp(a.app)}</span>
+            <span className="flex items-center gap-2">
+              <span className="rank-bar h-2.5 rounded-full" style={{ width: `${Math.max(3, (a.findings / max) * 82)}%`, background: t.series[i % t.series.length], animationDelay: `${i * 40}ms` }} />
+              <span className="tabular font-medium">{num(a.findings)}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  )
+}
+
+function VmCard({ s, v }: { s: Summary; v: View }) {
+  const { theme } = useTheme()
+  const t = chartTokens[theme]
   const opcos = s.uc3.opco_totals
   const opcoMax = Math.max(...opcos.map((o) => o.findings), 1)
   return (
     <Panel className="p-6">
-      <Tabs value={tab} onChange={setTab} tabs={[['apps', 'By app'], ['opco', 'By VM']]} />
-      {tab === 'apps' ? (
-        <>
-          <h3 className="mt-5 font-semibold">Where the findings sit</h3>
-          <p className="mt-1 text-sm text-ink-3">Which apps cause the most vulnerabilities?</p>
-          <ul className="mt-5 flex flex-col gap-3.5">
-            {top.map((a, i) => (
-              <li key={a.app} className="grid grid-cols-[112px_1fr] items-center gap-3 text-xs">
-                <span className="truncate text-right text-ink-3" title={a.app}>{shortApp(a.app)}</span>
-                <span className="flex items-center gap-2">
-                  <span className="rank-bar h-2.5 rounded-full" style={{ width: `${Math.max(3, (a.findings / max) * 82)}%`, background: t.series[i % t.series.length], animationDelay: `${i * 40}ms` }} />
-                  <span className="tabular font-medium">{num(a.findings)}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : (
-        <>
-          <h3 className="mt-5 font-semibold">Findings by VM</h3>
-          <p className="mt-1 text-sm text-ink-3">How severe is each VM's exposure?</p>
-          <ul className="mt-6 flex flex-col gap-6">
-            {opcos.map((o) => {
-              const rows = s.uc3.opco.filter((r) => r.opco === o.opco)
-              return (
-                <li key={o.opco} className={cn(v.opco !== 'all' && v.opco !== o.opco && 'opacity-40')}>
-                  <div className="mb-2 flex items-baseline justify-between text-sm">
-                    <span className="font-medium">{o.opco}</span>
-                    <span className="tabular text-ink-3">{num(o.findings)}</span>
-                  </div>
-                  <div className="flex h-2 gap-0.5" style={{ width: `${(o.findings / opcoMax) * 100}%` }}>
-                    {SEVERITIES.map((sev) => {
-                      const c = rows.find((r) => r.severity === sev)?.count ?? 0
-                      return (
-                        <Tooltip key={sev}>
-                          <TooltipTrigger asChild>
-                            <span className="h-full first:rounded-l-full last:rounded-r-full" style={{ flexGrow: c, background: t.severity[sev] }} />
-                          </TooltipTrigger>
-                          <TooltipContent>{sev}: {num(c)}</TooltipContent>
-                        </Tooltip>
-                      )
-                    })}
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-          <div className="mt-6 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-ink-3">
-            {SEVERITIES.map((sev) => (
-              <span key={sev} className="flex items-center gap-1.5">
-                <span className="size-2 rounded-full" style={{ background: t.severity[sev] }} /> {sev}
-              </span>
-            ))}
-          </div>
-        </>
-      )}
+      <h3 className="font-semibold">Findings on each VM</h3>
+      <p className="mt-1 text-sm text-ink-3">How severe is each VM's exposure?</p>
+      <ul className="mt-6 flex flex-col gap-6">
+        {opcos.map((o) => {
+          const rows = s.uc3.opco.filter((r) => r.opco === o.opco)
+          return (
+            <li key={o.opco} className={cn(v.opco !== 'all' && v.opco !== o.opco && 'opacity-40')}>
+              <div className="mb-2 flex items-baseline justify-between text-sm">
+                <span className="font-medium">{o.opco}</span>
+                <span className="tabular text-ink-3">{num(o.findings)}</span>
+              </div>
+              <div className="flex h-2 gap-0.5" style={{ width: `${(o.findings / opcoMax) * 100}%` }}>
+                {SEVERITIES.map((sev) => {
+                  const c = rows.find((r) => r.severity === sev)?.count ?? 0
+                  return (
+                    <Tooltip key={sev}>
+                      <TooltipTrigger asChild>
+                        <span className="h-full first:rounded-l-full last:rounded-r-full" style={{ flexGrow: c, background: t.severity[sev] }} />
+                      </TooltipTrigger>
+                      <TooltipContent>{sev}: {num(c)}</TooltipContent>
+                    </Tooltip>
+                  )
+                })}
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+      <div className="mt-6 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-ink-3">
+        {SEVERITIES.map((sev) => (
+          <span key={sev} className="flex items-center gap-1.5">
+            <span className="size-2 rounded-full" style={{ background: t.severity[sev] }} /> {sev}
+          </span>
+        ))}
+      </div>
     </Panel>
   )
 }

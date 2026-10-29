@@ -32,12 +32,19 @@ def fetch(graph, store: Store, settings: Settings) -> list[dict]:
 
     known = {r["incident_id"]: r["fingerprint"]
              for r in store.query("SELECT incident_id, fingerprint FROM verdicts")}
+    seen = {r["incident_id"]: (r["status"], r["classification"], r["determination"])
+            for r in store.query("SELECT incident_id, status, classification, determination FROM incidents")}
     packets, newest = [], since
+    new = reclassified = 0
     for incident in raw:
         packet = build(incident, settings.lab_devices, lab_titles=settings.lab_alert_titles)
         updated = to_utc(packet["updated_at"]) or utcnow()
         newest = max(newest, updated) if newest else updated
         iid = packet["incident_id"]
+        if iid not in known:
+            new += 1
+        elif seen.get(iid) != (packet["status"], packet["classification"], packet["determination"]):
+            reclassified += 1       # closed, reopened or classified in Defender since we last looked
         if iid in known:
             # keep Defender's current status visible in the queue (closed in the portal, by UC4, reopened...)
             store.execute("UPDATE incidents SET status = ?, classification = ?, determination = ?, updated_at = ? "
@@ -49,5 +56,8 @@ def fetch(graph, store: Store, settings: Settings) -> list[dict]:
             packets.append(packet)
     if newest:
         store.set_state("incident_watermark", newest.strftime("%Y-%m-%dT%H:%M:%SZ"))
-    log.info("Ingest: %d incident(s) returned, %d need triage", len(raw), len(packets))
+    # Defender returns every incident whose last-update time moved, which includes touches that change nothing
+    # (a comment, a tag, alert housekeeping): count what really changed. The portal reads this line.
+    log.info("Ingest: %d incident(s) returned, %d need triage, %d new, %d status or classification change(s)",
+             len(raw), len(packets), new, reclassified)
     return packets

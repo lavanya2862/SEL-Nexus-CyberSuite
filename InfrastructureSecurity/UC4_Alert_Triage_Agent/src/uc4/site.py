@@ -6,7 +6,8 @@ The portal is the only user interface; this service has no web pages, only the A
   POST /api/run          start a run now (header X-UC4: run)
   POST /api/feedback     analyst agree/disagree (header X-UC4: feedback)
   POST /api/contain      human-approved isolate/release of a LAB device (header X-UC4: contain; off unless UC4_CONTAIN=1)
-  POST /api/close        close an incident in Defender (header X-UC4: close; off unless switched on)
+  POST /api/close        an analyst's decision written to Defender: false positive -> closed, true positive ->
+                         in progress (header X-UC4: close; off unless UC4_CLOSE=1)
   POST /api/reopen       reopen an automatically closed incident (header X-UC4: reopen)
   POST /api/ask          "Ask about this incident": the AI answers from the incident's saved evidence (header X-UC4: ask)
 
@@ -237,7 +238,8 @@ class _Handler(BaseHTTPRequestHandler):
                 try:
                     result = close_act(s.settings, s.graph_factory(), incident_id, str(body.get("verdict") or ""),
                                        body.get("determination"), str(body.get("reason") or "")[:500],
-                                       float(minutes) if minutes not in (None, "") else None)
+                                       float(minutes) if minutes not in (None, "") else None,
+                                       by=str(body.get("by") or "")[:80] or None)
                 except (CloseError, ValueError, TypeError) as exc:
                     return self._json(400, {"error": str(exc)})
                 return self._json(200, result)

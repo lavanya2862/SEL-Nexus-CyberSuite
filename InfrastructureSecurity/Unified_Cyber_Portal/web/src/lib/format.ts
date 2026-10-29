@@ -16,6 +16,9 @@ export function ago(iso: string | null | undefined): string {
   return `${Math.round(hours / 24)} days ago`
 }
 
+/** A timestamp written in UTC without a zone (UC1's fix state) as ISO the browser reads as UTC, not local time */
+export const utc = (s: string | null | undefined) => (s ? s.replace(' ', 'T') + (s.endsWith('Z') || s.includes('+') ? '' : 'Z') : null)
+
 export function dateTime(iso: string | null | undefined): string {
   if (!iso) return '–'
   return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })

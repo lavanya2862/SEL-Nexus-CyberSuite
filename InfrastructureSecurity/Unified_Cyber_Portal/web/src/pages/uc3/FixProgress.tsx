@@ -1,9 +1,10 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Check, CheckCircle2, Clock, Loader2, Minus, Monitor, ShieldCheck, Wrench, X, XCircle } from 'lucide-react'
+import { ArrowLeft, Check, CheckCircle2, ChevronDown, Clock, History, Loader2, Minus, Monitor, ShieldCheck, Wrench, X, XCircle } from 'lucide-react'
 import { Empty, Panel } from '@/components/kit'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ago, dateTime, num } from '@/lib/format'
-import { ACTION_LABEL, FixDown, STATUS, isSetting, useFix, type FixRow, type FixView } from '@/lib/fix'
+import { ago, dateTime, num, utc } from '@/lib/format'
+import { ACTION_LABEL, FixDown, METHOD_LABEL, STATUS, isSetting, useFix, type FixRow, type FixView } from '@/lib/fix'
 import { GettingReady, useAutoStart } from '@/lib/services'
 import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
@@ -73,7 +74,7 @@ function Body({ v }: { v: FixView }) {
                 {live ? (v.worker.task === 'probe' ? 'Checking device connectivity…' : 'Remediating…') : rows.length ? 'Last remediation run complete' : 'No remediations executed yet'}
               </h2>
               <p key={v.worker.step || v.worker.message} className="mt-0.5 text-sm text-ink-3 animate-in fade-in slide-in-from-left-1 duration-300">
-                {live ? v.worker.step || 'Starting' : v.worker.message || 'Add items to the remediation queue in Remediation, then select Execute remediation.'}
+                {live ? words(v.worker.step || 'Starting') : v.worker.message ||'Add items to the remediation queue in Remediation, then select Execute remediation.'}
                 {startedAt && <> · started {dateTime(startedAt)}</>}
               </p>
             </div>
@@ -119,7 +120,7 @@ function Body({ v }: { v: FixView }) {
             <span className="text-xs text-ink-3">· {rows.filter((r) => r.device_name === d).length === 1 ? '1 remediation' : `${rows.filter((r) => r.device_name === d).length} remediations`}</span>
           </div>
           <ul className="mt-4 flex flex-col divide-y divide-hairline">
-            {rows.filter((r) => r.device_name === d).map((r) => <FixTrack key={r.fix_id} r={r} />)}
+            {rows.filter((r) => r.device_name === d).map((r) => <FixTrack key={r.fix_id} r={r} events={v.events} />)}
           </ul>
         </Panel>
       ))}
@@ -131,22 +132,6 @@ function Body({ v }: { v: FixView }) {
         </Panel>
       )}
 
-      {/* activity log */}
-      <Panel className="p-6">
-        <h3 className="font-semibold tracking-tight">Activity</h3>
-        <p className="mt-1 text-sm text-ink-3">Remediation activity, most recent first.</p>
-        {v.events.length ? (
-          <ol className="mt-4 flex max-h-[420px] flex-col gap-2 overflow-y-auto">
-            {[...v.events].reverse().slice(0, 60).map((e, i) => (
-              <li key={i} className="flex gap-3 text-sm">
-                <span className="tabular w-28 shrink-0 text-xs text-ink-3">{ago(e.at)}</span>
-                <span className="text-ink-2">{e.text}</span>
-              </li>
-            ))}
-          </ol>
-        ) : <p className="mt-4 text-sm text-ink-3">Nothing yet.</p>}
-      </Panel>
-
       {v.impact && (
         <p className="text-xs text-ink-3">
           Remediations to date resolve {num(v.impact.findings_cleared)} of {num(v.impact.findings_open + v.impact.findings_cleared)} findings.
@@ -156,8 +141,24 @@ function Body({ v }: { v: FixView }) {
   )
 }
 
-function FixTrack({ r }: { r: FixRow }) {
+/** The fixer's wording with the method in words */
+const words = (text: string) => text
+  .replace(/ via runcommand\b/g, ` via ${METHOD_LABEL.runcommand}`)
+  .replace(/ via liveresponse\b/g, ` via ${METHOD_LABEL.liveresponse}`)
+  .replace(/ -> /g, ' → ')
+
+/** An event as the card reads it: the card already names the device */
+const tidy = (text: string, device: string) => words(text)
+  .replace(new RegExp(`^${device.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: `, 'i'), '')
+  .replace(/^./, (c) => c.toUpperCase())
+
+const SHOWN = 3
+
+function FixTrack({ r, events }: { r: FixRow; events: FixView['events'] }) {
   const st = stops(r)
+  const [all, setAll] = useState(false)
+  const mine = events.filter((e) => e.fix_id === r.fix_id).sort((a, b) => b.at.localeCompare(a.at))
+  const shown = all ? mine : mine.slice(0, SHOWN)
   return (
     <li className="grid grid-cols-1 gap-3 py-4 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] md:items-center">
       <div className="min-w-0">
@@ -184,6 +185,25 @@ function FixTrack({ r }: { r: FixRow }) {
           </p>
         )}
       </div>
+      {mine.length > 0 && (
+        <div className="md:col-span-2">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-ink-2"><History className="size-3.5 text-ink-3" /> Activity</div>
+          <ol className="mt-2 flex flex-col gap-1.5 border-l-2 border-hairline pl-3">
+            {shown.map((e, i) => (
+              <li key={`${e.at}-${i}`} className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-3 text-xs animate-in fade-in duration-300">
+                <time className="tabular text-ink-3" dateTime={utc(e.at) ?? undefined} title={dateTime(utc(e.at))}>{ago(utc(e.at))}</time>
+                <span className="break-words text-ink-2">{tidy(e.text, r.device_name)}</span>
+              </li>
+            ))}
+          </ol>
+          {mine.length > SHOWN && (
+            <button onClick={() => setAll(!all)} className="mt-1.5 flex items-center gap-1 pl-3.5 text-xs font-medium text-ink-2 hover:text-ink" aria-expanded={all}>
+              {all ? 'Show less' : `Show all ${mine.length}`}
+              <ChevronDown className={cn('size-3.5 transition-transform', all && 'rotate-180')} />
+            </button>
+          )}
+        </div>
+      )}
     </li>
   )
 }

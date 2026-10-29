@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from urllib.parse import quote
 
 from portal import fixproxy, services
+from portal.audit import AuditLog
 from portal.sources import UC1, UC4, _jsonl
 
 AGENTS = {"uc1": "Threat Intel Agent", "uc3": "Vulnerability Agent", "uc4": "Alert Triage Agent", "attack": "Attack Detection Agent"}
@@ -124,7 +125,7 @@ def _fixes(settings) -> list[dict]:
     if not services.listening(settings.uc1_site, timeout=0.3):
         return []
     try:
-        events = fixproxy.get_fix(settings.uc1_site).get("events") or []
+        events = fixproxy.named(fixproxy.get_fix(settings.uc1_site), AuditLog(settings.audit_dir).entries).get("events") or []
     except fixproxy.Uc1Unavailable:
         return []
     out = []

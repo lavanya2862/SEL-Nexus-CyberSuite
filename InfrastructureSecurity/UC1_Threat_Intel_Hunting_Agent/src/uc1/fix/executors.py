@@ -117,32 +117,57 @@ class AzureVMs:
                            "(it can take a few minutes to apply).")
         return subs
 
+    def groups(self) -> list[str]:
+        """FIX_RESOURCE_GROUP may list several groups, comma-separated (e.g. old and new lab)."""
+        return [g.strip() for g in self.settings.fix_resource_group.split(",") if g.strip()]
+
     def list(self) -> list[dict]:
         if self._vms is None:
-            vms = []
-            rg = self.settings.fix_resource_group.lower()
+            vms, errors = [], []
+            allowed = {g.lower() for g in self.groups()}
             for sub in self.subscriptions():
-                # list inside the lab resource group only (the role is granted there, not on the subscription)
-                url = (f"{ARM}/subscriptions/{sub}/resourceGroups/{self.settings.fix_resource_group}"
-                       f"/providers/Microsoft.Compute/virtualMachines?api-version={COMPUTE_API}")
-                while url:
-                    body = self._get(url)
-                    for vm in body.get("value", []):
-                        parts = vm["id"].split("/")
-                        group = parts[parts.index("resourceGroups") + 1] if "resourceGroups" in parts else ""
-                        if group.lower() != rg:
-                            continue                                  # never outside the lab resource group
-                        vms.append({"id": vm["id"], "name": vm["name"], "resource_group": group, "location": vm.get("location"),
-                                    "computer_name": ((vm.get("properties") or {}).get("osProfile") or {}).get("computerName", "")})
-                    url = body.get("nextLink")
+                for rg in self.groups():
+                    # list inside the lab resource groups only (the role is granted there, not on the subscription)
+                    url = (f"{ARM}/subscriptions/{sub}/resourceGroups/{rg}"
+                           f"/providers/Microsoft.Compute/virtualMachines?api-version={COMPUTE_API}")
+                    try:
+                        while url:
+                            body = self._get(url)
+                            for vm in body.get("value", []):
+                                parts = vm["id"].split("/")
+                                group = parts[parts.index("resourceGroups") + 1] if "resourceGroups" in parts else ""
+                                if group.lower() not in allowed:
+                                    continue                          # never outside the lab resource groups
+                                vms.append({"id": vm["id"], "name": vm["name"], "resource_group": group,
+                                            "location": vm.get("location"),
+                                            "computer_name": ((vm.get("properties") or {}).get("osProfile") or {})
+                                            .get("computerName", "")})
+                            url = body.get("nextLink")
+                    except FixError as exc:
+                        errors.append(exc)                            # group not in this subscription, or no role
+            if not vms and errors:
+                raise errors[0]
             self._vms = vms
         return self._vms
 
-    def find(self, device_name: str) -> dict:
+    def find(self, device_name: str, resource_id: str = "") -> dict:
+        """Prefer Defender's link to the Azure VM (resource_id): names repeat across subscriptions, and a VM
+        renamed inside Windows keeps its old Azure name."""
+        if resource_id:
+            for vm in self.list():
+                if vm["id"].lower() == resource_id.lower():
+                    return vm
+            raise FixError(f"{device_name} is Azure VM {resource_id.split('/')[-1]} in resource group "
+                           f"{resource_id.split('/')[4] if resource_id.count('/') > 4 else '?'}, which UC1 can't reach. "
+                           f"Add that group to FIX_RESOURCE_GROUP and give UC1-Hunting-Agent-Lab "
+                           "'Virtual Machine Contributor' on it.")
         name = device_name.lower().split(".")[0]
-        for vm in self.list():
-            if name in (vm["name"].lower(), (vm["computer_name"] or "").lower()):
-                return vm
+        hits = [vm for vm in self.list() if name in (vm["name"].lower(), (vm["computer_name"] or "").lower())]
+        if len(hits) > 1:
+            raise FixError(f"{len(hits)} Azure VMs are called {device_name}; Defender didn't say which one it is, "
+                           "so UC1 won't guess")
+        if hits:
+            return hits[0]
         raise FixError(f"No Azure VM called {device_name} in resource group {self.settings.fix_resource_group}")
 
     def power_state(self, vm_id: str) -> str:
@@ -211,14 +236,29 @@ class RunCommandExecutor:
     label = "Azure Run Command"
     can_start_vms = True
 
-    def __init__(self, settings: Settings, http: _Http | None = None, sleep: Callable[[float], None] = time.sleep):
+    def __init__(self, settings: Settings, http: _Http | None = None, sleep: Callable[[float], None] = time.sleep,
+                 defender_http: _Http | None = None):
         self.settings = settings
         self.vms = AzureVMs(settings, http or _Http(EntraTokenProvider(settings, scope=ARM_SCOPE), sleep=sleep), sleep)
+        # tests inject `http` only; then there's no Defender lookup and VMs are matched by name
+        self.defender = defender_http if defender_http or http else _Http(EntraTokenProvider(settings), sleep=sleep)
         self.started: set[str] = set()                                # VMs this executor switched on (the runner warns)
+
+    def azure_resource_id(self, device_id: str) -> str:
+        """The Azure VM Defender links this device to ('' if unknown or Defender can't be asked)."""
+        if not self.defender or not device_id:
+            return ""
+        try:
+            r = self.defender.request("GET", f"{self.settings.api_base.rstrip('/')}/api/machines/{device_id}")
+        except FixError:
+            return ""
+        if r.status_code >= 400:
+            return ""
+        return ((r.json().get("vmMetadata") or {}).get("resourceId") or "").strip()
 
     def run(self, device_name: str, device_id: str, spec: dict, say: Callable[[str], None] = log.info,
             allow_start: bool = True) -> str:
-        vm = self.vms.find(device_name)
+        vm = self.vms.find(device_name, self.azure_resource_id(device_id))
         state = self.vms.power_state(vm["id"])
         if state != "running":
             if not allow_start:

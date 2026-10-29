@@ -1,21 +1,22 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  ArrowRight, BellRing, Bot, CheckCircle2, ChevronRight, Play, Radar, Scale, Search, Siren, UserCheck, Wrench,
+  ArrowRight, BellRing, Bot, CheckCircle2, ChevronRight, CircleDot, Play, Radar, Scale, Search, Siren, UserCheck, Wrench,
 } from 'lucide-react'
 import { Card, Empty, InfoTip, Panel, Tag } from '@/components/kit'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ago, num } from '@/lib/format'
 import { useRuns } from '@/lib/runs'
 import { statusColor } from '@/lib/theme'
-import { NotFound, RULES, VERDICT, VERDICT_ORDER, needsPerson, sourceNames, useUc4Quality, useUc4Queue, utc, verdictMeta, type QueueRow } from '@/lib/uc4'
+import { NotFound, RULES, VERDICT, VERDICT_ORDER, isClosed, needsPerson, sourceNames, useUc4Quality, useUc4Queue, utc, verdictMeta, type QueueRow, type Verdict } from '@/lib/uc4'
 import { cn } from '@/lib/utils'
 
 type Filter = 'all' | 'likely_true_positive' | 'likely_false_positive' | 'needs_investigation'
 type Who = 'agent' | 'person' | 'decided'
 const iso = (s: string | null) => utc(s)?.toISOString() ?? null
-// older verdicts may still say benign positive: that is filed as a false positive
-const outcome = (r: QueueRow) => (r.verdict === 'benign_positive' ? 'likely_false_positive' : r.verdict)
+// the analyst's or Defender's classification when one is made, else the agent's verdict (older verdicts may still
+// say benign positive: that is filed as a false positive)
+const outcome = (r: QueueRow): Verdict => r.outcome ?? (r.verdict === 'benign_positive' ? 'likely_false_positive' : r.verdict)
 
 /** Act › Triage (UC4): the agent handles the clear calls; a person decides only the unclear ones. */
 export function Respond() {
@@ -24,8 +25,13 @@ export function Respond() {
   const rows = useMemo(() => data?.queue ?? [], [data])
   const auto = !!data?.automation?.auto_resolve
   const who = (r: QueueRow): Who =>
-    !needsPerson(r, auto, r.last_action?.action === 'reopen') ? 'agent' : r.feedback ? 'decided' : 'person'
+    !needsPerson(r, auto, r.last_action?.action === 'reopen') ? 'agent' : r.decision ? 'decided' : 'person'
   const shown = rows.filter((r) => filter === 'all' || outcome(r) === filter)
+  // a tile on top filters the queue below and brings it into view
+  const pick = (f: Filter) => {
+    setFilter(f)
+    document.getElementById('triage-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -37,11 +43,12 @@ export function Respond() {
         </Panel>
       ) : data && (
         <>
-          <Kpis rows={rows} />
+          <Kpis rows={rows} filter={filter} onPick={pick} />
           <HowItWorks />
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
             <Card
-              className="xl:col-span-2"
+              id="triage-queue"
+              className="xl:col-span-2 scroll-mt-4"
               title="The queue"
               description="Most recent first. Open an incident to view the evidence."
               action={<span className="tabular whitespace-nowrap text-xs text-ink-3">{shown.length} of {rows.length}</span>}
@@ -99,26 +106,39 @@ function Header({ lastRun }: { lastRun: string | null }) {
   )
 }
 
-function Kpis({ rows }: { rows: QueueRow[] }) {
+function Kpis({ rows, filter, onPick }: { rows: QueueRow[]; filter: Filter; onPick: (f: Filter) => void }) {
   const bySource = new Map<string, number>()
   rows.forEach((r) => { const s = sourceNames(r.sources) || 'Unknown'; bySource.set(s, (bySource.get(s) ?? 0) + 1) })
-  const count = (v: string) => rows.filter((r) => r.verdict === v).length
-  const tiles: { label: string; value: string; sub: string; dot?: string; tip: string; hue: string }[] = [
-    { hue: '', label: 'Incidents triaged', value: num(rows.length), sub: [...bySource].map(([s, n]) => `${n} ${s}`).join(' · '), tip: 'Incidents from Microsoft Defender and Sentinel classified by the Alert Triage Agent.' },
-    { hue: 'card-hero-red', label: 'True positive', value: num(count('likely_true_positive')), sub: 'escalated in Defender', dot: VERDICT.likely_true_positive.color, tip: VERDICT.likely_true_positive.help },
-    { hue: 'card-hero-green', label: 'False positive', value: num(count('likely_false_positive') + count('benign_positive')), sub: 'closed in Defender', dot: VERDICT.likely_false_positive.color, tip: VERDICT.likely_false_positive.help },
-    { hue: 'card-hero-amber', label: 'Needs review', value: num(count('needs_investigation')), sub: 'the agent could not classify: analyst decision', dot: VERDICT.needs_investigation.color, tip: 'The only incidents that require an analyst decision.' },
+  const count = (v: Verdict) => rows.filter((r) => outcome(r) === v).length
+  const closed = rows.filter((r) => isClosed(r.status)).length
+  const tiles: { id: Filter; label: string; value: string; sub: string; dot?: string; tip: string; hue: string }[] = [
+    { id: 'all', hue: '', label: 'Incidents triaged', value: num(rows.length), sub: `${num(rows.length - closed)} open · ${num(closed)} closed in Defender`,
+      tip: `Every incident from Microsoft Defender and Sentinel the Alert Triage Agent has classified (${[...bySource].map(([s, n]) => `${n} ${s}`).join(', ')}). Defender's incident list may show fewer if it is filtered by last update time.` },
+    { id: 'likely_true_positive', hue: 'card-hero-red', label: 'True positive', value: num(count('likely_true_positive')), sub: 'real attacks: escalated in Defender', dot: VERDICT.likely_true_positive.color, tip: `${VERDICT.likely_true_positive.help} Includes incidents an analyst classified as true positive.` },
+    { id: 'likely_false_positive', hue: 'card-hero-green', label: 'False positive', value: num(count('likely_false_positive')), sub: 'harmless: closed in Defender', dot: VERDICT.likely_false_positive.color, tip: `${VERDICT.likely_false_positive.help} Includes incidents an analyst classified as false positive.` },
+    { id: 'needs_investigation', hue: 'card-hero-amber', label: 'Needs review', value: num(count('needs_investigation')), sub: 'awaiting an analyst decision', dot: VERDICT.needs_investigation.color, tip: 'Incidents the agent could not classify and no analyst has classified yet, here or in Defender.' },
   ]
   return (
     <div className="card-row gap-4 [--card-min:175px]">
       {tiles.map((t) => (
-        <Panel key={t.label} className={cn('card-hero p-5', t.hue)}>
-          <div className="flex items-center justify-between gap-2 text-sm text-ink-2">
-            <span className="flex items-center gap-2">{t.dot && <span className="size-2 rounded-full bg-white" />}{t.label}</span>
-            <InfoTip text={t.tip} />
+        <Panel key={t.label} className={cn('card-hero p-0 transition-[transform,opacity] hover:-translate-y-0.5', t.hue, filter !== 'all' && filter !== t.id && 'opacity-60 hover:opacity-90')}>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => onPick(t.id)}
+              aria-pressed={filter === t.id}
+              aria-label={`${t.label}: ${t.value}. Show these in the queue`}
+              className="absolute inset-0 rounded-[20px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            />
+            <div className="pointer-events-none relative p-5">
+              <div className="flex items-center justify-between gap-2 text-sm text-ink-2">
+                <span className="flex items-center gap-2">{t.dot && <span className="size-2 rounded-full bg-white" />}{t.label}</span>
+                <span className="pointer-events-auto"><InfoTip text={t.tip} /></span>
+              </div>
+              <div className="tabular mt-3 text-3xl font-semibold tracking-tight">{t.value}</div>
+              <div className="mt-1 text-xs text-ink-3">{t.sub}</div>
+            </div>
           </div>
-          <div className="tabular mt-3 text-3xl font-semibold tracking-tight">{t.value}</div>
-          <div className="mt-1 text-xs text-ink-3">{t.sub}</div>
         </Panel>
       ))}
     </div>
@@ -166,7 +186,7 @@ function QueueItem({ r, who }: { r: QueueRow; who: Who }) {
   return (
     <li>
       <Link to={`/respond/${encodeURIComponent(r.incident_id)}`} className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-4 py-3.5 hover:bg-well">
-        <span className="pt-0.5"><VerdictPill verdict={r.verdict} /></span>
+        <span className="pt-0.5"><VerdictPill verdict={r.outcome ?? r.verdict} /></span>
         <span className="min-w-0">
           <span className="block truncate text-sm font-medium group-hover:underline">{r.title}</span>
           <span className="mt-0.5 block truncate text-xs text-ink-3">
@@ -174,10 +194,16 @@ function QueueItem({ r, who }: { r: QueueRow; who: Who }) {
           </span>
           <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {who === 'agent' ? (r.verdict === 'likely_true_positive'
-              ? <Tag tone="bad">Escalated</Tag>
-              : <Tag>Closed</Tag>)
-              : who === 'person' ? <Tag tone="warn"><UserCheck className="size-3" /> Analyst decision</Tag>
-              : <Tag><UserCheck className="size-3" /> Analyst decided</Tag>}
+              ? <Tag tone="bad">Escalated by the agent</Tag>
+              : <Tag>Closed by the agent</Tag>)
+              : who === 'person' ? <Tag tone="warn"><UserCheck className="size-3" /> Analyst decision needed</Tag>
+              : r.decision?.by === 'defender' ? <Tag><UserCheck className="size-3" /> Classified in Defender</Tag>
+              : <Tag><UserCheck className="size-3" /> Reviewed by {r.decision?.who || 'an analyst'}</Tag>}
+            {/* Defender's status, always: open = still being worked on, closed = resolved */}
+            {isClosed(r.status)
+              ? <Tag><CheckCircle2 className="size-3" /> Closed in Defender</Tag>
+              : <Tag tone={who === 'person' ? undefined : 'bad'}><CircleDot className="size-3" /> Open in Defender</Tag>}
+            {who === 'decided' && r.verdict !== outcome(r) && <Tag>Agent said: {verdictMeta(r.verdict).short.toLowerCase()}</Tag>}
             {r.guardrails.filter((g) => RULES[g]).map((g) => <Tag key={g} tone="warn">{RULES[g].label}</Tag>)}
             {r.ai_status !== 'ai' && <Tag tone="warn">rules only</Tag>}
           </span>
@@ -219,7 +245,8 @@ function Accuracy({ byVerdict }: { byVerdict: Record<string, number> }) {
         </ul>
       ) : <Empty text="No backtest yet" />}
       <div className="mt-5 border-t border-hairline pt-4">
-        <div className="text-sm font-medium">Verdicts so far</div>
+        <div className="text-sm font-medium">Agent verdicts so far</div>
+        <p className="mt-0.5 text-xs text-ink-3">Before any analyst decision</p>
         <ul className="mt-2 flex flex-col gap-1.5 text-sm">
           {VERDICT_ORDER.map((v) => (
             <li key={v} className="flex items-center gap-2">

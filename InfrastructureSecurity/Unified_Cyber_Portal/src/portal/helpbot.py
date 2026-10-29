@@ -35,7 +35,7 @@ _lock = threading.Lock()
 
 # What each screen is for, so the AI knows where the user is standing (the menu names the user sees).
 SCREENS: dict[str, str] = {
-    "home": "Summary: three headline numbers, Priority remediations / Threats / Devices tables, risk by app and by VM, agent status.",
+    "home": "Summary: three headline numbers, Most vulnerable apps and Findings on each VM cards, agent status.",
     "threats": "Threats: attack news from public sources (NVD, NCSC-NL, CERT-EU, Microsoft, abuse.ch) rated for how much it applies to our devices. Tabs: Overview (posture, funnel and the threat landscape charts), Affects us (each threat that matches our devices: the vulnerability, the device and the remediation), Explorer (Threats and Clues kept apart: clues are IPs, domains, web links and file hashes), Health & metrics.",
     "threat": "Threat detail: one threat news item, why it matters to us, which devices are affected, and what to do.",
     "hunts": "Attack hunting: searches through Microsoft Defender records for signs an attacker is already inside; hits are real or lab-test matches.",

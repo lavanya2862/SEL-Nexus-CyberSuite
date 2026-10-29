@@ -14,7 +14,8 @@ SLA_HOURS = {"high": 1, "medium": 4, "low": 24, "informational": 72}
 
 def queue(store: Store) -> list[dict]:
     rows = store.query("""
-        SELECT i.incident_id, i.title, i.severity, i.status, i.sources, i.is_lab, i.web_url, i.created_at,
+        SELECT i.incident_id, i.title, i.severity, i.status, i.classification, i.determination, i.sources, i.is_lab,
+               i.web_url, i.created_at,
                i.devices, i.accounts, v.verdict, v.confidence, v.recommended_severity, v.escalate, v.guardrails,
                v.summary, v.ai_status, v.triaged_at, v.queries_run, v.ti_lookups, v.seconds
         FROM incidents i JOIN verdicts v USING (incident_id)

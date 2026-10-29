@@ -95,7 +95,7 @@ class Settings:
     hunt_lookback_days: int = 30
     # fix loop: which lab VMs UC1 may fix and how
     azure_subscription_id: str | None = None        # empty = found automatically (the one UC1 has a role on)
-    fix_resource_group: str = "rg-uc3-lab"          # Run Command only touches VMs in this resource group
+    fix_resource_group: str = "rg-uc3-lab"          # Run Command only touches VMs in these resource groups (comma-separated)
     fix_method: str = "runcommand"                  # runcommand | liveresponse (default for new approvals)
     fix_allow_choco: bool = False                   # Chocolatey fallback (downloads + runs its installer as SYSTEM): opt-in
     fix_start_vms: bool = True                      # start a stopped lab VM before fixing it

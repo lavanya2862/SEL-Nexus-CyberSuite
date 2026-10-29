@@ -38,6 +38,7 @@ const ACTIONS: Record<string, { label: string; tone: Tone }> = {
   'triage.agree': { label: 'Confirmed a triage verdict', tone: 'good' },
   'triage.disagree': { label: 'Overrode a triage verdict', tone: 'warn' },
   'triage.reopen': { label: 'Reopened an incident', tone: 'warn' },
+  'triage.decide': { label: 'Classified an incident in Defender', tone: 'good' },
 }
 const TONE: Record<Tone, string> = { good: 'bg-teal', warn: 'bg-amber', bad: 'bg-rose', info: 'bg-sky', idle: 'bg-ink-3' }
 

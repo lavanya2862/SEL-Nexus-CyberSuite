@@ -122,13 +122,36 @@ def verdict_count(n: int, words: str) -> str:
     return f"{n} {words}" + ("s" if n != 1 and words.endswith(("threat", "alarm")) else "")
 
 
-def ingest_words(text: str) -> str:
-    """ "6 incident(s) returned, 0 need triage" → "6 incidents in Defender · none new" """
-    got = re.findall(r"\d+", text)
+def ingest_counts(text: str) -> dict | None:
+    """UC4's ingest log line → what really changed. Defender also returns incidents whose last-update time moved for
+    nothing that matters (a comment, a tag), so the raw "returned" number is never shown.
+    "5 incident(s) returned, 0 need triage, 0 new, 0 status or classification change(s)" (older runs: first two only)"""
+    got = [int(x) for x in re.findall(r"\d+", text)]
     if len(got) < 2:
+        return None
+    need = got[1]
+    if len(got) >= 4:
+        return {"new": got[2], "new_alerts": max(need - got[2], 0), "reclassified": got[3]}
+    return {"new": None, "new_alerts": need, "reclassified": 0}
+
+
+def ingest_parts(c: dict) -> list[str]:
+    parts = []
+    if c["new_alerts"]:
+        parts.append(f"{_plural(c['new_alerts'], 'incident')} with new alerts" if c["new"] is not None
+                     else f"{c['new_alerts']} new or changed to check")
+    if c["reclassified"]:
+        parts.append(f"{c['reclassified']} closed or reclassified in Defender")
+    return parts
+
+
+def ingest_words(text: str) -> str:
+    """ → "No new incidents in Defender" or "2 new incidents · 1 closed or reclassified in Defender" """
+    c = ingest_counts(text)
+    if c is None:
         return text
-    total, new = int(got[0]), int(got[1])
-    return f"{_plural(total, 'incident')} in Defender · " + (f"{new} new to check" if new else "none new")
+    head = [f"{_plural(c['new'], 'new incident')}"] if c["new"] else []
+    return " · ".join(head + ingest_parts(c)) or "No new incidents in Defender"
 
 
 REPORT_READY = "Report updated with today's numbers"
@@ -643,9 +666,11 @@ class RunState:
                     else "no new remediations in this run")
             return out
         if self.uc == "uc4":
-            got = re.findall(r"\d+", r.get("ingest_text") or "")
-            if len(got) >= 2:
-                add("Incidents read from Defender", got[0], f"{got[1]} new or changed, needing a verdict")
+            c = ingest_counts(r.get("ingest_text") or "")
+            if c is not None:
+                rest = ingest_parts({**c, "new_alerts": c["new_alerts"] if c["new"] is not None else 0})
+                add("New incidents in Defender", c["new"] if c["new"] is not None else c["new_alerts"],
+                    " · ".join(rest) if rest else "nothing else changed since the last check")
             verdicts = r.get("verdicts") or []
             if "triage" in r or verdicts:
                 words = {}

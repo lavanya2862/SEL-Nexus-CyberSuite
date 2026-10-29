@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from portal.audit import ACTIONS
+from portal.fixproxy import is_account
 from portal.runs import AGENT_NAMES
 
 KINDS = ("run", "fix", "triage")
@@ -31,11 +32,12 @@ def _utc(value) -> str | None:
 
 
 def _person(by) -> tuple[str, str]:
-    """(name, email) from a run's "by" ({email, name}) or a fix's approver (an employee id); "portal" = not recorded."""
+    """(name, email) from a run's "by" ({email, name}) or a fix's approver. A computer account (UC1 wrote the Windows
+    login before the portal passed the person's name) or "portal" = not recorded."""
     if isinstance(by, dict):
         return str(by.get("name") or by.get("email") or NOT_RECORDED), str(by.get("email") or "")
     by = str(by or "").strip()
-    return (by, "") if by and by != "portal" else (NOT_RECORDED, "")
+    return (by, "") if by and not is_account(by) else (NOT_RECORDED, "")
 
 
 def _entry(key: str, at, action: str, who, *, agent: str = "", target: str = "", outcome: str = "success",

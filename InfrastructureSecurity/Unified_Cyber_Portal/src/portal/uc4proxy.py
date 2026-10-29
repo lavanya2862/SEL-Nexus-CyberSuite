@@ -3,7 +3,8 @@
 UC4 keeps the feedback file, its checks and its accuracy maths; the portal only forwards POST /api/feedback with
 UC4's header X-UC4: feedback, passing just the fields UC4 expects. Questions ("Ask about this incident") are forwarded
 the same way to POST /api/ask (X-UC4: ask); UC4 answers from the saved evidence and changes nothing. Reopen (a person undoing an automatic close) goes to
-POST /api/reopen (X-UC4: reopen). Containment
+POST /api/reopen (X-UC4: reopen). An analyst's decision (true / false positive) goes to POST /api/close
+(X-UC4: close), which writes it into Defender: false positive closed, true positive in progress. Containment
 (isolating a device) is NOT forwarded: the portal is advise-only for UC4. If UC4's website is not running, the portal can start it with UC4's own Python
 (127.0.0.1 only).
 """
@@ -85,6 +86,25 @@ def post_reopen(base: str, body: dict) -> tuple[int, dict]:
     if not clean["incident_id"]:
         return 400, {"error": "incident_id missing"}
     return _call(base, "/api/reopen", clean, timeout=30, header="reopen")
+
+
+# the analyst's final classification and Defender's "why" (UC4 close.DETERMINATIONS)
+DECISIONS = {"likely_true_positive": {"malware", "compromisedAccount", "maliciousUserActivity", "other"},
+             "likely_false_positive": {"notMalicious", "notEnoughDataToValidate"}}
+
+
+def post_decide(base: str, body: dict, by: str) -> tuple[int, dict]:
+    """An analyst's decision, written into Defender by UC4 (POST /api/close, X-UC4: close): a false positive is
+    closed (resolved), a true positive stays open as in progress for the response. UC4 also saves it as feedback."""
+    verdict = body.get("verdict")
+    if verdict not in DECISIONS:
+        return 400, {"error": "Choose true positive or false positive."}
+    det = body.get("determination") if body.get("determination") in DECISIONS[verdict] else None
+    clean = {"incident_id": str(body.get("incident_id") or "")[:80], "verdict": verdict, "determination": det,
+             "reason": str(body.get("reason") or "")[:500], "confirm": True, "by": by[:80]}
+    if not clean["incident_id"]:
+        return 400, {"error": "incident_id missing"}
+    return _call(base, "/api/close", clean, timeout=30, header="close")
 
 
 def start_uc4_site(uc4_dir: Path, base: str, wait_s: float = 12) -> bool:
