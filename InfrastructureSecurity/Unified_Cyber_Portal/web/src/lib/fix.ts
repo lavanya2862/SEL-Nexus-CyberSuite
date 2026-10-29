@@ -23,6 +23,8 @@ export interface FixRow {
   /** The threats in the news that target this app on this computer (Threat Intel Agent), most urgent first */
   threats?: { id: string; title: string }[]
   finished_at: string | null; verified_at: string | null; message: string | null
+  /** Attack responses: the Remediation Agent's moves (quick_scan / full_scan / stop), why, and what Defender reported */
+  agent?: { action: 'quick_scan' | 'full_scan' | 'stop'; reason: string; result: string; status?: FixStatus }[] | null
   /** Security settings (kind 'setting', software_name 'setting:<config_id>'): what the fix engine changes */
   kind?: 'setting' | 'response' | null; config_id?: string | null; category?: string | null; subcategory?: string | null; impact?: number | null
   setting_kind?: 'asr' | 'defender' | 'registry' | null; setting_target?: string | null; setting_value?: number | null
@@ -38,6 +40,8 @@ export interface FixView {
   events: { at: string; fix_id: string | null; text: string }[]
   probes: Record<string, { error?: string; method?: string; checked_at?: string; winget?: string; apps?: string[]; reboot_pending?: boolean }>
   default_method: FixMethod
+  /** ATTACK_AUTO_FIX=1: the Attack Detection Agent approves and runs its own scan-and-clean responses */
+  attack_auto_fix?: boolean
   impact: { findings_open: number; findings_cleared: number }
   worker: { running: boolean; elsewhere: boolean; task: string; step: string; message: string }
 }
@@ -83,6 +87,12 @@ export function useFixAction() {
       qc.invalidateQueries({ queryKey: ['runs'] })     // a decision can end a run's Fix stage
     },
   })
+}
+
+/** Auto-fix: approve and run straight away, one click instead of Approve then Execute remediation (same allow-listed fix). */
+export function autoFix(act: ReturnType<typeof useFixAction>, ids: string[], method: FixMethod) {
+  if (!ids.length) return
+  act.mutateAsync({ action: 'approve', ids, method }).then(() => act.mutate({ action: 'run', ids })).catch(() => {})   // errors show via act.error
 }
 
 export const STATUS: Record<FixStatus, { label: string; tone: 'muted' | 'sky' | 'run' | 'teal' | 'good' | 'bad' | 'warn' }> = {

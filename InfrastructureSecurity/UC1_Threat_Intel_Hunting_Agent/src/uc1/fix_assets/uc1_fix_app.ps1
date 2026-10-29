@@ -7,8 +7,9 @@ param([string]$Spec)
 #   action = replace  : remove the old app, then install the current one
 #   action = setting  : change ONE security setting (from config\setting_fix_catalog.csv), reading it before and after:
 #                       kind asr = attack-protection rule, defender = a Defender Antivirus option, registry = a DWORD
-#   action = respond  : after a sign of attack: update Defender's signatures, quick scan, remove what it finds
-#                       (kind scan_clean, the only response), counting active threats before and after
+#   action = respond  : after a sign of attack: update Defender's signatures, quick (or full) scan, remove what it finds
+#                       (kind scan_clean, the only response), counting active threats before and after; for a lab
+#                       test (lab_cleanup) it also removes the fixed UC1LabTest leftovers of scripts\lab\Invoke-UC1LabTest.ps1
 # The last line of output is "UC1RESULT {json}" - UC1 reads that. Windows PowerShell 5.1 compatible, ASCII only.
 
 $ErrorActionPreference = 'Continue'
@@ -286,11 +287,31 @@ if ($s.action -eq 'respond') {
     $result.before = (Get-ActiveThreats).Count
     try { Update-MpSignature -ErrorAction Stop; Say 'Defender signatures updated' }
     catch { Say "signature update failed (scanning with the current ones): $($_.Exception.Message)" }
-    try { Start-MpScan -ScanType QuickScan -ErrorAction Stop; Say 'Defender quick scan finished' }
+    $scan = if ($s.scan -eq 'FullScan') { 'FullScan' } else { 'QuickScan' }     # only these two, whatever the spec says
+    $result.scan = $scan
+    try { Start-MpScan -ScanType $scan -ErrorAction Stop; Say "Defender $($scan -replace 'Scan', '').ToLower() scan finished" }
     catch { $result.error = ($_.Exception.Message -replace '[^\x20-\x7E]', '').Trim(); Say "scan failed: $($result.error)" }
     if (-not $result.error -and (Get-ActiveThreats).Count -gt 0) {
         try { Remove-MpThreat -ErrorAction Stop; Say 'removed the active threats Defender found' }
         catch { Say "remove failed: $($_.Exception.Message)" }
+    }
+    if ($s.lab_cleanup) {
+        # Only these fixed names: what the lab script creates. Nothing here comes from the spec or the evidence.
+        $cleaned = New-Object System.Collections.Generic.List[string]
+        $run = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run'
+        if (Get-ItemProperty -Path $run -Name 'UC1LabTest' -ErrorAction SilentlyContinue) {
+            Remove-ItemProperty -Path $run -Name 'UC1LabTest' -ErrorAction SilentlyContinue; $cleaned.Add('Run key UC1LabTest')
+        }
+        $startup = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp\UC1LabTest.cmd'
+        if (Test-Path $startup) { Remove-Item $startup -Force -ErrorAction SilentlyContinue; $cleaned.Add('Startup file UC1LabTest.cmd') }
+        if (Get-LocalUser -Name 'UC1LabTest' -ErrorAction SilentlyContinue) {
+            Remove-LocalUser -Name 'UC1LabTest' -ErrorAction SilentlyContinue; $cleaned.Add('local user UC1LabTest')
+        }
+        if (Get-Service -Name 'UC1LabTest' -ErrorAction SilentlyContinue) {
+            & sc.exe delete UC1LabTest | Out-Null; $cleaned.Add('service UC1LabTest')
+        }
+        $result.lab_cleaned = @($cleaned)
+        Say ("lab test clean-up: " + $(if ($cleaned.Count) { $cleaned -join ', ' } else { 'nothing left to remove' }))
     }
     $left = Get-ActiveThreats
     $result.after = $left.Count

@@ -96,6 +96,8 @@ def pull(store: Store, client: DefenderClient) -> dict:
     for table, rows in (("devices", devices), ("software", software), ("device_vulns", vulns)):
         store.execute(f"DELETE FROM {table}")
         store.upsert(table, rows)
+    # when our runs first saw Defender list each CVE on each computer (kept across runs, unlike the snapshot)
+    store.execute("""INSERT OR IGNORE INTO defender_seen SELECT DISTINCT device_name, cve_id, ? FROM device_vulns""", [now])
     result = {"devices": len(devices), "software": len(software), "vulnerabilities": len(vulns),
               "defender_count": defender_count,
               "coverage_ok": defender_count is None or defender_count == len(vuln_rows)}

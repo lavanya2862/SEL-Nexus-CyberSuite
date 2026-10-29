@@ -52,3 +52,9 @@ class Resolution(BaseModel):
 class FixAdvice(BaseModel):
     steps: list[str] = Field(description="3 to 6 steps in order to remove this threat from our computers, each one concrete action starting with a verb, max 35 words each")
     done_when: str = Field(description="How to confirm the threat no longer affects us, max 30 words")
+
+
+class RemediationMove(BaseModel):
+    action: str = Field(description="One of: quick_scan, full_scan, stop")
+    reason: str = Field(description="Why this is the right next move, from the evidence and the results so far, max 30 words")
+    summary: str = Field(default="", description="Only with stop: the outcome for the administrator, plain English, max 40 words")

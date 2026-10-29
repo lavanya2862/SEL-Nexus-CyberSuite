@@ -5,7 +5,8 @@ Judging uses the installed versions the script reads from Windows before and aft
   remove   ok when nothing matching the old version is left
   replace  ok when the old version is gone (a failed install of the new one is reported but doesn't undo the fix)
   setting  ok when the value the script reads back afterwards is the value the catalogue asks for
-  respond  (a sign of attack) ok when the Defender scan ran and no active threat is left afterwards
+  respond  (a sign of attack) ok when the Defender scan ran and no active threat is left afterwards; until then the
+           Remediation Agent (Azure AI Foundry) picks the next scan, up to 3 (without AI: quick, full, full)
 "done" means fixed on the computer; it becomes "verified" when Defender's next inventory no longer lists it.
 """
 
@@ -27,6 +28,8 @@ from uc1.store import utcnow
 
 log = logging.getLogger("uc1.fix")
 OK_CODES = {0, 1641, 3010, -1978334967, -1978334966}
+# a scan-and-clean is repeated until Defender lists no active threat: the same fixed script each time, a stronger scan
+RESPONSE_LADDER = ("QuickScan", "FullScan", "FullScan")
 
 
 class FixBusy(RuntimeError):
@@ -143,6 +146,8 @@ def judge_setting(result: dict) -> tuple[str, str]:
 def judge_response(result: dict) -> tuple[str, str]:
     """Scan and clean (a sign of attack): done when the scan ran and Defender lists no active threat afterwards."""
     before, after = int(result.get("before") or 0), int(result.get("after") or 0)
+    lab = result.get("lab_cleaned") or []
+    also = f" Also removed the lab test's leftovers: {', '.join(lab)}." if lab else ""
     if result.get("error"):
         return "failed", f"The Defender scan could not run: {result['error']}"
     if after:
@@ -150,13 +155,28 @@ def judge_response(result: dict) -> tuple[str, str]:
         return "failed", f"Scanned, but Defender still lists {after} active threat{'s' * (after != 1)} ({names}). " \
                          "Look at the computer in Defender; isolate it there if needed."
     if before:
-        return "done", f"Scanned and cleaned: Defender removed {before} active threat{'s' * (before != 1)}."
+        return "done", f"Scanned and cleaned: Defender removed {before} active threat{'s' * (before != 1)}.{also}"
+    if lab:
+        return "done", f"Scanned with Defender: no active threat found.{also}"
     return "done", "Scanned with Defender: no active threat found on the computer."
 
 
+def _remediation_ai(settings: Settings):
+    """The Remediation Agent's model: the suite's Azure AI Foundry deployment (AI_PROVIDER), or None (standard scans)."""
+    from uc1.ai.azure_client import make_client
+    from uc1.ai.gemini_client import AIUnavailable
+    try:
+        return make_client(settings)
+    except AIUnavailable as exc:
+        log.info("Remediation Agent without AI: %s", exc)
+        return None
+
+
 class FixRunner:
-    def __init__(self, settings: Settings, executor_factory: Callable = make_executor, on_step: Callable[[str], None] | None = None):
+    def __init__(self, settings: Settings, executor_factory: Callable = make_executor, on_step: Callable[[str], None] | None = None,
+                 ai=None):
         self.settings = settings
+        self.ai = ai if ai is not None else _remediation_ai(settings)
         self.state = FixState(settings.fix_dir / "state.json")
         self.factory = executor_factory
         self.on_step = on_step or (lambda text: None)
@@ -225,22 +245,76 @@ class FixRunner:
                 f"scan and clean after '{item['app']}'" if item["action"] == "respond" else \
                 f"{item['action']} {item['app']} {item['version']}"
             self._say(f"{device}: {what} via {method}", fid)
-            output, result = "", None
-            try:
-                ex = self.executor(method)
-                output = ex.run(device, item["device_id"], spec, say=lambda t: self._say(t, fid))
-                result = parse_result(output)
-                status, message = judge(item["action"], result)
-            except FixError as exc:
-                status, message = "failed", str(exc)
-            except Exception as exc:  # noqa: BLE001 - one failed fix must not stop the others
-                log.exception("Remediation %s failed unexpectedly", fid)
-                status, message = "failed", f"{exc.__class__.__name__}: {exc}"
+            moves = None
+            if item["action"] == "respond":
+                status, message, result, output, moves = self._respond(device, fid, item, method, spec)
+            else:
+                status, message, result, output = self._attempt(device, fid, item, method, spec)
             with self.state.edit() as data:
                 data["fixes"][fid].update(status=status, message=message[:600], finished_at=utcnow().isoformat(),
-                                          result=result, output=(output or "")[-3000:])
+                                          result=result, output=(output or "")[-3000:],
+                                          **({"agent": moves} if moves is not None else {}))
             self._say(f"{device}: {' '.join(p for p in (item['app'], item.get('version')) if p)} -> {status}: {message}", fid)
             results[fid] = status
+
+    def _attempt(self, device: str, fid: str, item: dict, method: str, spec: dict) -> tuple[str, str, dict | None, str]:
+        """Run the fixed script once on the computer and judge what it reports."""
+        output, result = "", None
+        try:
+            output = self.executor(method).run(device, item["device_id"], spec, say=lambda t: self._say(t, fid))
+            result = parse_result(output)
+            status, message = judge(item["action"], result)
+        except FixError as exc:
+            status, message = "failed", str(exc)
+        except Exception as exc:  # noqa: BLE001 - one failed fix must not stop the others
+            log.exception("Remediation %s failed unexpectedly", fid)
+            status, message = "failed", f"{exc.__class__.__name__}: {exc}"
+        return status, message, result, output
+
+    def _respond(self, device: str, fid: str, item: dict, method: str, spec: dict):
+        """Scan and clean until Defender lists no active threat. The Remediation Agent (Azure AI Foundry) picks each
+        move from the evidence and the results so far, but only from quick scan / full scan / stop: the script and
+        what it does stay fixed. Without the AI (or when it fails) the moves follow RESPONSE_LADDER."""
+        from uc1.ai.gemini_client import AIUnavailable
+        from uc1.ai.prompts import REMEDIATE_SYSTEM, remediate_prompt
+        from uc1.ai.schemas import RemediationMove
+        system = REMEDIATE_SYSTEM.replace("{max_moves}", str(len(RESPONSE_LADDER)))
+        evidence = "\n".join(f"{k}: {v}" for k, v in (("Device", device), ("Sign of attack", item.get("app")),
+                                                       ("Type", item.get("category")), ("Evidence", item.get("note"))) if v)
+        moves: list[dict] = []
+        status, message, result, output, summary = "failed", "No scan ran.", None, "", ""
+        while len([m for m in moves if m["action"] != "stop"]) < len(RESPONSE_LADDER):
+            scans = len(moves)
+            fallback = RESPONSE_LADDER[scans]
+            move = None
+            if self.ai is not None:
+                history = "\n".join(f"{i}. {m['action']}: {m['result']}" for i, m in enumerate(moves, 1))
+                try:
+                    move = self.ai.json("remediate", system, remediate_prompt(evidence, history), RemediationMove, max_tokens=400)
+                except AIUnavailable as exc:
+                    self._say(f"{device}: Remediation Agent unavailable ({exc}); using the standard scans", fid)
+                    self.ai = None
+            action = move.action.strip().lower() if move else ("quick_scan" if fallback == "QuickScan" else "full_scan")
+            if status == "done" or (action == "stop" and scans):    # clean (or the agent is done): only its summary is left
+                if move and action == "stop":
+                    summary = move.summary or move.reason
+                    moves.append({"action": "stop", "reason": move.reason, "result": summary})
+                break
+            if action not in ("quick_scan", "full_scan"):       # anything else (or stop before any scan): the standard move
+                action = "quick_scan" if fallback == "QuickScan" else "full_scan"
+            reason = move.reason if move else "Standard sequence (no AI)"
+            self._say(f"{device}: Remediation Agent: {action.replace('_', ' ')} ({reason})", fid)
+            status, message, result, output = self._attempt(
+                device, fid, item, method, {**spec, "scan": "FullScan" if action == "full_scan" else "QuickScan"})
+            moves.append({"action": action, "reason": reason, "result": message, "status": status})
+            with self.state.edit() as data:          # the card shows each move as it happens
+                data["fixes"][fid]["agent"] = list(moves)
+            if status == "done" and self.ai is None:
+                break
+        scans = [m for m in moves if m["action"] != "stop"]
+        message = f"{summary} " if summary else ""
+        message += f"After {len(scans)} scan{'s' * (len(scans) != 1)}: {scans[-1]['result'] if scans else message}"
+        return status, message, result, output, moves
 
     # ---------------------------------------------------------- probe (read-only check)
     def probe(self, method: str | None = None, devices: list[str] | None = None) -> dict:

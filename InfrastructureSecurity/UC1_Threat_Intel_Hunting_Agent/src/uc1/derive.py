@@ -56,6 +56,11 @@ def forget_repeats(store: Store) -> int:
     ids = [f"cve:{r['cve_id']}" for r in store.query(
                 "SELECT c.cve_id, c.products FROM threats t JOIN cves c ON t.threat_id = 'cve:' || c.cve_id WHERE t.kind = 'cve'")
             if not _matches_installed(json.loads(r["products"] or "[]"), installed)]
+    return forget(store, ids)
+
+
+def forget(store: Store, ids: list[str]) -> int:
+    """Delete these threats from every table that reports a threat."""
     if not ids:
         return 0
     marks = ", ".join("?" * len(ids))

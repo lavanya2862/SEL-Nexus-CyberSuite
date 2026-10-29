@@ -1,9 +1,9 @@
 import { Link, useSearchParams } from 'react-router-dom'
-import { ArrowRight, ShieldAlert, X, Zap } from 'lucide-react'
+import { ArrowRight, ShieldAlert, Sparkles, X } from 'lucide-react'
 import { FixCardSmall } from '@/components/NewFixes'
 import { Empty, Panel } from '@/components/kit'
 import { BasketBar } from './FixCentre'
-import { FixDown, canApprove, fixTime, useFix, useFixAction, type FixRow } from '@/lib/fix'
+import { FixDown, autoFix, canApprove, fixTime, useFix, useFixAction, type FixRow } from '@/lib/fix'
 import { dateTime, num } from '@/lib/format'
 import { UC_DOT, UC_NAME } from '@/lib/runs'
 import { GettingReady, useAutoStart } from '@/lib/services'
@@ -68,7 +68,10 @@ export function AttackResponses() {
         <div className="text-sm text-ink-2">
           <p>
             For every detection the <span className="inline-flex items-center gap-1.5 font-medium"><span className={cn('size-2 rounded-full', UC_DOT.attack)} />{UC_NAME.attack}</span> finds,
-            it proposes a standard response: <b>update Defender, run a quick scan and remove any threats found</b> on the affected device. Nothing runs until you select Approve and then Execute remediation.
+            it proposes a standard response: <b>update Defender, scan and remove any threats found</b> on the affected device, repeating with a full scan until Defender lists no active threat.{' '}
+            {v.attack_auto_fix
+              ? <>Auto-fix is <b>on</b>: at the end of each run the agent approves and runs every response nobody has decided on, and retries the ones not clean yet. <b>Defer</b> keeps one out of auto-fix; <b>Auto-fix</b> on a card runs it now.</>
+              : <>Nothing runs until you select Approve and then Execute remediation.</>}
           </p>
           <p className="mt-1.5 text-xs text-ink-3">
             Device isolation is outside this agent's scope; perform it in Microsoft Defender. The evidence on each card comes directly from Defender.
@@ -122,8 +125,8 @@ export function AttackResponses() {
                   Open the agent <ArrowRight className="size-3.5" />
                 </Link>
                 {fixable.length > 0 && (
-                  <button onClick={() => approve(fixable.map((r) => r.fix_id))} disabled={busy} className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
-                    <Zap className="size-3.5" /> Remediate all ({fixable.length})
+                  <button onClick={() => autoFix(act, fixable.map((r) => r.fix_id), v.default_method)} disabled={busy} className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
+                    <Sparkles className="size-3.5" /> Auto-fix all ({fixable.length})
                   </button>
                 )}
               </div>
@@ -131,6 +134,7 @@ export function AttackResponses() {
             <ul className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
               {rs.map((r) => (
                 <FixCardSmall key={r.fix_id} r={r} busy={busy} onFix={() => approve([r.fix_id])}
+                  onAutoFix={() => autoFix(act, [r.fix_id], v.default_method)}
                   onSave={() => act.mutate({ action: 'save', ids: [r.fix_id] })}
                   onUndo={(action) => act.mutate({ action, ids: [r.fix_id] })} />
               ))}

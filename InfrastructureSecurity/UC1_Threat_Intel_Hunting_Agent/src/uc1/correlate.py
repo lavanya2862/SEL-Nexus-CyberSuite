@@ -24,6 +24,8 @@ log = logging.getLogger("uc1.correlate")
 
 EICAR_SHA256 = "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f"
 LAB_MARKER = "uc1 lab test"
+LAB_NAME = "uc1labtest"          # scripts/lab/Invoke-UC1LabTest.ps1 and everything it creates carry this name
+AMSI_TEST = "7e72c3ce-861b-4339-8740-0ac1484f1386"        # Microsoft's harmless AMSI test sample
 ENC_ARG = re.compile(r"(?i)\s[-/]e[a-z]*\s+([A-Za-z0-9+/=]{16,})")
 SYSTEM_ACCOUNTS = {"system", "local service", "network service", "anonymous logon"}
 
@@ -49,7 +51,8 @@ def decode_powershell(command: str | None) -> str | None:
 def is_lab_test(row: dict) -> bool:
     text = json.dumps(row, default=str).lower()
     decoded = (decode_powershell(row.get("ProcessCommandLine")) or "").lower()
-    return EICAR_SHA256 in text or "eicar" in text or LAB_MARKER in decoded
+    return (EICAR_SHA256 in text or "eicar" in text or LAB_MARKER in decoded or LAB_NAME in text
+            or AMSI_TEST in text or "amsi_test" in text)
 
 
 def _fid(*parts) -> str:

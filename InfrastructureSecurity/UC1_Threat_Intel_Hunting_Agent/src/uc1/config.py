@@ -100,6 +100,9 @@ class Settings:
     fix_allow_choco: bool = False                   # Chocolatey fallback (downloads + runs its installer as SYSTEM): opt-in
     fix_start_vms: bool = True                      # start a stopped lab VM before fixing it
     fix_devices: tuple[str, ...] = ()               # empty = every Defender device in the plan
+    attack_auto_fix: bool = True                    # the Attack Detection Agent approves and runs its own scan-and-clean (0 = wait for a person)
+    # the Vulnerability Agent's folder: its data says when Defender first listed each CVE on each computer
+    vuln_agent_dir: Path | None = None
 
     # ---------- paths ----------
     @property
@@ -221,6 +224,8 @@ def load_settings(env_file: Path | None = None) -> Settings:
         fix_allow_choco=(_env("FIX_ALLOW_CHOCO") or "0").lower() in ("1", "true", "yes"),
         fix_start_vms=(_env("FIX_START_VMS") or "1") not in ("0", "false", "no"),
         fix_devices=tuple(d.strip().lower() for d in (_env("FIX_DEVICES") or "").split(",") if d.strip()),
+        attack_auto_fix=(_env("ATTACK_AUTO_FIX") or "1").lower() not in ("0", "false", "no"),
+        vuln_agent_dir=_resolve(_env("UC1_VULN_AGENT_DIR") or "../UC3_MDE_Vuln_Extraction"),
     )
 
 

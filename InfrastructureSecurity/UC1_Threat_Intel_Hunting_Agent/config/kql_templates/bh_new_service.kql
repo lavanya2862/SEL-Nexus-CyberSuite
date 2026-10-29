@@ -1,0 +1,12 @@
+// name: New Windows service created from the command line
+// kind: behaviour
+// technique: T1543.003
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where (FileName =~ "sc.exe" and ProcessCommandLine has "create")
+     or (FileName in~ ("powershell.exe", "pwsh.exe") and ProcessCommandLine has "New-Service")
+| where InitiatingProcessFileName !in~ ("MsSense.exe", "SenseIR.exe", "TrustedInstaller.exe", "msiexec.exe",
+                                        "WindowsAzureGuestAgent.exe")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

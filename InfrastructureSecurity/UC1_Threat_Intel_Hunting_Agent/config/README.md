@@ -27,6 +27,11 @@ All files are plain text (CSV or `.kql`); edit them with Notepad or LibreOffice.
 | `bh_lsass_access.kql` | Behaviour (T1003.001) | Unusual programs reading the memory where Windows keeps passwords (LSASS) |
 | `bh_scheduled_task.kql` | Behaviour (T1053.005) | New scheduled tasks created from the command line (a way to survive a restart) |
 | `bh_av_detection.kql` | Behaviour (T1204.002) | Malware detections by Defender antivirus |
+| `bh_run_key.kql` | Behaviour (T1547.001) | A program set to start automatically through a Run key in the registry |
+| `bh_startup_folder.kql` | Behaviour (T1547.001) | A file placed in the Startup folder, so it runs at every sign-in |
+| `bh_local_account.kql` | Behaviour (T1136.001) | A new local user account (a classic way to keep a back door) |
+| `bh_new_service.kql` | Behaviour (T1543.003) | A new Windows service created from the command line |
+| `bh_discovery_burst.kql` | Behaviour (T1082) | Four or more discovery tools (whoami, net, systeminfo, ipconfig...) run within 10 minutes by one program |
 | `cve_exposure.kql` | Manual | Which devices have given CVEs (for analysts; not run automatically) |
 
 Every query, template or AI-drafted, passes the validator (`src\uc1\hunting\validator.py`) before it runs: allowed tables only, a time filter, a row limit, no external data.

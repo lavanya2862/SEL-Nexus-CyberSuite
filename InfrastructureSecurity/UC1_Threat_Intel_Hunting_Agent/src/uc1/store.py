@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS device_vulns (
     device_id VARCHAR, device_name VARCHAR, cve_id VARCHAR, vendor VARCHAR, name VARCHAR, version VARCHAR,
     severity VARCHAR, cvss DOUBLE, exploit_available BOOLEAN, recommended_update VARCHAR, snapshot_at TIMESTAMP,
     PRIMARY KEY (device_id, cve_id, vendor, name, version));
+CREATE TABLE IF NOT EXISTS defender_seen (
+    device_name VARCHAR, cve_id VARCHAR, first_seen TIMESTAMP, PRIMARY KEY (device_name, cve_id));
 CREATE TABLE IF NOT EXISTS device_settings (
     device_id VARCHAR, device_name VARCHAR, config_id VARCHAR, name VARCHAR, category VARCHAR, subcategory VARCHAR,
     impact DOUBLE, snapshot_at TIMESTAMP, PRIMARY KEY (device_id, config_id));

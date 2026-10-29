@@ -1,6 +1,8 @@
 """Exposure: which of our devices are affected by each threat.
 
-1. By CVE (exact): the threat's CVEs that Defender reports on a device.
+1. By CVE (exact): the threat's CVEs that Defender reports on a device, only when we knew no later than Defender:
+   a CVE Defender listed on that device on an earlier day than we first collected the threat is the Vulnerability
+   Agent's finding, so it is left out (and an NVD CVE threat left with nothing is deleted).
 2. Not in Defender yet ("early"): a CVE of the threat that Defender does NOT list on a device, but NVD says the
    installed version of that app is affected (version checked against NVD's ranges, never by name alone).
    Defender needs time to add new holes to its catalogue; the news has them on day 0. After EARLY_DAYS without
@@ -17,7 +19,7 @@ from datetime import timedelta
 
 from rapidfuzz import fuzz
 
-from uc1.config import read_csv
+from uc1.config import Settings, read_csv
 from uc1.feeds.common import norm_name
 from uc1.store import NEW_IDS_SHOWN, Store, utcnow
 
@@ -81,8 +83,39 @@ def product_matches(vendor: str, product: str, installed: list[dict]) -> list[di
     return hits
 
 
-def compute(store: Store) -> dict:
+def defender_first_listed(store: Store, settings: Settings) -> dict[tuple[str, str], str]:
+    """{(computer, CVE): 'YYYY-MM-DD'} the day Defender first listed it: the Vulnerability Agent's first-seen dates
+    (open and fixed findings, as the portal shows them), else the first run of ours that saw it."""
+    first: dict[tuple[str, str], str] = {}
+    def earliest(k: tuple[str, str], day: str) -> None:
+        if day and (k not in first or day < first[k]):
+            first[k] = day
+    for r in store.query("SELECT device_name, cve_id, first_seen FROM defender_seen"):
+        earliest((str(r["device_name"]).lower(), r["cve_id"]), str(r["first_seen"] or "")[:10])
+    path = settings.vuln_agent_dir / "data" / "dashboard" / "dashboard_data.json" if settings.vuln_agent_dir else None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path else {}
+    except (OSError, ValueError):
+        data = {}
+    names = [(d.get("name") or "").split(".")[0].lower() for d in data.get("devices") or []]
+    for key in ("f", "fixed"):
+        t = data.get(key) or {}
+        cols = t.get("cols") or []
+        if not {"d", "cve", "fs"} <= set(cols):
+            continue
+        d, cve, fs = (cols.index(c) for c in ("d", "cve", "fs"))
+        for r in t.get("rows") or []:
+            if isinstance(r[d], int) and r[d] < len(names):
+                earliest((names[r[d]], str(r[cve]).upper()), str(r[fs] or "")[:10])
+    return first
+
+
+def compute(store: Store, first_listed: dict[tuple[str, str], str] | None = None) -> dict:
+    """first_listed: defender_first_listed(); None = no dates, every Defender match counts."""
     now = utcnow()
+    first_listed = first_listed or {}
+    known = {r["threat_id"]: str(r["first_seen_at"] or "")[:10] for r in store.query("SELECT threat_id, first_seen_at FROM threats")}
+    repeats: dict[str, int] = {}   # threat -> Defender matches left out because Defender listed them first
     devices = {d["device_id"]: d for d in store.query("SELECT * FROM devices")}
     installed = store.query("SELECT DISTINCT device_id, device_name, vendor, name, version FROM software")
     watchlist = read_csv("tech_watchlist.csv")
@@ -102,6 +135,10 @@ def compute(store: Store) -> dict:
         if lk["cve"]:
             placeholders = ",".join("?" for _ in lk["cve"])
             for v in store.query(f"SELECT * FROM device_vulns WHERE cve_id IN ({placeholders})", sorted(lk["cve"])):
+                listed_on = first_listed.get((str(v["device_name"]).lower(), v["cve_id"]))
+                if listed_on and known.get(tid) and listed_on < known[tid]:
+                    repeats[tid] = repeats.get(tid, 0) + 1   # already on Defender's list: only repeats it
+                    continue
                 d = devices.get(v["device_id"], {})
                 rows.append({"threat_id": tid, "device_id": v["device_id"], "device_name": v["device_name"],
                              "opco": d.get("opco", "Unassigned"), "match_type": "cve",
@@ -148,9 +185,17 @@ def compute(store: Store) -> dict:
                                  "detail": "watch-list match, not verified in Defender", "recommended_update": "",
                                  "found_at": now})
     rows = list({(r["threat_id"], r["device_id"], r["match_type"], r["detail"]): r for r in rows}.values())
-    store.upsert("exposure", rows)
     exposed = {r["threat_id"] for r in rows if r["match_type"] == "cve"}
+    # an NVD CVE threat exists only because it was on our computers: when Defender had it first, it only repeats
+    # Defender's list (like the ones derive never makes), so it goes
+    gone = sorted(t for t in repeats if t.startswith("cve:") and t not in exposed
+                  and not any(r["threat_id"] == t for r in rows))
+    if gone:
+        from uc1.derive import forget
+        forget(store, gone)
+    store.upsert("exposure", rows)
     return {"exposure_rows": len(rows), "threats_exposed": len(exposed),
+            "defender_first_left_out": sum(repeats.values()), "repeat_threats_removed": len(gone),
             "new_threats_exposed": len(exposed - before),       # not on our computers' list in the last run
             "new_threat_ids": sorted(exposed - before)[:NEW_IDS_SHOWN],   # the portal's run page names them
             "not_in_defender_yet": len({(r["device_id"], r["detail"]) for r in rows if r["match_type"] == "early"}),

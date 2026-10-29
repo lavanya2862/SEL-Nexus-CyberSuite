@@ -100,8 +100,9 @@ def build_spec(item: dict, allow_choco: bool = True) -> dict:
     """What the script on the VM gets (base64 JSON). Built from the catalogue row only."""
     action = item["action"]
     if action == "respond":
+        # a lab test's sign of attack: the script also removes the fixed UC1LabTest leftovers (names live in the script)
         return {"id": item["fix_id"], "action": "respond", "kind": "scan_clean", "check": [], "remove": [], "procs": [],
-                "allow_choco": False}
+                "allow_choco": False, "lab_cleanup": bool(item.get("is_test"))}
     if action == "setting":
         return {"id": item["fix_id"], "action": "setting", "kind": item["setting_kind"], "target": item["setting_target"],
                 "value": item["setting_value"], "check": [], "remove": [], "procs": [], "allow_choco": False}
@@ -178,7 +179,7 @@ def response_items(store: Store, settings: Settings, limit_devices: bool = True)
             "app": r["detail"] or sign, "fix_id": fix_id(r["device_name"], f"response:{r['finding_id']}", ""),
             "findings": 0, "cves": 0, "max_epss": 0, "max_cvss": 0,
             "winget_id": "", "choco_id": "", "match": "", "processes": [], "stage": RESPONSE_STAGE, "action": "respond",
-            "category": sign + (" (test)" if r["is_test"] else ""), "note": evidence,
+            "category": sign + (" (test)" if r["is_test"] else ""), "note": evidence, "is_test": bool(r["is_test"]),
             "snapshot_at": r["created_at"].isoformat() if isinstance(r["created_at"], datetime) else r["created_at"]})
     return items
 
@@ -410,7 +411,7 @@ def view(settings: Settings) -> dict:
     events = [e for i, e in enumerate(data["events"]) if i >= recent or e.get("fix_id") in ran]
     return {"generated_at": plan.get("generated_at"), "inventory_at": plan.get("inventory_at"), "stages": plan.get("stages", STAGES),
             "rows": rows, "totals": total, "events": events[::-1], "probes": data.get("probes", {}),
-            "default_method": settings.fix_method,
+            "default_method": settings.fix_method, "attack_auto_fix": settings.attack_auto_fix,
             "impact": {"findings_open": sum(r["findings"] for r in rows if r["status"] not in ("verified", "gone")),
                        "findings_cleared": sum(r["findings"] for r in fixed)}}
 
@@ -424,7 +425,7 @@ def _row(item: dict, f: dict) -> dict:
                                         "setting_kind", "setting_target", "setting_value")},
             "status": status, **{k: f.get(k) for k in ("method", "approved_by", "approved_at", "saved_by", "saved_at",
                                                       "started_at", "finished_at",
-                                                      "verified_at", "message", "result")}}
+                                                      "verified_at", "message", "result", "agent")}}
 
 
 def approve(settings: Settings, ids: list[str], method: str | None = None, who: str | None = None) -> dict:

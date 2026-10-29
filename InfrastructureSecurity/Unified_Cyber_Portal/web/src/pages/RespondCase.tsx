@@ -519,24 +519,66 @@ function DidByItself({ c }: { c: Uc4Case }) {
   )
 }
 
-function Timeline({ c }: { c: Uc4Case }) {
+type Moment = { label: string; at: string | null; note?: string; who: 'defender' | 'agent' | 'person' }
+const MOMENT_DOT: Record<Moment['who'], string> = { defender: 'bg-rose', agent: 'bg-blue', person: 'bg-[#16a34a]' }
+
+/** Everything that happened to the incident, oldest first: Defender's events, the agent's verdict and actions,
+ *  analysts' decisions and reopens, and Defender's latest change when nothing here explains it. */
+function moments(c: Uc4Case): Moment[] {
   const p = c.packet
-  const rows = [
-    ['Activity started', iso(p.first_activity)],
-    ['Defender raised it', iso(p.created_at)],
-    ['Agent verdict ready', iso(c.triaged_at)],
-  ] as const
+  const list: Moment[] = [
+    { label: 'Activity started', at: iso(p.first_activity), who: 'defender' },
+    { label: 'Defender raised it', at: iso(p.created_at), who: 'defender' },
+    { label: 'Agent verdict ready', at: iso(c.triaged_at), note: `Agent said: ${verdictMeta(c.verdict.verdict).label}`, who: 'agent' },
+  ]
+  for (const a of c.actions) {
+    if (a.status !== 'done' && a.status !== 'failed') continue
+    const at = iso(a.done_at ?? a.requested_at)
+    if (a.action === 'close_incident' || a.action === 'escalate_incident') {
+      // "resolved / falsePositive / notMalicious by Lavanya" (UC4 close.act)
+      const [head, by] = (a.detail ?? '').split(' by ')
+      const [status, cls, det] = head.split(' / ')
+      list.push({
+        label: `Decided by ${by?.trim() || 'an analyst'}: ${CLASSIFICATION_WORDS[cls] ?? cls ?? ''}${a.status === 'failed' ? ' (not saved)' : ''}`,
+        at, who: 'person',
+        note: a.status === 'failed' ? a.detail : `${isClosed(status) ? 'Closed' : 'Kept open'} in Defender${det ? ` · ${DETERMINATION_WORDS[det] ?? det}` : ''}`,
+      })
+    } else if (a.action === 'reopen') {
+      list.push({ label: 'Reopened in Defender', at, who: 'person', note: a.detail?.split(':').slice(1).join(':').trim() || undefined })
+    } else {
+      list.push({ label: `${ACTION_WORDS[a.action] ?? a.action}${a.status === 'failed' ? ' (failed)' : ''}`, at, who: 'agent',
+        note: a.detail ? a.detail.split(' -> ')[0] : undefined })
+    }
+  }
+  // Defender's newest change, when it is later than everything above (an analyst working in Defender)
+  const st = c.defender_state
+  const changed = iso(st.updated_at)
+  const latest = list.reduce((m, x) => (x.at && x.at > m ? x.at : m), '')
+  if (changed && changed > latest) {
+    const cls = st.classification && st.classification !== 'unknown' ? CLASSIFICATION_WORDS[st.classification] ?? st.classification : 'Not classified'
+    list.push({ label: 'Last updated in Defender', at: changed, who: 'defender', note: `${cls} · ${isClosed(st.status) ? 'closed' : 'open'}` })
+  }
+  return list.sort((x, y) => (x.at ?? '').localeCompare(y.at ?? ''))
+}
+
+function Timeline({ c }: { c: Uc4Case }) {
+  const rows = moments(c)
   return (
-    <Card title="Timeline">
+    <Card title="Timeline" description="Newest at the bottom. Updated after every check of Defender and every decision.">
       <ol className="relative flex flex-col gap-4 border-l border-hairline pl-4">
-        {rows.map(([label, t]) => (
-          <li key={label} className="relative">
-            <span className="absolute -left-[21px] top-1.5 size-2.5 rounded-full border-2 border-panel bg-rose" />
-            <div className="text-sm font-medium">{label}</div>
-            <div className="text-xs text-ink-3">{t ? dateTime(t) : '–'}</div>
+        {rows.map((m, i) => (
+          <li key={i} className="relative">
+            <span className={cn('absolute -left-[21px] top-1.5 size-2.5 rounded-full border-2 border-panel', MOMENT_DOT[m.who])} />
+            <div className="text-sm font-medium">{m.label}</div>
+            <div className="text-xs text-ink-3">{m.at ? dateTime(m.at) : '–'}{m.note ? ` · ${m.note}` : ''}</div>
           </li>
         ))}
       </ol>
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-3">
+        {(Object.keys(MOMENT_DOT) as Moment['who'][]).map((k) => (
+          <span key={k} className="flex items-center gap-1.5"><span className={cn('size-2 rounded-full', MOMENT_DOT[k])} />{{ defender: 'Defender', agent: 'Agent', person: 'Analyst' }[k]}</span>
+        ))}
+      </div>
       {c.seconds != null && <p className="mt-3 text-xs text-ink-3">The agent took {Math.round(c.seconds)} s, running {c.queries.length} searches{c.ti.length ? ` and ${c.ti.length} threat-intel look-ups` : ''}.</p>}
     </Card>
   )

@@ -57,6 +57,7 @@ export interface Story {
   cve: string; device: string; app: string; version: string
   announced: string | null; known: string | null; listed: string | null; fixed: string | null
   ahead: number | null      // days Defender listed it after we knew (only when the app was already on that computer)
+  behind: boolean           // Defender listed it on an earlier day than we knew: we only repeated its list
   waiting: number | null    // days since we knew, while Defender hasn't listed it
 }
 
@@ -77,10 +78,12 @@ export function storyOf(e: ExplorerRow, dd: DefenderDates): Story | null {
       match, cve: x.cve, device: x.device, app: x.app, version: x.version,
       announced: x.announced || null, known: x.known || null, listed, fixed: want === 'cve' ? dd.fixed.get(key) ?? null : null,
       ahead: ahead && ahead > 0 ? ahead : null,
+      behind: !!(listed && knownDay && listed < knownDay),
       waiting: want !== 'cve' && knownDay ? Math.max(0, today() - dayNo(knownDay)) : null,
     }
   })
-  return stories.sort((a, b) => (b.ahead ?? -1) - (a.ahead ?? -1))[0] ?? null
+  // most ahead first, then ones where we were no later than Defender (same rule as the matches list)
+  return stories.sort((a, b) => (b.ahead ?? -1) - (a.ahead ?? -1) || Number(a.behind) - Number(b.behind))[0] ?? null
 }
 
 /** Small badge for the card header. */
@@ -95,16 +98,18 @@ export function StoryBadge({ s }: { s: Story | null }) {
   return null
 }
 
-/** Announced → we knew → Defender listed → fixed, for one CVE on one computer. */
+/** Announced → we knew → Defender listed → fixed, for one CVE on one computer; Defender before us when it was first. */
 export function Timeline({ s }: { s: Story }) {
-  const steps: { label: string; when: string | null; note?: string; tone?: 'good' | 'warn' | 'muted' }[] = [
+  type Step = { label: string; when: string | null; note?: string; tone?: 'good' | 'warn' | 'muted' }
+  const identified: Step = { label: 'Identified', when: s.known, note: s.behind ? 'Threat Intel Agent · after Defender' : 'Threat Intel Agent' }
+  const defender: Step = s.match === 'defender'
+    ? { label: 'Defender listed it', when: s.listed, note: s.ahead ? `${s.ahead} day${s.ahead === 1 ? '' : 's'} after us` : 'on our device', tone: s.ahead ? 'good' : undefined }
+    : s.match === 'early'
+      ? { label: 'Defender', when: null, note: `not listed yet · waiting ${s.waiting} day${s.waiting === 1 ? '' : 's'}`, tone: 'warn' }
+      : { label: 'Defender', when: null, note: 'not reported (14+ days)', tone: 'muted' }
+  const steps: Step[] = [
     { label: 'Announced', when: s.announced, note: 'by the vendor / NVD' },
-    { label: 'Identified', when: s.known, note: 'Threat Intel Agent' },
-    s.match === 'defender'
-      ? { label: 'Defender listed it', when: s.listed, note: s.ahead ? `${s.ahead} day${s.ahead === 1 ? '' : 's'} after us` : 'on our device', tone: s.ahead ? 'good' : undefined }
-      : s.match === 'early'
-        ? { label: 'Defender', when: null, note: `not listed yet · waiting ${s.waiting} day${s.waiting === 1 ? '' : 's'}`, tone: 'warn' }
-        : { label: 'Defender', when: null, note: 'not reported (14+ days)', tone: 'muted' },
+    ...(s.behind ? [defender, identified] : [identified, defender]),
     s.fixed ? { label: 'Remediated', when: s.fixed, note: 'gone from Defender', tone: 'good' } : { label: 'Remediated', when: null, note: 'not yet', tone: 'muted' },
   ]
   return (

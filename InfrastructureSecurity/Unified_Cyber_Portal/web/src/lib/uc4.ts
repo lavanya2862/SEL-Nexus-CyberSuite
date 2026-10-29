@@ -206,7 +206,7 @@ export interface Uc4Case {
   feedback: { feedback_id: string; agree: boolean; analyst_verdict: string | null; reason: string; minutes: number | null; created_at: string }[]
   actions: { action_id?: string; action: string; target: string; status: string; detail?: string; requested_at: string; done_at?: string | null }[]
   questions?: Question[]
-  defender_state: { status: string | null; classification: string | null; determination: string | null }
+  defender_state: { status: string | null; classification: string | null; determination: string | null; updated_at: string | null }
   decision: Decision | null
   outcome: Verdict
   automation: Automation

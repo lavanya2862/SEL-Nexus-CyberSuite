@@ -179,6 +179,14 @@ export function attackType(kind: string, detail: string): AttackType {
     return { label: 'Malware caught by antivirus', category: 'Malware', what: 'Microsoft Defender antivirus found a harmful file on the device.' }
   if (/\bt1204\b/.test(d) || d.includes('user execution'))
     return { label: 'Program started from a document', category: 'Malicious document', what: 'A document application (such as a PDF reader) launched another program, a common technique of malicious documents.' }
+  if (d.includes('start automatically') || d.includes('startup folder'))
+    return { label: d.includes('startup folder') ? 'File placed in the Startup folder' : 'Program set to start automatically', category: 'Persistence', what: 'Something was set to run every time the device starts or a user signs in, a common way for attackers to stay on a device.' }
+  if (d.includes('local user account'))
+    return { label: 'New local user account', category: 'Persistence', what: 'A new user account was created on the device, a common way for attackers to keep a way back in.' }
+  if (d.includes('windows service'))
+    return { label: 'New Windows service', category: 'Persistence', what: 'A new Windows service was created from the command line, a common way for attackers to run code with full rights.' }
+  if (d.includes('discovery commands'))
+    return { label: 'Burst of discovery commands', category: 'Reconnaissance', what: 'One program ran several commands that list users, groups and system details within minutes, as attackers do right after getting in.' }
   const name = detail.replace(/^AI-drafted:\s*/, '').replace(/^T\d{4}(\.\d{3})?\s+/, '')
   return { label: name, category: 'Suspicious activity', what: `Activity that matches a known attacker trick: ${name}.` }
 }

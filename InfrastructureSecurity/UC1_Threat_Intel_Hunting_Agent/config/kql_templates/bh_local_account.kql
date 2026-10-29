@@ -1,0 +1,9 @@
+// name: New local user account created
+// kind: behaviour
+// technique: T1136.001
+DeviceEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "UserAccountCreated"
+| project Timestamp, DeviceId, DeviceName, ActionType, AccountName, AccountDomain,
+          InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

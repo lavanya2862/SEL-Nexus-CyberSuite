@@ -379,7 +379,8 @@ class UC4:
         export = _read_json(self.data / "export" / "triage_data.json")
         row = next((r for r in (export or {}).get("queue", []) if r.get("incident_id") == real_id), {}) \
             if isinstance(export, dict) else {}
-        data["defender_state"] = {k: row.get(k) or data["packet"].get(k) for k in ("status", "classification", "determination")}
+        data["defender_state"] = {k: row.get(k) or data["packet"].get(k)
+                                  for k in ("status", "classification", "determination", "updated_at")}
         verdict = (data.get("verdict") or {}).get("verdict")
         data["decision"] = uc4_decision(data["defender_state"], uc4_person_action(data["actions"]),
                                         export.get("generated_at") if isinstance(export, dict) else None)

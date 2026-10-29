@@ -1,0 +1,16 @@
+// name: Burst of system discovery commands
+// kind: behaviour
+// technique: T1082
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName in~ ("whoami.exe", "net.exe", "net1.exe", "systeminfo.exe", "ipconfig.exe", "nltest.exe", "quser.exe",
+                      "tasklist.exe", "hostname.exe")
+| where InitiatingProcessFileName !in~ ("MsSense.exe", "SenseIR.exe", "SenseCM.exe", "WindowsAzureGuestAgent.exe",
+                                        "CollectGuestLogs.exe")
+| summarize Tools = dcount(FileName), Commands = make_set(ProcessCommandLine, 20), FirstSeen = min(Timestamp),
+            take_any(DeviceName, AccountName, InitiatingProcessCommandLine)
+            by DeviceId, InitiatingProcessId, InitiatingProcessFileName, Window = bin(Timestamp, 10m)
+| where Tools >= 4
+| project Timestamp = FirstSeen, DeviceId, DeviceName, AccountName, Tools, Commands,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

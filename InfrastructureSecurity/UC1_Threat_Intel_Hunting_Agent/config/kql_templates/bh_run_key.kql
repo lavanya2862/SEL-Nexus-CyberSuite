@@ -1,0 +1,12 @@
+// name: Program set to start automatically (Run key)
+// kind: behaviour
+// technique: T1547.001
+DeviceRegistryEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "RegistryValueSet"
+| where RegistryKey contains @"\CurrentVersion\Run"
+| where InitiatingProcessFileName in~ ("reg.exe", "powershell.exe", "pwsh.exe", "cmd.exe", "wscript.exe", "cscript.exe",
+                                       "mshta.exe", "rundll32.exe", "regsvr32.exe")
+| project Timestamp, DeviceId, DeviceName, ActionType, RegistryKey, RegistryValueName, RegistryValueData,
+          InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

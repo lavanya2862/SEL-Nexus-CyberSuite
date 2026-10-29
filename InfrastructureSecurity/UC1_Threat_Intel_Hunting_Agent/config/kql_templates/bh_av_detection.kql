@@ -5,5 +5,5 @@ DeviceEvents
 | where Timestamp > ago({{LOOKBACK}}d)
 | where ActionType in ("AntivirusDetection", "AntivirusDetectionActionType", "AntivirusMalwareBlocked")
 | project Timestamp, DeviceId, DeviceName, ActionType, FileName, FolderPath, SHA256,
-          InitiatingProcessAccountName, InitiatingProcessFileName, AdditionalFields
+          InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine, AdditionalFields
 | take 500

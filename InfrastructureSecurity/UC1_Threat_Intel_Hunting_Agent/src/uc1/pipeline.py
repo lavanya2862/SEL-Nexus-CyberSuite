@@ -171,7 +171,7 @@ class Pipeline:
         return self.step("analyse", analyse.run, self.store, self.ai, workers=self.settings.ai_workers)
 
     def score(self, name="score"):
-        self.step("exposure", exposure.compute, self.store)
+        self.step("exposure", exposure.compute, self.store, exposure.defender_first_listed(self.store, self.settings))
         return self.step(name, scoring.run, self.store)
 
     def hunt(self):
@@ -200,6 +200,28 @@ class Pipeline:
         from uc1.fix import plan as fix_plan
         return self.step("fix_plan", fix_plan.refresh, self.store, self.settings, source)
 
+    def auto_fix(self) -> dict:
+        """Auto-fix (on unless ATTACK_AUTO_FIX=0): approve every scan-and-clean response nobody has decided on (this
+        run's new ones and earlier runs' still pending), plus the ones that are not clean yet, and run them now.
+        The runner repeats each with a stronger scan until Defender lists no active threat; what is still not clean
+        is tried again on the next run. A person still sees each result and can defer (Save for later stops
+        auto-fix for that one), retry or undo as usual."""
+        from uc1.fix import plan as fix_plan
+        from uc1.fix.runner import FixRunner, fix_active
+        from uc1.fix.state import FixState
+        plan = fix_plan.read_plan(self.settings)
+        decided = FixState(self.settings.fix_dir / "state.json").read()["fixes"]
+        new = set(plan.get("new_ids", []))
+        ids = [i["fix_id"] for i in plan.get("items", []) if i.get("kind") == "response"
+               and (decided.get(i["fix_id"]) or {}).get("status", "proposed") in ("proposed", "failed", "still_there")]
+        if not ids:
+            return {"approved": 0, "earlier": 0, "ran": 0, "done": 0, "failed": 0}
+        approved = fix_plan.approve(self.settings, ids, who="Attack Detection Agent (auto-fix)")["approved"]
+        earlier = sum(1 for fid in approved if fid not in new)
+        if fix_active(self.settings):      # another remediation run is going: these stay approved for the next Execute
+            return {"approved": len(approved), "earlier": earlier, "ran": 0, "done": 0, "failed": 0, "busy": True}
+        return {"approved": len(approved), "earlier": earlier, **FixRunner(self.settings).run_approved(approved)}
+
     def attack_check(self) -> dict:
         """The Attack Check Agent: search our computers for the warning signs the Threat Intel run collected."""
         started = utcnow()
@@ -213,6 +235,10 @@ class Pipeline:
         self.step("report", attack_report.build, self.store, self.settings, self.run_id, self.steps)
         self.step("dashboard", lambda: str(dashboard.build(self.store, self.settings)))
         self.fix_plan("attack_detection")
+        if self.settings.attack_auto_fix:
+            self.step("auto_fix", self.auto_fix)
+        else:
+            self.skip("auto_fix", "ATTACK_AUTO_FIX=0: responses wait for approval")
         failed = [k for k, v in self.steps.items() if v["status"] == "error"]
         status = "ok" if not failed else "partial"
         finished = utcnow()

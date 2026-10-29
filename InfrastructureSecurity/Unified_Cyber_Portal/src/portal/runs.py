@@ -93,8 +93,8 @@ def attack_steps() -> list[Step]:
              ("resolve",)),
         Step("publish", "Publish", "Update the Attack detection page, raise alerts and write the report",
              ("alerts", "report", "dashboard")),
-        Step("fix", "Remediation", "Propose a Defender scan-and-clean for every new detection, for your approval below",
-             ("fix_plan",)),
+        Step("fix", "Remediation", "Propose a Defender scan-and-clean for every detection; with auto-fix on, the agent runs "
+             "each one and repeats it with a full scan until clean", ("fix_plan", "auto_fix")),
     ]
 
 
@@ -207,6 +207,18 @@ def fix_words(info: dict) -> str:
     return text + (f" · {waiting:,} waiting from earlier runs" if waiting else "")
 
 
+def auto_fix_words(info: dict) -> str:
+    """The Attack Detection Agent's auto-fix: "Auto-fix ran 2 scan-and-cleans (1 from earlier runs) · 2 clean"."""
+    n, earlier = int(info.get("approved") or 0), int(info.get("earlier") or 0)
+    if not n:
+        return "Auto-fix on · nothing left to remediate"
+    what = _plural(n, "scan-and-clean") + (f" ({earlier} from earlier runs)" if earlier else "")
+    if info.get("busy"):
+        return f"Auto-fix approved {what} · another remediation run is going, so they run on the next Execute"
+    done, failed = int(info.get("done") or 0), int(info.get("failed") or 0)
+    return f"Auto-fix ran {what} · {done} clean" + (f" · {failed} not clean yet, retried next run" if failed else "")
+
+
 def _short(text: str, limit: int = 110) -> str:
     text = re.sub(r"[A-Z]:\\[^ ,'}]+", "", text).strip(" :,")
     return text if len(text) <= limit else text[: limit - 1] + "…"
@@ -306,6 +318,8 @@ def friendly(name: str, value) -> str | None:
             return "Benefit metrics updated"
         if name == "fix_plan":
             return fix_words(d)
+        if name == "auto_fix":
+            return auto_fix_words(d)
         # UC4
         if name == "feedback":
             return f"{_plural(d.get('feedback', 0), 'feedback click')} · {_plural(d.get('actions', 0), 'action')} imported"
@@ -344,7 +358,7 @@ def group_summary(key: str, r: dict) -> str | None:
             new = _new_steps(get("fix_advice"))
             return f"Remediation steps written for {_plural(new, 'applicable threat')}" if new else "No new remediation steps needed"
         if key == "fix":
-            return fix_words(get("fix_plan"))
+            return auto_fix_words(get("auto_fix")) if get("auto_fix") else fix_words(get("fix_plan"))
         if key == "search":
             return _searched(get("hunt"))
         if key == "resolve":
@@ -828,7 +842,7 @@ def fix_waiting(run: dict, fix_dir: Path, read: Callable[[Path], dict | None] = 
     if open_ids:
         step.update(status="waiting", finished_at=None,
                     detail=f"Awaiting your decision: {len(open_ids)} of {len(ids)} new remediation{'s' if len(ids) != 1 else ''}")
-    elif ids:
+    elif ids and not str(step.get("detail") or "").startswith("Auto-fix"):
         step["detail"] = f"All {len(ids)} decided: {to_fix} approved, {saved} deferred"
     hint = (f"{len(open_ids)} still waiting for you below" if open_ids
             else f"of {len(ids)} new remediation{'s' if len(ids) != 1 else ''} in this run" if ids else "no new remediations in this run")
