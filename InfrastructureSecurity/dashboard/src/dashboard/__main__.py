@@ -20,7 +20,7 @@ def main() -> None:
     settings = load_settings()
     if args.command == "serve":
         start_watcher(settings)   # keeps the fixing and alert-triage services running (PORTAL_AUTOSTART=0 to switch off)
-        uvicorn.run("portal.app:create_app", factory=True, host=settings.host, port=args.port or settings.port,
+        uvicorn.run("dashboard.app:create_app", factory=True, host=settings.host, port=args.port or settings.port,
                     reload=args.reload, log_level="info")
 
 
