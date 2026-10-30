@@ -289,3 +289,4 @@ scid-66,Disable Microsoft Defender Firewall notifications when programs are bloc
 scid-68,Disable Microsoft Defender Firewall notifications when programs are blocked for Private profile,firewall,Private,False,Set-NetFirewallProfile -Profile Private -NotifyOnListen False,Suppresses user notification popups on blocked inbound connections
 scid-71,Disable Microsoft Defender Firewall notifications when programs are blocked for Public profile,firewall,Public,False,Set-NetFirewallProfile -Profile Public -NotifyOnListen False,Suppresses user notification popups on blocked inbound connections
 ```
+
