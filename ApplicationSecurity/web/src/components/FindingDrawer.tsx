@@ -1,7 +1,7 @@
 // The details of one finding, in a drawer from the right: first the problem (what it is, where, the code, why it ranks
 // where it does), then what our agents did about it (the Remediation Agent's fix and diff, the Validation Agent's
 // checks). Opened from any table on any page.
-import { ExternalLink, Sparkles } from 'lucide-react'
+import { ExternalLink, Sparkles, X } from 'lucide-react'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { CodeView, Diff, Markdown } from '@/components/Code'
 import { Chip, FixStatusTag, Loading, Notice, RiskScore, SevTag, StatusTag, VerdictTag } from '@/components/kit'
@@ -14,14 +14,14 @@ export function FindingDrawer() {
   const { finding, closeFinding } = usePanels()
   return (
     <Sheet open={!!finding} onOpenChange={(o) => !o && closeFinding()}>
-      <SheetContent side="right" className="w-full gap-0 overflow-y-auto border-hairline bg-panel p-0 sm:max-w-[640px]">
-        {finding && <Body jobId={finding.jobId} findingId={finding.findingId} />}
+      <SheetContent side="right" className="w-full gap-0 overflow-y-auto border-hairline bg-panel p-0 sm:max-w-[min(880px,82vw)]">
+        {finding && <Body jobId={finding.jobId} findingId={finding.findingId} closeFinding={closeFinding} />}
       </SheetContent>
     </Sheet>
   )
 }
 
-function Body({ jobId, findingId }: { jobId: string; findingId: string }) {
+function Body({ jobId, findingId, closeFinding }: { jobId: string; findingId: string; closeFinding: () => void }) {
   const { openChat } = usePanels()
   const job = useJob(jobId)
   const { report, findings } = useJobResults(jobId, true)
@@ -40,6 +40,7 @@ function Body({ jobId, findingId }: { jobId: string; findingId: string }) {
   return (
     <div className="flex flex-col">
       <div className="sticky top-0 z-10 border-b border-hairline bg-panel px-6 pb-4 pt-6 pr-14">
+        <button onClick={() => closeFinding()} aria-label="Close" className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg text-ink-3 hover:bg-well hover:text-ink transition-colors"><X className="size-4" /></button>
         <div className="flex flex-wrap items-center gap-2">
           <SevTag sev={f.severity} />
           <Chip>Risk <span className="ml-1"><RiskScore score={f.priority_score} /></span></Chip>
