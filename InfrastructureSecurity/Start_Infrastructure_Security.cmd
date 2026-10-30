@@ -88,14 +88,18 @@ if exist "%DI%agents\%1\data\%2.duckdb" if not exist "%DI%agents\%1\data\%1.duck
 if exist "%DI%agents\%1\data\%2.duckdb.wal" if not exist "%DI%agents\%1\data\%1.duckdb.wal" ren "%DI%agents\%1\data\%2.duckdb.wal" "%1.duckdb.wal"
 exit /b 0
 
-rem ---- :setup <folder> <package>: its own .venv with the requirements, and the package's src folder on the path
-rem (a .pth file, so it also works on Python 3.11)
+rem ---- :setup <folder> <package>: its own .venv with the requirements, and the package's src folder and the shared
+rem infra_core library on the path (.pth files, so it also works on Python 3.11)
 :setup
+if exist "%DI%%~1\.venv\Scripts\python.exe" if not exist "%DI%%~1\.venv\Lib\site-packages\infra_core.pth" (
+  (echo %DI%shared\infra_core\src)>"%DI%%~1\.venv\Lib\site-packages\infra_core.pth"
+)
 if exist "%DI%%~1\.venv\Scripts\python.exe" exit /b 0
 echo Setting up %~1, first time only...
 %PY% -m venv "%DI%%~1\.venv" || exit /b 1
 "%DI%%~1\.venv\Scripts\python.exe" -m pip install --quiet --disable-pip-version-check -r "%DI%%~1\requirements.txt" || exit /b 1
 (echo %DI%%~1\src)>"%DI%%~1\.venv\Lib\site-packages\%~2.pth"
+(echo %DI%shared\infra_core\src)>"%DI%%~1\.venv\Lib\site-packages\infra_core.pth"
 exit /b 0
 
 :failed

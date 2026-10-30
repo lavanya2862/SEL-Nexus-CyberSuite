@@ -31,6 +31,16 @@ def test_every_module_imports(part):
     assert done.returncode == 0, done.stdout + done.stderr
 
 
+@pytest.mark.parametrize("part", sorted(PARTS))
+def test_shared_library_imports(part):
+    py = python(part)
+    if not py.exists():
+        pytest.skip(f"{part} has no .venv yet")
+    done = subprocess.run([str(py), "-c", WALK, "infra_core"], cwd=part_dir(part), capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=300)
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
 @pytest.mark.parametrize("part", sorted(p for p in PARTS if p != "dashboard"))
 def test_command_line_answers(part):
     py = python(part)
