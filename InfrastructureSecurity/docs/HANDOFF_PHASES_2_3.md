@@ -3,10 +3,16 @@
 Who does what for the rest of the restructure (see `ARCHITECTURE.md` for the target and the rules). The work is
 split three ways:
 
-- **Part A – Gemini, no code changes.** Writing and checking: specs, schemas, reports. Safe to give away.
-- **Part B – Gemini, small mechanical code changes.** Each one is protected by the tests. Skip Part B if you want
-  only Claude to touch code.
-- **Part C – Claude.** The parts that need careful reading of the code.
+- **Part A – Gemini, no code changes.** Writing and checking: specs, schemas, reports.
+- **Part B – Claude.** Phase 2 code changes, done in parallel with Part A.
+- **Part C – Claude.** Phase 3, after Part A (it uses A3, A4 and A5).
+
+Gemini never changes code. It works in its own copy of the repository, so it and Claude never touch the same files:
+
+| Who | Folder | Branch |
+|---|---|---|
+| Gemini (Part A) | `C:\Users\2862390\Desktop\PoC\SEL_Nexus_CyberSuite-docs` | `infra-docs` |
+| Claude (Parts B and C) | `C:\Users\2862390\Desktop\PoC\SEL_Nexus_CyberSuite` | `infra-four-agents` |
 
 Do the tasks in the order listed. One task per Gemini chat keeps it focused.
 
@@ -14,33 +20,33 @@ Do the tasks in the order listed. One task per Gemini chat keeps it focused.
 
 ## Your steps (you, not an AI)
 
-1. **Before each task:** make sure you are on the branch `infra-four-agents` and nothing is uncommitted:
-   `git status` should say "nothing to commit". If it doesn't, commit or ask before going on.
+1. **Open the Gemini folder** `SEL_Nexus_CyberSuite-docs` in Antigravity (not the main one).
 2. **Start every Gemini chat** with the "Paste this first" block below, then paste one task.
-3. **After each task:** run the check yourself (from `InfrastructureSecurity`):
-   `dashboard\.venv\Scripts\python.exe -m pytest tests -q`
-   All tests must pass. If anything fails, run `git checkout -- .` and `git clean -fd agents dashboard shared contracts tests`
-   to throw the task's changes away, and either retry the task or leave it for Claude.
-4. **Commit each task on its own** with the message given in the task (`git add -A` then `git commit -m "..."`).
-5. **Secrets:** never paste `.env` values into any chat. When a task mentions `.env`, you edit it yourself.
-6. **Signing in:** you sign in to the dashboard yourself; an AI never types your password.
-7. **When Part A and B are done,** update the phase table in `ARCHITECTURE.md` (or ask Claude to, in one line) and
-   start Part C with Claude.
+3. **After each task:** check with `git status` (in the Gemini folder) that only documentation files changed: `.md`
+   files, and new `.json` files under `InfrastructureSecurity/contracts/`. If anything else changed, throw it away with
+   `git checkout -- <file>`.
+4. **Commit each task on its own** in the Gemini folder, with the message given in the task
+   (`git add -A` then `git commit -m "..."`).
+5. **Secrets:** never paste `.env` values into any chat.
+6. **Signing in:** for A6 you sign in to the dashboard yourself; an AI never types your password.
+7. **When A3, A4 and A5 are committed,** tell Claude "Part A is ready". Claude merges `infra-docs` and starts Part C.
 
 ---
 
 ## Paste this first (in every Gemini chat)
 
 ```
-You are working in the repository SEL_Nexus_CyberSuite, folder InfrastructureSecurity, on the git branch
-infra-four-agents. Read InfrastructureSecurity/docs/ARCHITECTURE.md and InfrastructureSecurity/CLAUDE.md first; their
-rules apply to you too.
+You are working in the folder SEL_Nexus_CyberSuite-docs (a copy of the repository SEL_Nexus_CyberSuite) on the git
+branch infra-docs. Read InfrastructureSecurity/docs/ARCHITECTURE.md and InfrastructureSecurity/CLAUDE.md first.
 Rules:
+- You write documentation only. Never change a .py, .ts, .tsx, .cmd, .ps1, .csv, .yaml, .kql or .toml file, and
+  never change an existing .json file. You may create or edit .md files and create new .json files under
+  InfrastructureSecurity/contracts/.
 - Do only the one task I give you. Do not "improve" anything else.
 - Never open, print or change .env, any data/ folder, any .venv folder or node_modules.
 - Never write UC1, UC3 or UC4 in new text, except the real external names listed under "Names that stay on purpose"
   in ARCHITECTURE.md.
-- Keep behaviour exactly the same unless the task says otherwise.
+- Another assistant is changing code in a different copy at the same time; describe the code as you find it here.
 - When you finish, list every file you created or changed, and stop. Do not commit.
 ```
 
@@ -122,7 +128,8 @@ Commit: `Docs: compare the two fix catalogues`
 
 ### A6. Click-through check of the dashboard (Gemini's browser, after you sign in)
 
-Start the module (`Start_Infrastructure_Security.cmd`), sign in yourself, then:
+Do this one after Claude finishes Part B, so it checks the latest code. Start the module from the **main** folder
+(`InfrastructureSecurity\Start_Infrastructure_Security.cmd`), sign in yourself, then:
 ```
 Task A6: the dashboard is open at http://127.0.0.1:8800 and I am signed in. Do not press any button that runs an
 agent, approves a fix, closes or reopens an incident, or isolates a device. Open each item of the left menu in turn
@@ -135,9 +142,9 @@ screenshot. Change nothing.
 
 ---
 
-## Part B – Gemini, small mechanical code changes (optional)
+## Part B – Claude (phase 2 code changes)
 
-Run the check after each task (see "Your steps"). If it fails twice, throw the change away and leave the task for Claude.
+Claude does these in the main folder while Gemini does Part A. They are kept here as the record of what phase 2 does.
 
 ### B1. Create `shared/infra_core`
 
