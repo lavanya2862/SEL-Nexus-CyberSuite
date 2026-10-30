@@ -1,6 +1,6 @@
 """The suite's report look for Word and PDF: cover band, number tiles, charts, styled tables and AI fix-guide boxes.
 
-The same file sits in every agent (threat_intel, vulnerability, alert_triage) so the agents stay independent and their reports look alike.
+Every agent imports it from infra_core (`from infra_core import docstyle as ds`), so their reports look alike.
 Charts are drawn with matplotlib (PNG); the PDF is the Word file saved as PDF by Microsoft Word on this computer
 (skipped, with the Word file still ready, when no converter is installed).
 """

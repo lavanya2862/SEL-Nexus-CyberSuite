@@ -36,7 +36,9 @@ def test_shared_library_imports(part):
     py = python(part)
     if not py.exists():
         pytest.skip(f"{part} has no .venv yet")
-    done = subprocess.run([str(py), "-c", WALK, "infra_core"], cwd=part_dir(part), capture_output=True, text=True,
+    # agents use all of it; the dashboard writes no reports, so it lacks docstyle's libraries and imports only the rest
+    code = WALK if part != "dashboard" else "import infra_core, infra_core.settings"
+    done = subprocess.run([str(py), "-c", code, "infra_core"], cwd=part_dir(part), capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=300)
     assert done.returncode == 0, done.stdout + done.stderr
 

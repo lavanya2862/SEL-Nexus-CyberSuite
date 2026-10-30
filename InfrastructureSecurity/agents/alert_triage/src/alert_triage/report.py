@@ -8,7 +8,7 @@ import json
 from collections import Counter
 from datetime import datetime
 
-from alert_triage import docstyle as ds
+from infra_core import docstyle as ds
 from alert_triage.config import Settings
 from alert_triage.store import Store, utcnow
 

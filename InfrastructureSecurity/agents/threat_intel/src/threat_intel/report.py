@@ -12,7 +12,7 @@ import re
 from collections import Counter
 from datetime import datetime
 
-from threat_intel import docstyle as ds
+from infra_core import docstyle as ds
 from threat_intel.config import Settings
 from threat_intel.store import Store, utcnow
 

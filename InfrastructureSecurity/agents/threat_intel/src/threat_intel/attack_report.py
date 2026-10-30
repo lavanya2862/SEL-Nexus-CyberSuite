@@ -3,7 +3,7 @@ with its evidence and the AI's steps to resolve it, and the queries used. Built 
 
 from __future__ import annotations
 
-from threat_intel import docstyle as ds
+from infra_core import docstyle as ds
 from threat_intel.config import Settings
 from threat_intel.report import _j, cover_lines, run_window
 from threat_intel.resolve import for_findings
