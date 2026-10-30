@@ -196,7 +196,7 @@ four agents are worked on in parallel, each in its own chat and branch.
 
 | Phase | What | Status |
 |---|---|---|
-| 0. Safety net | Record today's outputs (dashboard JSON, parquet columns, report names) and add smoke tests that compare against them, plus a dashboard test that loads every page's API | not started |
+| 0. Safety net | `tests/`: every module imports, every command line answers, each agent rebuilds its dashboard data from a copy of its database, and every read-only dashboard API keeps its shape (`tests/snapshots/`, keys and types only, no data). Run: `<dashboard venv>\Scripts\python.exe -m pytest tests -q` from this folder. When a phase moves things, update `tests/layout.py` only | done |
 | 1. Rename and move | New folders, package names, routes, labels, env names with aliases, Start/Stop scripts. `git mv` so history survives. Phase 0 tests still pass | not started |
 | 2. infra_core | Move the duplicated code into `shared/infra_core`; merge the duplicated catalogs | not started |
 | 3. Split | Attack Detection out of Threat Intel; fix engine to `shared/remediation`; `contracts/`; dashboard adapters and progress events | not started |

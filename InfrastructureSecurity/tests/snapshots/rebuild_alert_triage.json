@@ -1,0 +1,61 @@
+{
+ "export/triage_data.json": {
+  "by_verdict": {
+   "likely_false_positive": "number",
+   "likely_true_positive": "number",
+   "needs_investigation": "number"
+  },
+  "generated_at": "str",
+  "last_run": "str",
+  "queue": [
+   {
+    "accounts": [
+     "str"
+    ],
+    "ai_status": "str",
+    "classification": "str",
+    "confidence": "str",
+    "created_at": "str",
+    "determination": "str",
+    "devices": [
+     "str"
+    ],
+    "escalate": "bool",
+    "feedback": {
+     "agree": "bool",
+     "analyst_verdict": "null"
+    },
+    "guardrails": [
+     "str"
+    ],
+    "incident_id": "str",
+    "is_lab": "bool",
+    "last_action": {
+     "action": "str",
+     "done_at": "str",
+     "status": "str"
+    },
+    "queries_run": "number",
+    "recommended_severity": "str",
+    "seconds": "number",
+    "severity": "str",
+    "sources": "str",
+    "status": "str",
+    "summary": "str",
+    "ti_lookups": "number",
+    "title": "str",
+    "triaged_at": "str",
+    "updated_at": "str",
+    "verdict": "str",
+    "web_url": "str"
+   }
+  ],
+  "totals": {
+   "auto_resolved": "number",
+   "escalate": "number",
+   "incidents": "number",
+   "lab": "number",
+   "resolved": "number"
+  }
+ }
+}

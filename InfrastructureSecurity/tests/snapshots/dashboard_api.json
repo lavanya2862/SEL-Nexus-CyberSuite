@@ -1,0 +1,1879 @@
+{
+ "activity": {
+  "items": [
+   {
+    "action": "str",
+    "agent": "str",
+    "detail": "str",
+    "email": "str",
+    "id": "str",
+    "label": "str",
+    "name": "str",
+    "outcome": "str",
+    "run": "null|str",
+    "source": "str",
+    "target": "str",
+    "ts": "str"
+   }
+  ],
+  "total": "number"
+ },
+ "alert_triage.case": {
+  "actions": [
+   {
+    "action": "str",
+    "action_id": "str",
+    "detail": "str",
+    "done_at": "str",
+    "incident_id": "str",
+    "requested_at": "str",
+    "status": "str",
+    "target": "str"
+   }
+  ],
+  "automation": {
+   "auto_resolve": "bool",
+   "known": "bool",
+   "writeback": "bool"
+  },
+  "context": {
+   "account_is_admin": "bool",
+   "devices": [
+    {
+     "admin_account": "bool",
+     "exposure": "str",
+     "health": "str",
+     "is_lab": "bool",
+     "name": "str",
+     "opco": "str",
+     "os": "str",
+     "risk": "str",
+     "tags": [
+      "str"
+     ]
+    }
+   ],
+   "is_lab": "bool",
+   "uc1": {
+    "apps": [
+     "str"
+    ],
+    "available": "bool",
+    "exploited_open": "number",
+    "open": "number"
+   },
+   "watchlist_hits": {}
+  },
+  "decision": {
+   "by": "str",
+   "classification": "str",
+   "determination": "str",
+   "outcome": "str",
+   "status": "str"
+  },
+  "defender_state": {
+   "classification": "str",
+   "determination": "str",
+   "status": "str",
+   "updated_at": "str"
+  },
+  "feedback": [
+   {
+    "agree": "bool",
+    "analyst_verdict": "str",
+    "created_at": "str",
+    "feedback_id": "str",
+    "incident_id": "str",
+    "minutes": "null",
+    "mode": "str",
+    "reason": "str"
+   }
+  ],
+  "history": {
+   "accounts": [
+    "str"
+   ],
+   "devices": [
+    "str"
+   ],
+   "note": "str",
+   "playbook": "str",
+   "prior_benign_rate": "null",
+   "prior_total": "number",
+   "prior_verdicts": {}
+  },
+  "injection": [],
+  "outcome": "str",
+  "packet": {
+   "alerts": [
+    {
+     "category": "str",
+     "classification": "str",
+     "created": "str",
+     "detection_source": "str",
+     "detector_id": "str",
+     "determination": "str",
+     "evidence_verdicts": [
+      {
+       "kind": "str",
+       "name": "str",
+       "remediation": "str",
+       "verdict": "str"
+      }
+     ],
+     "first_activity": "str",
+     "id": "str",
+     "investigation_state": "str",
+     "last_activity": "str",
+     "product": "str",
+     "recommended_actions": "str",
+     "sentinel_rule": "null",
+     "service_source": "str",
+     "severity": "str",
+     "status": "str",
+     "techniques": [
+      "str"
+     ],
+     "threat_family": "str",
+     "threat_name": "str",
+     "title": "str",
+     "untrusted": {
+      "description": "str"
+     },
+     "web_url": "str"
+    }
+   ],
+   "classification": "str",
+   "created_at": "str",
+   "detection_sources": [
+    "str"
+   ],
+   "determination": "str",
+   "entities": {
+    "accounts": [
+     {
+      "aad_id": "str",
+      "domain": "str",
+      "name": "str",
+      "roles": [],
+      "sid": "str",
+      "upn": "str"
+     }
+    ],
+    "apps": [],
+    "devices": [
+     {
+      "id": "str",
+      "name": "str",
+      "os": "str",
+      "risk": "str",
+      "roles": [],
+      "verdict": "str"
+     }
+    ],
+    "domains": [],
+    "files": [
+     {
+      "detection": "str",
+      "name": "str",
+      "path": "str",
+      "sha1": "str",
+      "sha256": "str",
+      "untrusted": "bool",
+      "verdict": "str"
+     }
+    ],
+    "ips": [],
+    "mailboxes": [],
+    "messages": [],
+    "processes": [
+     {
+      "account": "str",
+      "created": "str",
+      "detection": "str",
+      "device_id": "str",
+      "file": "str",
+      "parent": "str",
+      "path": "str",
+      "pid": "number",
+      "remediation": "str",
+      "sha1": "str",
+      "sha256": "str",
+      "untrusted": {
+       "command_line": "str"
+      },
+      "verdict": "str"
+     }
+    ],
+    "registry": [
+     {
+      "key": "str",
+      "untrusted": {
+       "value": "str"
+      },
+      "value_name": "str"
+     }
+    ],
+    "urls": []
+   },
+   "fingerprint": "str",
+   "first_activity": "str",
+   "incident_id": "str",
+   "is_lab": "bool",
+   "last_activity": "str",
+   "services": [
+    "str"
+   ],
+   "severity": "str",
+   "source": "str",
+   "status": "str",
+   "techniques": [
+    "str"
+   ],
+   "title": "str",
+   "updated_at": "str",
+   "web_url": "str"
+  },
+  "playbook": {
+   "description": "str",
+   "id": "str",
+   "label": "str",
+   "notes": "str"
+  },
+  "queries": [
+   {
+    "id": "str",
+    "query": "str",
+    "row_count": "number",
+    "rows": [
+     {
+      "<key>": "str"
+     }
+    ],
+    "rows_total": "number",
+    "status": "str"
+   }
+  ],
+  "questions": [],
+  "seconds": "number",
+  "site_up": "bool",
+  "site_url": "str",
+  "ti": [],
+  "triaged_at": "str",
+  "verdict": {
+   "ai_status": "str",
+   "checker_notes": [],
+   "confidence": "str",
+   "containment_options": [
+    "str"
+   ],
+   "escalate": "bool",
+   "evidence": [
+    {
+     "finding": "str",
+     "query_id": "str",
+     "source": "str"
+    }
+   ],
+   "guardrail_reasons": [],
+   "guardrail_triggered": "str",
+   "guardrails": [],
+   "mitre_techniques": [
+    "str"
+   ],
+   "recommended_actions": [
+    "str"
+   ],
+   "recommended_severity": "str",
+   "summary": "str",
+   "verdict": "str",
+   "would_change_verdict_if": "str"
+  }
+ },
+ "alert_triage.quality": {
+  "backtest": {
+   "generated_at": "str",
+   "lab_detail": [
+    {
+     "ai_status": "str",
+     "correct": "bool",
+     "escalate": "bool",
+     "escalate_ok": "bool",
+     "expected": "str",
+     "incident_id": "str",
+     "missed_true_positive": "bool",
+     "must_escalate": "str",
+     "name": "str",
+     "title": "str",
+     "verdict": "str",
+     "verdict_ok": "bool",
+     "wave": "str"
+    }
+   ],
+   "noisy_detectors": [
+    {
+     "detector": "str",
+     "harmless_pct": "number",
+     "incidents": "number"
+    }
+   ],
+   "sets": {
+    "guide": {
+     "accuracy_when_decided_pct": "number",
+     "ai_used": "number",
+     "baseline_history_accuracy_pct": "number",
+     "baseline_history_decided_pct": "number",
+     "confusion": {
+      "<key>": {
+       "<key>": "number"
+      }
+     },
+     "decided_pct": "number",
+     "false_alarms_closable_pct": "number",
+     "missed_true_positives": "number",
+     "n": "number",
+     "real_attacks_kept_for_humans_pct": "number"
+    },
+    "lab": {
+     "accuracy_when_decided_pct": "null",
+     "ai_used": "number",
+     "baseline_history_accuracy_pct": "null",
+     "baseline_history_decided_pct": "number",
+     "confusion": {
+      "<key>": {
+       "<key>": "number"
+      }
+     },
+     "decided_pct": "number",
+     "false_alarms_closable_pct": "number",
+     "missed_true_positives": "number",
+     "n": "number",
+     "real_attacks_kept_for_humans_pct": "null"
+    }
+   }
+  },
+  "metrics": {
+   "generated_at": "str",
+   "incidents": "number",
+   "metrics": [
+    {
+     "label": "str",
+     "name": "str",
+     "note": "str",
+     "value": "mixed|null|number"
+    }
+   ]
+  }
+ },
+ "alert_triage.queue": {
+  "automation": {
+   "auto_resolve": "bool",
+   "known": "bool",
+   "writeback": "bool"
+  },
+  "by_outcome": {
+   "likely_false_positive": "number",
+   "likely_true_positive": "number",
+   "needs_investigation": "number"
+  },
+  "by_verdict": {
+   "likely_false_positive": "number",
+   "likely_true_positive": "number",
+   "needs_investigation": "number"
+  },
+  "generated_at": "str",
+  "last_run": "str",
+  "last_run_detail": {
+   "finished_at": "str",
+   "run_id": "str",
+   "started_at": "str",
+   "status": "str",
+   "steps": {
+    "accuracy": {
+     "lab_correct": "number",
+     "lab_incidents": "number",
+     "lab_missed_tp": "number",
+     "report": "bool"
+    },
+    "actions": {
+     "actions": "number",
+     "feedback": "number"
+    },
+    "auto_resolve": {
+     "escalate": "number",
+     "failed": "number",
+     "needs_human": "number",
+     "resolve": "number"
+    },
+    "defender_view": "number",
+    "export": "str",
+    "feedback": {
+     "actions": "number",
+     "feedback": "number"
+    },
+    "ingest": "str",
+    "ledger": {
+     "loaded": "number",
+     "matched": "number"
+    },
+    "metrics": "str",
+    "report": {
+     "docx": "str",
+     "pdf": "str"
+    },
+    "respond": {
+     "already_running": "number",
+     "failed": "number",
+     "requested": "number"
+    },
+    "triage": "str",
+    "writeback": "number"
+   },
+   "triaged": []
+  },
+  "queue": [
+   {
+    "accounts": [
+     "str"
+    ],
+    "ai_status": "str",
+    "classification": "str",
+    "confidence": "str",
+    "created_at": "str",
+    "decision": {
+     "by": "str",
+     "classification": "str",
+     "determination": "str",
+     "outcome": "str",
+     "status": "str"
+    },
+    "determination": "str",
+    "devices": [
+     "str"
+    ],
+    "escalate": "bool",
+    "feedback": {
+     "agree": "bool",
+     "analyst_verdict": "null|str"
+    },
+    "guardrails": [
+     "str"
+    ],
+    "incident_id": "str",
+    "is_lab": "bool",
+    "last_action": {
+     "action": "str",
+     "done_at": "str",
+     "status": "str"
+    },
+    "outcome": "str",
+    "queries_run": "number",
+    "recommended_severity": "str",
+    "seconds": "number",
+    "severity": "str",
+    "sources": "str",
+    "status": "str",
+    "summary": "str",
+    "ti_lookups": "number",
+    "title": "str",
+    "triaged_at": "str",
+    "updated_at": "str",
+    "verdict": "str",
+    "web_url": "str"
+   }
+  ],
+  "site_up": "bool",
+  "site_url": "str",
+  "totals": {
+   "auto_resolved": "number",
+   "escalate": "number",
+   "incidents": "number",
+   "lab": "number",
+   "resolved": "number"
+  }
+ },
+ "device_names": {
+  "<key>": "str"
+ },
+ "help.ready": {
+  "items": [
+   {
+    "answer": "str",
+    "links": [
+     {
+      "label": "str",
+      "to": "str"
+     }
+    ],
+    "question": "str"
+   }
+  ]
+ },
+ "notifications": {
+  "generated_at": "str",
+  "items": [
+   {
+    "at": "str",
+    "detail": "str",
+    "id": "str",
+    "kind": "str",
+    "level": "str",
+    "link": "str",
+    "title": "str"
+   }
+  ]
+ },
+ "reports": {
+  "uc1": [
+   {
+    "modified": "str",
+    "name": "str",
+    "size": "number"
+   }
+  ],
+  "uc3": [
+   {
+    "modified": "str",
+    "name": "str",
+    "size": "number"
+   }
+  ],
+  "uc4": [
+   {
+    "modified": "str",
+    "name": "str",
+    "size": "number"
+   }
+  ]
+ },
+ "runs": {
+  "attack": {
+   "exit_code": "number",
+   "facts": [
+    {
+     "hint": "str",
+     "label": "str",
+     "value": "str"
+    }
+   ],
+   "files_from": "str",
+   "finished_at": "str",
+   "fix": {
+    "fixable": "number",
+    "gone": "number",
+    "grew": {},
+    "grew_vulns": "number",
+    "high_priority": "number",
+    "items": "number",
+    "new": "number",
+    "new_apps": "number",
+    "new_ids": [],
+    "new_settings": "number",
+    "open": "number",
+    "saved": "number",
+    "saved_now": "number",
+    "still_there": "number",
+    "to_fix": "number",
+    "verified": "number",
+    "waiting": "number"
+   },
+   "lines": "number",
+   "log_tail": [
+    "str"
+   ],
+   "message": "str",
+   "new_ids": {
+    "alerts": [],
+    "attack": [],
+    "threats": []
+   },
+   "report_file": "str",
+   "report_files": [
+    "str"
+   ],
+   "run_id": "str",
+   "started_at": "str",
+   "status": "str",
+   "steps": [
+    {
+     "description": "str",
+     "detail": "str",
+     "finished_at": "str",
+     "key": "str",
+     "label": "str",
+     "started_at": "str",
+     "status": "str"
+    }
+   ],
+   "typical_seconds": "number",
+   "uc": "str",
+   "waiting_for_you": "bool"
+  },
+  "uc1": {
+   "exit_code": "number",
+   "facts": [
+    {
+     "hint": "str",
+     "label": "str",
+     "value": "str"
+    }
+   ],
+   "files_from": "str",
+   "findings": [
+    {
+     "action": "str",
+     "id": "str",
+     "kind": "str",
+     "rating": "str",
+     "test": "bool",
+     "title": "str",
+     "to": "str",
+     "where": "str",
+     "why": "str"
+    }
+   ],
+   "finished_at": "str",
+   "fix": {
+    "fixable": "number",
+    "gone": "number",
+    "grew": {},
+    "grew_vulns": "number",
+    "high_priority": "number",
+    "items": "number",
+    "new": "number",
+    "new_apps": "number",
+    "new_ids": [],
+    "new_settings": "number",
+    "open": "number",
+    "saved": "number",
+    "saved_now": "number",
+    "still_there": "number",
+    "to_fix": "number",
+    "verified": "number",
+    "waiting": "number"
+   },
+   "lines": "number",
+   "log_tail": [
+    "str"
+   ],
+   "message": "str",
+   "new_ids": {
+    "alerts": [
+     "str"
+    ],
+    "attack": [],
+    "threats": []
+   },
+   "report_file": "str",
+   "report_files": [
+    "str"
+   ],
+   "run_id": "str",
+   "started_at": "str",
+   "status": "str",
+   "steps": [
+    {
+     "description": "str",
+     "detail": "str",
+     "finished_at": "str",
+     "key": "str",
+     "label": "str",
+     "started_at": "str",
+     "status": "str"
+    }
+   ],
+   "typical_seconds": "number",
+   "uc": "str",
+   "waiting_for_you": "bool"
+  },
+  "uc3": {
+   "exit_code": "number",
+   "facts": [
+    {
+     "hint": "str",
+     "label": "str",
+     "value": "str"
+    }
+   ],
+   "files_from": "str",
+   "finished_at": "str",
+   "fix": {
+    "fixable": "number",
+    "grew": {
+     "fx_1494094d3e32": "number",
+     "fx_31c9a30289bb": "number",
+     "fx_8c77d63e3fa0": "number"
+    },
+    "grew_vulns": "number",
+    "inventory": "str",
+    "new": "number",
+    "new_apps": "number",
+    "new_ids": [
+     "str"
+    ],
+    "new_settings": "number",
+    "open": "number",
+    "saved": "number",
+    "saved_now": "number",
+    "still_there": "number",
+    "to_fix": "number",
+    "urgent": "null",
+    "verified": "number",
+    "waiting": "number"
+   },
+   "lines": "number",
+   "log_tail": [
+    "str"
+   ],
+   "message": "str",
+   "new_ids": {},
+   "report_file": "str",
+   "report_files": [
+    "str"
+   ],
+   "run_id": "str",
+   "started_at": "str",
+   "status": "str",
+   "steps": [
+    {
+     "description": "str",
+     "detail": "str",
+     "finished_at": "null|str",
+     "key": "str",
+     "label": "str",
+     "started_at": "str",
+     "status": "str"
+    }
+   ],
+   "typical_seconds": "number",
+   "uc": "str",
+   "waiting_for_you": "bool"
+  },
+  "uc4": {
+   "exit_code": "number",
+   "facts": [
+    {
+     "hint": "str",
+     "label": "str",
+     "value": "str"
+    }
+   ],
+   "files_from": "str",
+   "finished_at": "str",
+   "fix": "null",
+   "lines": "number",
+   "log_tail": [
+    "str"
+   ],
+   "message": "str",
+   "new_ids": {},
+   "report_file": "str",
+   "report_files": [
+    "str"
+   ],
+   "run_id": "str",
+   "started_at": "str",
+   "status": "str",
+   "steps": [
+    {
+     "description": "str",
+     "detail": "str",
+     "finished_at": "str",
+     "key": "str",
+     "label": "str",
+     "started_at": "str",
+     "status": "str"
+    }
+   ],
+   "typical_seconds": "number",
+   "uc": "str"
+  }
+ },
+ "runs.history": [
+  {
+   "exit_code": "number",
+   "files_from": "str",
+   "finished_at": "str",
+   "fix": {
+    "fixable": "number",
+    "gone": "number",
+    "grew": {
+     "fx_1494094d3e32": "number",
+     "fx_31c9a30289bb": "number",
+     "fx_8c77d63e3fa0": "number"
+    },
+    "grew_vulns": "number",
+    "high_priority": "number",
+    "inventory": "str",
+    "items": "number",
+    "new": "number",
+    "new_apps": "number",
+    "new_ids": [
+     "str"
+    ],
+    "new_settings": "number",
+    "saved": "number",
+    "still_there": "number",
+    "urgent": "null|number",
+    "verified": "number",
+    "waiting": "number"
+   },
+   "lines": "number",
+   "message": "str",
+   "new_ids": {
+    "alerts": [
+     "str"
+    ],
+    "attack": [
+     "str"
+    ],
+    "threats": []
+   },
+   "report_file": "null|str",
+   "report_files": [
+    "str"
+   ],
+   "run_id": "str",
+   "started_at": "str",
+   "status": "str",
+   "steps": [
+    {
+     "description": "str",
+     "detail": "str",
+     "finished_at": "null|str",
+     "key": "str",
+     "label": "str",
+     "started_at": "null|str",
+     "status": "str"
+    }
+   ],
+   "uc": "str"
+  }
+ ],
+ "summary": {
+  "devices": [
+   {
+    "critical": "number",
+    "findings": "number",
+    "hunt_hits": "number",
+    "last_seen": "str",
+    "name": "str",
+    "opco": "str",
+    "p1": "number",
+    "test_hits": "number",
+    "threats_exposed": "number"
+   }
+  ],
+  "generated_at": "str",
+  "health": [
+   {
+    "age_hours": "number",
+    "coverage": "number",
+    "data_as_of": "str",
+    "defender_count": "number",
+    "key": "str",
+    "last_run_at": "str",
+    "message": "str",
+    "model": "str",
+    "name": "str",
+    "quality": "str",
+    "rows": "number",
+    "run_id": "str",
+    "status": "str",
+    "vulnerabilities": "number"
+   }
+  ],
+  "reports": {
+   "uc1": "number",
+   "uc3": "number"
+  },
+  "stale_hours": "number",
+  "uc1": {
+   "devices": [
+    {
+     "device_name": "str",
+     "exposed": "number",
+     "hits": "number",
+     "last_seen": "str",
+     "opco": "str",
+     "os_platform": "str",
+     "test_hits": "number",
+     "vulns": "number"
+    }
+   ],
+   "feeds": {
+    "failing": [],
+    "ok": "number",
+    "total": "number"
+   },
+   "funnel": [
+    {
+     "note": "str",
+     "stage": "str",
+     "value": "number"
+    }
+   ],
+   "posture": {
+    "affecting": "number",
+    "rating": "str",
+    "urgent": "number"
+   },
+   "threat_trend": {
+    "days": [
+     "str"
+    ],
+    "series": {
+     "<key>": [
+      "number"
+     ]
+    }
+   },
+   "top_threats": [
+    {
+     "action": "str",
+     "chips": [
+      "str"
+     ],
+     "devices": "str",
+     "id": "str",
+     "kind": "str",
+     "published": "str",
+     "rating": "str",
+     "score": "number",
+     "source": "str",
+     "summary": "str",
+     "title": "str",
+     "url": "str",
+     "why": "str"
+    }
+   ],
+   "totals": {
+    "affecting": "number",
+    "alerts": "number",
+    "hunts_ok": "number",
+    "hunts_per_run": "number",
+    "hunts_total": "number",
+    "manual_hours_saved": "number",
+    "median_minutes_to_assess": "number",
+    "new_threats": "number",
+    "pct_assessed": "number",
+    "real_hits": "number",
+    "test_hits": "number",
+    "urgent": "number"
+   }
+  },
+  "uc3": {
+   "ai_fixes": {
+    "ai_enabled": "bool",
+    "built_at": "str",
+    "counts": {
+     "ai": "number",
+     "apps": "number",
+     "asked": "number",
+     "by_fix_type": {
+      "<key>": "number"
+     },
+     "by_kind": {
+      "app": {
+       "ai": "number",
+       "cards": "number",
+       "corrections": "number",
+       "rules": "number"
+      },
+      "setting": {
+       "ai": "number",
+       "cards": "number",
+       "corrections": "number",
+       "rules": "number"
+      }
+     },
+     "corrections": "number",
+     "no_patch_cves": "number",
+     "reused": "number",
+     "rules": "number",
+     "settings": "number",
+     "vulnerabilities": "number"
+    },
+    "model": "str",
+    "snapshot": "str"
+   },
+   "apps": [
+    {
+     "app": "str",
+     "findings": "number",
+     "opco": "str",
+     "p1": "number",
+     "software_name": "str"
+    }
+   ],
+   "devices": [
+    {
+     "critical": "number",
+     "device_name": "str",
+     "exposure_level": "str",
+     "findings": "number",
+     "is_stale": "bool",
+     "last_seen": "str",
+     "opco": "str",
+     "p1": "number"
+    }
+   ],
+   "fixes": [
+    {
+     "app": "str",
+     "command": "null|str",
+     "cves": "number",
+     "devices": "number",
+     "fix_action": "str",
+     "fix_by": "null|str",
+     "installed_versions": "null|str",
+     "opcos": "str",
+     "p1": "number",
+     "rank": "number",
+     "source": "str",
+     "urgency": "str",
+     "urgency_level": "number",
+     "why_now": "str"
+    }
+   ],
+   "opco": [
+    {
+     "count": "number",
+     "opco": "str",
+     "severity": "str"
+    }
+   ],
+   "opco_totals": [
+    {
+     "critical": "number",
+     "devices": "number",
+     "findings": "number",
+     "fixed": "number",
+     "fixed_since": "null|str",
+     "opco": "str",
+     "p1": "number"
+    }
+   ],
+   "priority": [
+    {
+     "count": "number",
+     "priority": "str"
+    }
+   ],
+   "quality": [
+    {
+     "check_name": "str",
+     "message": "str",
+     "status": "str"
+    }
+   ],
+   "totals": {
+    "changes": {
+     "<key>": "number"
+    },
+    "critical": "number",
+    "cves": "number",
+    "devices": "number",
+    "exploitable": "number",
+    "fixed_since": "str",
+    "p1": "number",
+    "remediated": "number",
+    "sla_breaches": "number",
+    "total": "number"
+   },
+   "trend": [
+    {
+     "date": "str",
+     "exploitable": "number",
+     "p1": "number",
+     "total": "number"
+    }
+   ],
+   "trend_opco": [
+    {
+     "date": "str",
+     "opco": "str",
+     "total": "number"
+    }
+   ]
+  },
+  "uc4": {
+   "latest": [
+    {
+     "confidence": "str",
+     "devices": [
+      "str"
+     ],
+     "escalate": "bool",
+     "incident_id": "str",
+     "is_lab": "bool",
+     "title": "str",
+     "triaged_at": "str",
+     "verdict": "str"
+    }
+   ],
+   "totals": {
+    "awaiting_review": "number",
+    "by_verdict": {
+     "likely_false_positive": "number",
+     "likely_true_positive": "number",
+     "needs_investigation": "number"
+    },
+    "closed": "number",
+    "escalate": "number",
+    "incidents": "number",
+    "lab": "number"
+   }
+  }
+ },
+ "threat_intel.clues": [
+  {
+   "collected": "str",
+   "first_seen": "str",
+   "malware": "str",
+   "seen_on": [
+    "str"
+   ],
+   "source": "str",
+   "test": "bool",
+   "threat": "str",
+   "threat_id": "str",
+   "type": "str",
+   "value": "str"
+  }
+ ],
+ "threat_intel.dashboard": {
+  "alerts": [
+   {
+    "alert_id": "str",
+    "created_at": "str",
+    "delivered": "str",
+    "is_test": "bool",
+    "message": "str",
+    "rating": "str",
+    "threat_id": "str",
+    "title": "str"
+   }
+  ],
+  "apps": [
+   "str"
+  ],
+  "days": [
+   "str"
+  ],
+  "devices": [
+   {
+    "device_name": "str",
+    "exposed": "number",
+    "hits": "number",
+    "last_seen": "str",
+    "opco": "str",
+    "os_platform": "str",
+    "test_hits": "number",
+    "vulns": "number"
+   }
+  ],
+  "explorer": [
+   {
+    "action": "str",
+    "chips": [
+     "str"
+    ],
+    "devices": "str",
+    "first_seen": "str",
+    "hits": "number",
+    "id": "str",
+    "kind": "str",
+    "match": "null|str",
+    "on_us": [
+     {
+      "announced": "str",
+      "app": "str",
+      "cve": "str",
+      "device": "str",
+      "known": "str",
+      "match": "str",
+      "version": "str"
+     }
+    ],
+    "published": "str",
+    "rating": "str",
+    "score": "number",
+    "source": "str",
+    "summary": "str",
+    "test": "bool",
+    "title": "str",
+    "url": "str",
+    "why": "str"
+   }
+  ],
+  "feeds": [
+   {
+    "cursor": "null|str",
+    "feed": "str",
+    "last_count": "number",
+    "last_error": "null|str",
+    "last_run_at": "str",
+    "last_status": "str",
+    "last_success_at": "null|str"
+   }
+  ],
+  "fixes": [
+   {
+    "app": "str",
+    "cves": "number",
+    "devices": "number",
+    "max_cvss": "number",
+    "versions": "str"
+   }
+  ],
+  "funnel": [
+   {
+    "note": "str",
+    "stage": "str",
+    "value": "number"
+   }
+  ],
+  "generated": "str",
+  "hits": [
+   {
+    "alerts": [
+     "str"
+    ],
+    "created_at": "str",
+    "detail": "str",
+    "device_id": "str",
+    "device_name": "str",
+    "finding_id": "str",
+    "first_hit": "str",
+    "hunt_id": "str",
+    "is_test": "bool",
+    "kind": "str",
+    "opco": "str",
+    "resolution": {
+     "done_when": "str",
+     "model": "null|str",
+     "source": "str",
+     "steps": [
+      "str"
+     ],
+     "what_happened": "str"
+    },
+    "threat_id": "str",
+    "timeline": [
+     {
+      "account": "null|str",
+      "time": "str",
+      "what": "str"
+     }
+    ],
+    "title": "str",
+    "users": []
+   }
+  ],
+  "hunts": [
+   {
+    "error": "null",
+    "name": "str",
+    "origin": "str",
+    "row_count": "number",
+    "status": "str",
+    "technique": "str"
+   }
+  ],
+  "ioc_hits": "number",
+  "ioc_types": {
+   "domain": "number",
+   "ip": "number",
+   "md5": "number",
+   "sha1": "number",
+   "sha256": "number",
+   "url": "number"
+  },
+  "last_run": {
+   "command": "str",
+   "finished_at": "null",
+   "run_id": "str",
+   "started_at": "str",
+   "status": "str",
+   "steps": "str"
+  },
+  "matrix": [
+   {
+    "app": "str",
+    "cves": "number",
+    "device_name": "str"
+   }
+  ],
+  "metrics": {
+   "<key>": "mixed"
+  },
+  "model": "str",
+  "periods": {
+   "<key>": {
+    "days": [
+     "str"
+    ],
+    "earlier": {
+     "<key>": "number"
+    },
+    "funnel": [
+     {
+      "note": "str",
+      "stage": "str",
+      "value": "number"
+     }
+    ],
+    "ioc_types": {
+     "domain": "number",
+     "ip": "number",
+     "md5": "number",
+     "sha1": "number",
+     "sha256": "number",
+     "url": "number"
+    },
+    "ratings": {
+     "<key>": "number"
+    },
+    "series": {
+     "<key>": [
+      "number"
+     ]
+    },
+    "sources": {
+     "<key>": {
+      "affect": "number",
+      "clues": "number",
+      "threats": "number"
+     }
+    },
+    "start": "str",
+    "tactics": [
+     {
+      "tactic": "str",
+      "threats": "number"
+     }
+    ],
+    "threats_collected": "number"
+   }
+  },
+  "posture": {
+   "affecting": "number",
+   "rating": "str",
+   "urgent": "number"
+  },
+  "ratings": {
+   "<key>": "number"
+  },
+  "scatter": [
+   [
+    "number|str"
+   ]
+  ],
+  "series": {
+   "<key>": [
+    "number"
+   ]
+  },
+  "tactics": [
+   {
+    "tactic": "str",
+    "threats": "number"
+   }
+  ],
+  "threats_collected": "number",
+  "top": [
+   {
+    "action": "str",
+    "chips": [
+     "str"
+    ],
+    "devices": "str",
+    "first_seen": "str",
+    "hits": "number",
+    "id": "str",
+    "kind": "str",
+    "match": "str",
+    "on_us": [
+     {
+      "announced": "str",
+      "app": "str",
+      "cve": "str",
+      "device": "str",
+      "known": "str",
+      "match": "str",
+      "version": "str"
+     }
+    ],
+    "published": "str",
+    "rating": "str",
+    "score": "number",
+    "source": "str",
+    "summary": "str",
+    "test": "bool",
+    "title": "str",
+    "url": "str",
+    "why": "str"
+   }
+  ]
+ },
+ "threat_intel.matches": {
+  "built_at": "str",
+  "counts": {
+   "firefox": "number",
+   "jre": "number",
+   "openssl": "number",
+   "python": "number",
+   "windows_11": "number"
+  },
+  "split": {
+   "firefox": [
+    "number"
+   ],
+   "jre": [
+    "number"
+   ],
+   "openssl": [
+    "number"
+   ],
+   "python": [
+    "number"
+   ],
+   "windows_11": [
+    "number"
+   ]
+  },
+  "vm_cves": {
+   "<key>": [
+    "str"
+   ]
+  }
+ },
+ "threat_intel.matches_one": {
+  "built_at": "str",
+  "rows": [
+   {
+    "cve": "str",
+    "device": "str",
+    "threat": "str",
+    "version": "str"
+   }
+  ],
+  "threats": {
+   "<key>": {
+    "found": "str",
+    "published": "str",
+    "score": "number",
+    "title": "str"
+   }
+  }
+ },
+ "threat_intel.threat": {
+  "actions": [],
+  "ai_model": "null",
+  "ai_status": "null",
+  "analysed_at": "null",
+  "confidence": "null",
+  "cves": [],
+  "dropped": {},
+  "exposure": [],
+  "factors": [
+   "str"
+  ],
+  "findings": [
+   {
+    "alerts": [],
+    "detail": "str",
+    "device": "str",
+    "first_hit": "str",
+    "hunt_id": "str",
+    "is_test": "bool",
+    "kind": "str",
+    "opco": "str",
+    "resolution": {
+     "done_when": "str",
+     "model": "null",
+     "source": "str",
+     "steps": [
+      "str"
+     ],
+     "what_happened": "str"
+    },
+    "timeline": [
+     {
+      "account": "str",
+      "time": "str",
+      "what": "str"
+     }
+    ],
+    "users": []
+   }
+  ],
+  "first_seen": "str",
+  "fix": "null",
+  "hunts": [
+   {
+    "error": "null",
+    "name": "str",
+    "origin": "str",
+    "query": "str",
+    "row_count": "number",
+    "started_at": "str",
+    "status": "str",
+    "technique": "str"
+   }
+  ],
+  "id": "str",
+  "ioc_count": "number",
+  "iocs": [],
+  "is_test": "bool",
+  "kind": "str",
+  "products": [],
+  "published": "str",
+  "rating": "str",
+  "score": "number",
+  "source": "str",
+  "summary": "null",
+  "techniques": [
+   {
+    "id": "str",
+    "name": "str",
+    "origin": "str",
+    "reason": "str",
+    "tactics": "str",
+    "url": "str"
+   }
+  ],
+  "text": "str",
+  "threat_type": "null",
+  "title": "str",
+  "url": "str",
+  "why": "str"
+ },
+ "vulnerability.dashboard": {
+  "changes": [
+   [
+    "number|str"
+   ]
+  ],
+  "daily": [
+   [
+    "number|str"
+   ]
+  ],
+  "devices": [
+   {
+    "critical": "number",
+    "exposure": "str",
+    "findings": "number",
+    "health": "str",
+    "id": "str",
+    "last_seen": "str",
+    "name": "str",
+    "opco": "str",
+    "os": "str",
+    "osv": "str",
+    "p1": "number",
+    "rbac_group_name": "str",
+    "stale": "bool",
+    "tags": [
+     "str"
+    ]
+   }
+  ],
+  "download": {
+   "changes_since": "str",
+   "counts": {
+    "change_rows": "number",
+    "defender_refreshed": "bool",
+    "export_reused": "bool",
+    "fixed": "number",
+    "machines": "number",
+    "new": "number",
+    "previous_rows": "number",
+    "updated": "number",
+    "vulnerability_rows": "number"
+   },
+   "export_generated_time": "str",
+   "previous_export_time": "str",
+   "run_date": "str",
+   "started_at": "str"
+  },
+  "dq": [
+   {
+    "expected": "str",
+    "message": "str",
+    "name": "str",
+    "run_date": "str",
+    "status": "str",
+    "value": "str"
+   }
+  ],
+  "f": {
+   "cols": [
+    "str"
+   ],
+   "rows": [
+    [
+     "null|number|str"
+    ]
+   ]
+  },
+  "fixed": {
+   "cols": [
+    "str"
+   ],
+   "rows": [
+    [
+     "null|number|str"
+    ]
+   ]
+  },
+  "fixes": {
+   "ai_enabled": "bool",
+   "ai_message": "null",
+   "apps": [
+    {
+     "ai": {
+      "side_effects": "str",
+      "steps": [
+       "str"
+      ],
+      "verify": "str",
+      "what_is_wrong": "str",
+      "why_now": "str",
+      "worst_case": "str"
+     },
+     "app": "str",
+     "critical": "number",
+     "cves": "number",
+     "devices": [
+      {
+       "name": "str",
+       "opco": "null|str"
+      }
+     ],
+     "exploit_public": "number",
+     "findings": "number",
+     "fix": {
+      "action": "str",
+      "command": "null|str",
+      "in_catalog": "bool",
+      "note": "null|str",
+      "url": "null|str"
+     },
+     "fix_by": "null|str",
+     "fix_type": "str",
+     "generated_at": "str",
+     "guard_notes": [
+      "str"
+     ],
+     "high": "number",
+     "key": "str",
+     "kind": "str",
+     "model": "str",
+     "no_patch": [],
+     "oldest_days": "number",
+     "opcos": [
+      "str"
+     ],
+     "os": "bool",
+     "overdue": "number",
+     "p1": "number",
+     "software": "str",
+     "source": "str",
+     "urgency": {
+      "label": "str",
+      "level": "number"
+     },
+     "vendor": "str",
+     "versions": [
+      {
+       "cves": "number",
+       "devices": [
+        "str"
+       ],
+       "eos": {
+        "date": "str",
+        "status": "str"
+       },
+       "folders": [
+        "str"
+       ],
+       "version": "str"
+      }
+     ]
+    }
+   ],
+   "built_at": "str",
+   "counts": {
+    "ai": "number",
+    "apps": "number",
+    "asked": "number",
+    "by_fix_type": {
+     "<key>": "number"
+    },
+    "by_kind": {
+     "app": {
+      "ai": "number",
+      "cards": "number",
+      "corrections": "number",
+      "rules": "number"
+     },
+     "setting": {
+      "ai": "number",
+      "cards": "number",
+      "corrections": "number",
+      "rules": "number"
+     }
+    },
+    "corrections": "number",
+    "no_patch_cves": "number",
+    "reused": "number",
+    "rules": "number",
+    "settings": "number",
+    "vulnerabilities": "number"
+   },
+   "kb": {
+    "entries": "number",
+    "status": "str"
+   },
+   "model": "str",
+   "settings": [
+    {
+     "ai": {
+      "side_effects": "str",
+      "steps": [
+       "str"
+      ],
+      "verify": "str",
+      "what_is_wrong": "str",
+      "why_now": "str",
+      "worst_case": "str"
+     },
+     "app": "str",
+     "benchmarks": "str",
+     "category": "str",
+     "config_id": "str",
+     "devices": [
+      {
+       "context": "str",
+       "name": "str",
+       "opco": "str"
+      }
+     ],
+     "fix": {
+      "action": "str",
+      "command": "null|str",
+      "in_catalog": "bool",
+      "note": "null|str",
+      "url": "null|str"
+     },
+     "fix_type": "str",
+     "generated_at": "str",
+     "guard_notes": [
+      "str"
+     ],
+     "impact": "number",
+     "key": "str",
+     "kind": "str",
+     "microsoft": {
+      "description": "str",
+      "links": [
+       "str"
+      ],
+      "remediation": "str",
+      "risk": "str"
+     },
+     "model": "str",
+     "opcos": [
+      "str"
+     ],
+     "source": "str",
+     "subcategory": "null|str",
+     "urgency": {
+      "label": "str",
+      "level": "number"
+     },
+     "user_impact": "bool"
+    }
+   ],
+   "snapshot": "str"
+  },
+  "kql": {
+   "coverage": "number",
+   "measured_at": "str",
+   "query": "str",
+   "rows_exist": "number",
+   "rows_returned": "number"
+  },
+  "meta": {
+   "built_at": "str",
+   "sla": {
+    "<key>": "number"
+   },
+   "snapshot": "str",
+   "source": "str"
+  },
+  "posture": {
+   "compliance": "number",
+   "config_kb": {
+    "rows": "number"
+   },
+   "eos": {
+    "method": "str",
+    "rows": "number"
+   },
+   "errors": [
+    "str"
+   ],
+   "failing": "number",
+   "run_date": "str"
+  },
+  "remed": [
+   [
+    "null|number|str"
+   ]
+  ],
+  "run": {
+   "change_rows": "number",
+   "coverage": "number",
+   "defender_count": "number",
+   "duration_seconds": "number",
+   "export_attempts": "number",
+   "export_generated_time": "str",
+   "machines": "number",
+   "quality": "str",
+   "repeats": "number",
+   "retries": "number",
+   "run_date": "str",
+   "started_at": "str",
+   "vulnerabilities": "number",
+   "vulnerability_rows": "number"
+  },
+  "runs": [
+   {
+    "change_rows": "number",
+    "coverage": "null|number",
+    "defender_count": "null|number",
+    "duration_seconds": "number",
+    "export_attempts": "number",
+    "export_generated_time": "str",
+    "machines": "number",
+    "quality": "null|str",
+    "repeats": "number",
+    "retries": "number",
+    "run_date": "str",
+    "started_at": "str",
+    "vulnerabilities": "number",
+    "vulnerability_rows": "number"
+   }
+  ],
+  "status": {
+   "message": "str",
+   "run_at": "str",
+   "run_date": "str",
+   "status": "str"
+  }
+ }
+}

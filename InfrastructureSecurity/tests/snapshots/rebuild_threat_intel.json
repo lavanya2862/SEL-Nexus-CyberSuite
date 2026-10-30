@@ -1,0 +1,441 @@
+{
+ "dashboard/clues.json": [
+  {
+   "collected": "str",
+   "first_seen": "str",
+   "malware": "str",
+   "seen_on": [
+    "str"
+   ],
+   "source": "str",
+   "test": "bool",
+   "threat": "str",
+   "threat_id": "str",
+   "type": "str",
+   "value": "str"
+  }
+ ],
+ "dashboard/dashboard_data.json": {
+  "alerts": [
+   {
+    "alert_id": "str",
+    "created_at": "str",
+    "delivered": "str",
+    "is_test": "bool",
+    "message": "str",
+    "rating": "str",
+    "threat_id": "str",
+    "title": "str"
+   }
+  ],
+  "apps": [
+   "str"
+  ],
+  "days": [
+   "str"
+  ],
+  "devices": [
+   {
+    "device_name": "str",
+    "exposed": "number",
+    "hits": "number",
+    "last_seen": "str",
+    "opco": "str",
+    "os_platform": "str",
+    "test_hits": "number",
+    "vulns": "number"
+   }
+  ],
+  "explorer": [
+   {
+    "action": "str",
+    "chips": [
+     "str"
+    ],
+    "devices": "str",
+    "first_seen": "str",
+    "hits": "number",
+    "id": "str",
+    "kind": "str",
+    "match": "null|str",
+    "on_us": [
+     {
+      "announced": "str",
+      "app": "str",
+      "cve": "str",
+      "device": "str",
+      "known": "str",
+      "match": "str",
+      "version": "str"
+     }
+    ],
+    "published": "str",
+    "rating": "str",
+    "score": "number",
+    "source": "str",
+    "summary": "str",
+    "test": "bool",
+    "title": "str",
+    "url": "str",
+    "why": "str"
+   }
+  ],
+  "feeds": [
+   {
+    "cursor": "null|str",
+    "feed": "str",
+    "last_count": "number",
+    "last_error": "null|str",
+    "last_run_at": "str",
+    "last_status": "str",
+    "last_success_at": "null|str"
+   }
+  ],
+  "fixes": [
+   {
+    "app": "str",
+    "cves": "number",
+    "devices": "number",
+    "max_cvss": "number",
+    "versions": "str"
+   }
+  ],
+  "funnel": [
+   {
+    "note": "str",
+    "stage": "str",
+    "value": "number"
+   }
+  ],
+  "generated": "str",
+  "hits": [
+   {
+    "alerts": [
+     "str"
+    ],
+    "created_at": "str",
+    "detail": "str",
+    "device_id": "str",
+    "device_name": "str",
+    "finding_id": "str",
+    "first_hit": "str",
+    "hunt_id": "str",
+    "is_test": "bool",
+    "kind": "str",
+    "opco": "str",
+    "resolution": {
+     "done_when": "str",
+     "model": "null|str",
+     "source": "str",
+     "steps": [
+      "str"
+     ],
+     "what_happened": "str"
+    },
+    "threat_id": "str",
+    "timeline": [
+     {
+      "account": "null|str",
+      "time": "str",
+      "what": "str"
+     }
+    ],
+    "title": "str",
+    "users": []
+   }
+  ],
+  "hunts": [
+   {
+    "error": "null",
+    "name": "str",
+    "origin": "str",
+    "row_count": "number",
+    "status": "str",
+    "technique": "str"
+   }
+  ],
+  "ioc_hits": "number",
+  "ioc_types": {
+   "domain": "number",
+   "ip": "number",
+   "md5": "number",
+   "sha1": "number",
+   "sha256": "number",
+   "url": "number"
+  },
+  "last_run": {
+   "command": "str",
+   "finished_at": "str",
+   "run_id": "str",
+   "started_at": "str",
+   "status": "str",
+   "steps": "str"
+  },
+  "matrix": [
+   {
+    "app": "str",
+    "cves": "number",
+    "device_name": "str"
+   }
+  ],
+  "metrics": {
+   "<key>": "mixed"
+  },
+  "model": "str",
+  "periods": {
+   "<key>": {
+    "days": [
+     "str"
+    ],
+    "earlier": {
+     "<key>": "number"
+    },
+    "funnel": [
+     {
+      "note": "str",
+      "stage": "str",
+      "value": "number"
+     }
+    ],
+    "ioc_types": {
+     "domain": "number",
+     "ip": "number",
+     "md5": "number",
+     "sha1": "number",
+     "sha256": "number",
+     "url": "number"
+    },
+    "ratings": {
+     "<key>": "number"
+    },
+    "series": {
+     "<key>": [
+      "number"
+     ]
+    },
+    "sources": {
+     "<key>": {
+      "affect": "number",
+      "clues": "number",
+      "threats": "number"
+     }
+    },
+    "start": "str",
+    "tactics": [
+     {
+      "tactic": "str",
+      "threats": "number"
+     }
+    ],
+    "threats_collected": "number"
+   }
+  },
+  "posture": {
+   "affecting": "number",
+   "rating": "str",
+   "urgent": "number"
+  },
+  "ratings": {
+   "<key>": "number"
+  },
+  "scatter": [
+   [
+    "number|str"
+   ]
+  ],
+  "series": {
+   "<key>": [
+    "number"
+   ]
+  },
+  "tactics": [
+   {
+    "tactic": "str",
+    "threats": "number"
+   }
+  ],
+  "threats_collected": "number",
+  "top": [
+   {
+    "action": "str",
+    "chips": [
+     "str"
+    ],
+    "devices": "str",
+    "first_seen": "str",
+    "hits": "number",
+    "id": "str",
+    "kind": "str",
+    "match": "str",
+    "on_us": [
+     {
+      "announced": "str",
+      "app": "str",
+      "cve": "str",
+      "device": "str",
+      "known": "str",
+      "match": "str",
+      "version": "str"
+     }
+    ],
+    "published": "str",
+    "rating": "str",
+    "score": "number",
+    "source": "str",
+    "summary": "str",
+    "test": "bool",
+    "title": "str",
+    "url": "str",
+    "why": "str"
+   }
+  ]
+ },
+ "dashboard/site_data.json": {
+  "<key>": {
+   "actions": [
+    "str"
+   ],
+   "ai_model": "null|str",
+   "ai_status": "null|str",
+   "analysed_at": "null|str",
+   "confidence": "null|str",
+   "cves": [
+    {
+     "cvss": "null|number",
+     "description": "str",
+     "epss": "null|number",
+     "epss_percentile": "null|number",
+     "id": "str",
+     "origin": "str",
+     "severity": "null|str"
+    }
+   ],
+   "dropped": {},
+   "exposure": [
+    {
+     "detail": "str",
+     "device_name": "str",
+     "match_type": "str",
+     "opco": "str",
+     "recommended_update": "str"
+    }
+   ],
+   "factors": [
+    "str"
+   ],
+   "findings": [
+    {
+     "alerts": [
+      {
+       "category": "str",
+       "id": "str",
+       "severity": "str",
+       "status": "str",
+       "techniques": [],
+       "time": "str",
+       "title": "str"
+      }
+     ],
+     "detail": "str",
+     "device": "str",
+     "first_hit": "str",
+     "hunt_id": "str",
+     "is_test": "bool",
+     "kind": "str",
+     "opco": "str",
+     "resolution": {
+      "done_when": "str",
+      "model": "null|str",
+      "source": "str",
+      "steps": [
+       "str"
+      ],
+      "what_happened": "str"
+     },
+     "timeline": [
+      {
+       "account": "null|str",
+       "time": "str",
+       "what": "str"
+      }
+     ],
+     "users": []
+    }
+   ],
+   "first_seen": "str",
+   "fix": {
+    "done_when": "str",
+    "model": "null|str",
+    "source": "str",
+    "steps": [
+     "str"
+    ]
+   },
+   "hunts": [
+    {
+     "error": "null",
+     "name": "str",
+     "origin": "str",
+     "query": "str",
+     "row_count": "number",
+     "started_at": "str",
+     "status": "str",
+     "technique": "str"
+    }
+   ],
+   "id": "str",
+   "ioc_count": "number",
+   "iocs": [
+    {
+     "origin": "str",
+     "type": "str",
+     "value": "str"
+    }
+   ],
+   "is_test": "bool",
+   "kind": "str",
+   "products": [
+    {
+     "origin": "str",
+     "value": "str"
+    }
+   ],
+   "published": "str",
+   "rating": "str",
+   "score": "number",
+   "source": "str",
+   "summary": "null|str",
+   "techniques": [
+    {
+     "id": "str",
+     "name": "str",
+     "origin": "str",
+     "reason": "str",
+     "tactics": "str",
+     "url": "str"
+    }
+   ],
+   "text": "str",
+   "threat_type": "null|str",
+   "title": "str",
+   "url": "str",
+   "why": "str"
+  }
+ },
+ "dashboard/threat_matches.json": {
+  "built_at": "str",
+  "cols": [
+   "str"
+  ],
+  "rows": [
+   [
+    "str"
+   ]
+  ],
+  "threats": {
+   "<key>": [
+    "number|str"
+   ]
+  }
+ }
+}
