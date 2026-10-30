@@ -531,6 +531,13 @@
     "size": "number"
    }
   ],
+  "attack_detection": [
+   {
+    "modified": "str",
+    "name": "str",
+    "size": "number"
+   }
+  ],
   "threat_intel": [
    {
     "modified": "str",

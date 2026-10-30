@@ -1,19 +1,45 @@
-"""Attack Detection Report for one attack-check run (Word + PDF): the searches it ran in Defender, every sign of attack
+"""Attack Detection Report for one run (Word + PDF): the searches it ran in Defender, every sign of attack
 with its evidence and the AI's steps to resolve it, and the queries used. Built from the database only."""
 
 from __future__ import annotations
 
+import json
+from datetime import datetime
+
 from infra_core import docstyle as ds
-from threat_intel.config import Settings
-from threat_intel.report import _j, cover_lines, run_window
-from threat_intel.resolve import for_findings
-from threat_intel.store import Store, utcnow
+from attack_detection.config import Settings
+from attack_detection.resolve import for_findings
+from attack_detection.store import Store, utcnow
 
 KIND_WORDS = {"ioc_hit": "Warning sign found", "behaviour_hit": "Suspicious behaviour"}
 
 
+def _j(value):
+    if value is None:
+        return []
+    return json.loads(value) if isinstance(value, str) else value
+
+
+def run_window(store: Store, run_id: str | None, command: str) -> tuple[str | None, datetime, datetime, dict]:
+    """(run_id, started, finished, steps) of this run, or of the latest run of that kind when built by hand."""
+    rows = store.query("SELECT * FROM runs WHERE run_id = ?", [run_id]) if run_id else \
+        store.query("SELECT * FROM runs WHERE command = ? AND finished_at IS NOT NULL ORDER BY started_at DESC LIMIT 1", [command])
+    if not rows:
+        now = utcnow()
+        return run_id, now, now, {}
+    r = rows[0]
+    return r["run_id"], r["started_at"], r["finished_at"] or utcnow(), _j(r["steps"]) or {}
+
+
+def cover_lines(started: datetime, finished: datetime, extra: str) -> list[str]:
+    mins = max(0, int((finished - started).total_seconds()))
+    return [f"Run of {started:%d %b %Y, %H:%M} UTC · took {mins // 60} min {mins % 60} s",
+            extra,
+            f"Created {utcnow():%d %b %Y, %H:%M} UTC · this report shows this run only"]
+
+
 def build(store: Store, settings: Settings, run_id: str | None = None, steps: dict | None = None) -> dict:
-    run_id, started, finished, stored = run_window(store, run_id, "attack-check")
+    run_id, started, finished, stored = run_window(store, run_id, "run")
     steps = steps or stored
     hunts = store.query("SELECT * FROM hunts WHERE run_id = ? ORDER BY row_count DESC, name", [run_id])
     signs = store.query("""SELECT f.*, t.title AS threat FROM findings f LEFT JOIN threats t USING (threat_id)

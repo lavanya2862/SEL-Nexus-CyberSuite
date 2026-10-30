@@ -5,7 +5,7 @@ import { ago } from '@/lib/format'
 
 interface ReportFile { name: string; size: number; modified: string | null }
 
-async function fetchReports(): Promise<{ threat_intel: ReportFile[]; vulnerability: ReportFile[]; alert_triage?: ReportFile[] }> {
+async function fetchReports(): Promise<{ threat_intel: ReportFile[]; vulnerability: ReportFile[]; alert_triage?: ReportFile[]; attack_detection?: ReportFile[] }> {
   const res = await fetch('/api/reports')
   if (!res.ok) throw new Error(`CyberSuite could not complete the request (error ${res.status})`)
   return res.json()
@@ -43,7 +43,7 @@ export function Reports() {
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           <Section uc="vulnerability" title="Vulnerability Agent" files={data.vulnerability} />
           <Section uc="threat_intel" title="Threat Intel Agent" files={data.threat_intel.filter((f) => !f.name.startsWith('Attack_Detection'))} />
-          <Section uc="threat_intel" title="Attack Detection Agent" files={data.threat_intel.filter((f) => f.name.startsWith('Attack_Detection'))} />
+          <Section uc="attack_detection" title="Attack Detection Agent" files={data.attack_detection ?? []} />
           <Section uc="alert_triage" title="Alert Triage Agent" files={data.alert_triage ?? []} />
         </div>
       )}
@@ -51,11 +51,11 @@ export function Reports() {
   )
 }
 
-function Section({ uc, title, files }: { uc: 'threat_intel' | 'vulnerability' | 'alert_triage'; title: string; files: ReportFile[] }) {
+function Section({ uc, title, files }: { uc: 'threat_intel' | 'vulnerability' | 'alert_triage' | 'attack_detection'; title: string; files: ReportFile[] }) {
   return (
     <Panel className="p-6">
       <div className="flex items-center gap-2 text-xs font-medium text-ink-3">
-        <span className={uc === 'threat_intel' ? 'size-2 rounded-full bg-violet' : uc === 'alert_triage' ? 'size-2 rounded-full bg-rose' : 'size-2 rounded-full bg-sky'} /> Reports
+        <span className={uc === 'attack_detection' ? 'size-2 rounded-full bg-signal' : uc === 'threat_intel' ? 'size-2 rounded-full bg-violet' : uc === 'alert_triage' ? 'size-2 rounded-full bg-rose' : 'size-2 rounded-full bg-sky'} /> Reports
       </div>
       <h2 className="mt-1 font-semibold tracking-tight">{title}</h2>
       {files.length ? (

@@ -1,0 +1,29 @@
+domain,reason
+github.com,Shared code hosting: attackers host files here but the domain itself is legitimate
+githubusercontent.com,GitHub file downloads (raw/objects/release assets)
+gitlab.com,Shared code hosting
+bitbucket.org,Shared code hosting
+google.com,Includes drive.google.com / docs.google.com file sharing
+googleapis.com,Google cloud storage and APIs
+googleusercontent.com,Google-hosted user content
+dropbox.com,File sharing
+dropboxusercontent.com,File sharing
+onedrive.live.com,File sharing
+1drv.ms,OneDrive short links
+sharepoint.com,Microsoft 365 file sharing
+microsoft.com,Microsoft
+windows.net,Azure storage (blob.core.windows.net)
+azureedge.net,Azure CDN
+amazonaws.com,AWS storage and services
+cloudfront.net,AWS CDN
+discord.com,Chat platform file hosting
+discordapp.com,Discord file hosting (cdn.discordapp.com)
+telegram.org,Messaging platform
+pastebin.com,Paste site (use exact URL IOCs instead)
+mediafire.com,File sharing
+mega.nz,File sharing
+transfer.sh,File sharing
+bit.ly,URL shortener
+cloudflare.com,CDN
+workers.dev,Cloudflare Workers shared hosting
+pages.dev,Cloudflare Pages shared hosting

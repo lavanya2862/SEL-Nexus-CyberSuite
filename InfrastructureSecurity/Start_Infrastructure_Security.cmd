@@ -33,6 +33,7 @@ call :setup dashboard dashboard || goto :failed
 call :setup agents\threat_intel threat_intel || goto :failed
 call :setup agents\vulnerability vulnerability || goto :failed
 call :setup agents\alert_triage alert_triage || goto :failed
+call :setup agents\attack_detection attack_detection || goto :failed
 rem Data from before the agents were renamed: each database file takes its agent's name
 for %%a in ("threat_intel uc1" "vulnerability uc3" "alert_triage uc4") do call :rename_db %%~a
 rem (Re)build the website when it is missing or older than its source files

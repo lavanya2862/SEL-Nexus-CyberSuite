@@ -14,6 +14,7 @@ PARTS = {
     "threat_intel": {"dir": "agents/threat_intel", "package": "threat_intel"},
     "vulnerability": {"dir": "agents/vulnerability", "package": "vulnerability"},
     "alert_triage": {"dir": "agents/alert_triage", "package": "alert_triage"},
+    "attack_detection": {"dir": "agents/attack_detection", "package": "attack_detection"},
     "dashboard": {"dir": "dashboard", "package": "dashboard"},
 }
 
@@ -42,6 +43,12 @@ REBUILDS = {
                       "from alert_triage.export import export_all; "
                       "s = load_settings(); export_all(Store(s.db_path), s)"],
         "outputs": ["export/triage_data.json"],
+    },
+    "attack_detection": {
+        "copy": ["attack_detection.duckdb"],
+        "env": {"ATTACK_DATA_DIR": "{data}"},
+        "run": ["-m", "attack_detection", "publish"],
+        "outputs": ["out/findings.json"],
     },
 }
 

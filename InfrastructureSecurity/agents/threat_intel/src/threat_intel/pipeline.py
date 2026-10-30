@@ -1,11 +1,12 @@
-﻿"""Two runs share this database:
+﻿"""Two runs use this database:
 
 - Threat Intel run (`threat_intel run`): collect -> inventory -> derive -> EPSS -> analyse -> exposure -> score -> link the
   exposure to computers -> AI fix steps for the threats that affect us -> alerts -> report -> dashboard -> metrics
-  -> fix (the fix plan, with the fixes that are new in this run).
-- Attack check run (`threat_intel attack-check`): hunt in Defender for the warning signs the Threat Intel run collected ->
-  correlate (keeps earlier signs, adds new ones) -> re-score -> AI resolution steps -> alerts -> dashboard -> fix
-  (a scan-and-clean response for every new sign of attack).
+  -> hunt inputs (data/out/hunt_inputs.json for the Attack Detection Agent) -> fix (the fix plan, with the fixes
+  that are new in this run).
+- Attack import (`threat_intel attack-import`, started by the Attack Detection Agent at the end of its run): import its
+  data/out/findings.json -> re-score -> alerts -> dashboard -> fix (a scan-and-clean response for every new sign of
+  attack, run straight away when auto-fix is on).
 The fix step only PROPOSES: a person fixes or saves each new fix for later on the portal's run page (or in the Fix
 Centre), and nothing on a computer changes without that approval. `python -m threat_intel fix-plan` rebuilds it on its own.
 
@@ -23,7 +24,7 @@ import traceback
 from contextlib import contextmanager
 from datetime import datetime
 
-from threat_intel import alerts, analyse, attack_report, correlate, dashboard, derive, exposure, fix_advice, inventory, metrics, report, resolve, scoring
+from threat_intel import alerts, analyse, attack_import, correlate, dashboard, derive, exposure, fix_advice, hunt_inputs, inventory, metrics, report, scoring
 from threat_intel.ai.azure_client import AzureFoundryClient, make_client
 from threat_intel.ai.gemini_client import AIUnavailable, GeminiClient
 from threat_intel.api_client import DefenderClient
@@ -32,7 +33,6 @@ from threat_intel.config import Settings
 from threat_intel.feeds import collect_all, epss
 from threat_intel.feeds.common import FeedContext
 from threat_intel.feeds.nvd import fetch_cves
-from threat_intel.hunting.runner import HuntRunner
 from threat_intel.store import Store, utcnow
 
 log = logging.getLogger("threat_intel.pipeline")
@@ -174,26 +174,18 @@ class Pipeline:
         self.step("exposure", exposure.compute, self.store, exposure.defender_first_listed(self.store, self.settings))
         return self.step(name, scoring.run, self.store)
 
-    def hunt(self):
-        if not self.defender:
-            return self.skip("hunt", "Defender not configured")
-        runner = HuntRunner(self.store, self.defender, self.run_id, self.settings.hunt_lookback_days, self.ai)
-        return self.step("hunt", runner.run_all, self.settings.feed_backfill_days)
-
     def correlate(self):
         return self.step("correlate", correlate.run, self.store, self.defender, self.run_id)
 
     def fix_advice(self):
         return self.step("fix_advice", fix_advice.run, self.store, self.settings, self.ai)   # AI fix steps per threat
 
-    def resolve(self):
-        return self.step("resolve", resolve.run, self.store, self.settings, self.ai)     # AI steps per sign of attack
-
     def outputs(self):
         self.step("alerts", alerts.run, self.store, self.settings)
         self.step("report", report.build, self.store, self.settings, self.run_id, self.ai, self.steps)
         self.step("dashboard", lambda: str(dashboard.build(self.store, self.settings)))
         self.step("metrics", metrics.write, self.store, self.settings)
+        self.step("hunt_inputs", hunt_inputs.write, self.store, self.settings)     # for the Attack Detection Agent
 
     def fix_plan(self, source: str):
         """Last step of both runs: rebuild the fix plan and list the fixes that are new in this run (proposals only)."""
@@ -222,17 +214,15 @@ class Pipeline:
             return {"approved": len(approved), "earlier": earlier, "ran": 0, "done": 0, "failed": 0, "busy": True}
         return {"approved": len(approved), "earlier": earlier, **FixRunner(self.settings).run_approved(approved)}
 
-    def attack_check(self) -> dict:
-        """The Attack Check Agent: search our computers for the warning signs the Threat Intel run collected."""
+    def attack_import(self) -> dict:
+        """After an Attack Detection run: take in its signs of attack, then re-score, alert, refresh the dashboard data
+        and propose (and with auto-fix, run) a scan-and-clean for every new one."""
         started = utcnow()
-        self.store.upsert("runs", [{"run_id": self.run_id, "command": "attack-check", "started_at": started,
+        self.store.upsert("runs", [{"run_id": self.run_id, "command": "attack-import", "started_at": started,
                                     "status": "running", "steps": {}}])
-        self.hunt()
-        self.correlate()
+        self.step("import", attack_import.run, self.store, self.settings)
         self.score("rescore")          # threats with new signs of attack get their rating raised
-        self.resolve()
         self.step("alerts", alerts.run, self.store, self.settings)
-        self.step("report", attack_report.build, self.store, self.settings, self.run_id, self.steps)
         self.step("dashboard", lambda: str(dashboard.build(self.store, self.settings)))
         self.fix_plan("attack_detection")
         if self.settings.attack_auto_fix:
@@ -242,7 +232,7 @@ class Pipeline:
         failed = [k for k, v in self.steps.items() if v["status"] == "error"]
         status = "ok" if not failed else "partial"
         finished = utcnow()
-        self.store.upsert("runs", [{"run_id": self.run_id, "command": "attack-check", "started_at": started,
+        self.store.upsert("runs", [{"run_id": self.run_id, "command": "attack-import", "started_at": started,
                                     "finished_at": finished, "status": status, "steps": self.steps}])
         (self.settings.data_dir / "last_attack_check.json").write_text(json.dumps({
             "run_id": self.run_id, "status": status, "started_at": started.isoformat(), "finished_at": finished.isoformat(),

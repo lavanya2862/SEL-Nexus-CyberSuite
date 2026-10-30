@@ -14,16 +14,16 @@ import logging
 import time
 from datetime import timedelta
 
-from threat_intel.ai.gemini_client import AIUnavailable, GeminiClient
-from threat_intel.ai.prompts import KQL_SYSTEM, kql_fix_prompt, kql_prompt
-from threat_intel.ai.schemas import KqlDraft
-from threat_intel.api_client import ApiError, DefenderClient
-from threat_intel.feeds.iocs import allowlisted
-from threat_intel.hunting import templates as tpl
-from threat_intel.hunting.validator import ensure_limit, validate
-from threat_intel.store import Store, to_utc, utcnow
+from attack_detection.ai.gemini_client import AIUnavailable, GeminiClient
+from attack_detection.ai.prompts import KQL_SYSTEM, kql_fix_prompt, kql_prompt
+from attack_detection.ai.schemas import KqlDraft
+from attack_detection.api_client import ApiError, DefenderClient
+from attack_detection.indicators import allowlisted
+from attack_detection.hunting import templates as tpl
+from attack_detection.hunting.validator import ensure_limit, validate
+from attack_detection.store import Store, to_utc, utcnow
 
-log = logging.getLogger("threat_intel.hunt")
+log = logging.getLogger("attack_detection.hunt")
 
 BATCH = 400
 MAX_AI_HUNTS = 5

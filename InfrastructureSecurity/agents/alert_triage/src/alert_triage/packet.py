@@ -203,7 +203,7 @@ def build(incident: dict, lab_devices: tuple[str, ...] = (), source: str | None 
         "entities": entities,
         "techniques": sorted(techniques),
         "first_activity": first, "last_activity": last,
-        "is_lab": bool(lab & set(devices)) or any(a["title"].lower().startswith("alert_triage lab") for a in alerts)
+        "is_lab": bool(lab & set(devices)) or any(a["title"].lower().startswith(("uc4 lab", "alert triage lab")) for a in alerts)   # lab alert titles from before the rename say "UC4 lab"
         or any(a["title"].strip().lower().startswith(t) for a in alerts for t in lab_titles if t),
         "fingerprint": fingerprint(alerts),
     }

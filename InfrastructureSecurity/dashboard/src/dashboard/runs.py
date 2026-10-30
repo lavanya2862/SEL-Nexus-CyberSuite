@@ -83,18 +83,21 @@ def threat_intel_steps() -> list[Step]:
 
 
 def attack_steps() -> list[Step]:
-    """The Attack Detection Agent: Threat Intel's `attack-check` run, on its own so it can run more often than the news."""
+    """The Attack Detection Agent's run; its last step has the Threat Intel Agent import the results (re-score, alerts,
+    dashboard data, fix proposals), and those steps' lines are part of this run's output."""
     return [
         Step("search", "Hunt across managed devices", "Search Microsoft Defender (last 30 days) for indicators from threat intelligence and known attacker techniques",
-             ("hunt",)),
+             ("inputs", "hunt")),
         Step("evidence", "Correlate the evidence", "Signed-in users and Defender context; earlier detections are kept, new ones added",
              ("correlate", "exposure", "rescore")),
         Step("resolve", "Write resolution steps", "The agent writes resolution steps for each new detection, validated against the evidence",
              ("resolve",)),
         Step("publish", "Publish", "Update the Attack detection page, raise alerts and write the report",
-             ("alerts", "report", "dashboard")),
+             # today: report, publish, then the Threat Intel import's own lines; runs from before the split logged
+             # alerts before report, hence the second "report"
+             ("report", "publish", "import", "rescore", "alerts", "report", "dashboard")),
         Step("fix", "Remediation", "Propose a Defender scan-and-clean for every detection; with auto-fix on, the agent runs "
-             "each one and repeats it with a full scan until clean", ("fix_plan", "auto_fix")),
+             "each one and repeats it with a full scan until clean", ("fix_plan", "auto_fix", "threat_intel")),
     ]
 
 
@@ -784,7 +787,7 @@ class RunState:
             "steps": [{k: getattr(s, k) for k in ("key", "label", "description", "status", "detail", "started_at", "finished_at")}
                       for s in self.steps],
             "facts": self.facts(), "report_file": self.report_file(), "report_files": self.report_files(),
-            "files_from": "threat_intel" if self.uc in ("threat_intel", "attack_detection") else self.uc, "lines": self.lines,
+            "files_from": self.uc, "lines": self.lines,
             "log_tail": list(self.log_tail)[-12:],
             # Vulnerability's Fix stage: the fixes this run proposed (the run page shows them as cards to approve)
             "fix": self.fix_result(),
@@ -1001,7 +1004,9 @@ class RunManager:
                 st = self.latest(uc)
                 run = {**st.to_dict(), "typical_seconds": self.typical_seconds(uc)} if st else None
                 if run and run["status"] != "running" and any((run.get("new_ids") or {}).values()):
-                    run["findings"] = run_findings(run["new_ids"], self._fix_files(self.uc_dirs[uc] / "data" / "dashboard" / "dashboard_data.json"))
+                    # Attack Detection's signs of attack are listed in the Threat Intel data, which imports them
+                    source = self.uc_dirs["threat_intel" if uc == "attack_detection" and "threat_intel" in self.uc_dirs else uc]
+                    run["findings"] = run_findings(run["new_ids"], self._fix_files(source / "data" / "dashboard" / "dashboard_data.json"))
                 out[uc] = fix_waiting(run, self.fix_dir, self._fix_files) if run and self.fix_dir else run
             return out
 

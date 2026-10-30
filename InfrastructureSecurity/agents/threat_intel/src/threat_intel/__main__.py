@@ -6,14 +6,14 @@
   collect     download the threat feeds
   inventory   pull devices, software and vulnerabilities from Defender
   analyse     derive + EPSS + Gemini analysis + exposure + scoring
-  hunt        run hunts in Defender (+ correlate + re-score)
   report      build the Word/PDF report
   dashboard   export the portal's data (data/dashboard/*.json)
   alerts      raise alerts for high-risk threats that affect us
   metrics     print the key metrics
-  run         the Threat Intel run: everything above except hunting, in order (what the scheduled task runs)
-  attack-check  the Attack Check Agent: hunt in Defender for the collected warning signs, keep new signs of attack,
-              AI resolution steps, alerts, portal data (waits up to 30 minutes if a Threat Intel run is busy)
+  run         the Threat Intel run: everything above, in order (what the scheduled task runs); also publishes
+              data/out/hunt_inputs.json for the Attack Detection Agent
+  attack-import  take in the Attack Detection Agent's data/out/findings.json: re-score, alerts, dashboard data, fix
+              proposals (that agent starts it at the end of its run; waits up to 30 minutes if a run is busy)
   summary     short overview of what's in the database
   spotcheck   export 20 AI answers for a person to check (--score FILE reads the marks back)
   demo        the demo story with today's numbers (data/demo_notes.md)
@@ -155,8 +155,8 @@ def cmd_fix(settings: Settings, args) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m threat_intel", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["check", "live-test", "models", "collect", "inventory", "analyse", "hunt",
-                                            "report", "dashboard", "alerts", "metrics", "run", "attack-check", "summary",
+    parser.add_argument("command", choices=["check", "live-test", "models", "collect", "inventory", "analyse",
+                                            "report", "dashboard", "alerts", "metrics", "run", "attack-import", "summary",
                                             "spotcheck", "demo", "serve", "fix-plan", "fix-refresh", "fix-status", "fix-probe",
                                             "fix-approve", "fix-run"])
     parser.add_argument("--feeds", help="collect: comma-separated feed names (default: all enabled)")
@@ -199,13 +199,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in ("fix-status", "fix-probe", "fix-approve", "fix-run"):
         return cmd_fix(settings, args)
 
-    if args.command in ("attack-check", "fix-refresh"):
+    if args.command in ("attack-import", "fix-refresh"):
         # wait BEFORE opening the database: a busy Threat Intel run holds the DuckDB file, so opening it would fail
-        waited, limit = 0, (30 if args.command == "attack-check" else 15) * 60
+        waited, limit = 0, (30 if args.command == "attack-import" else 15) * 60
         while lock_active(settings) and waited < limit:              # a Threat Intel run is busy: wait for it
             if waited % 60 == 0:
                 print("Waiting for the Threat Intel run to finish before "
-                      + ("checking for attacks" if args.command == "attack-check" else "refreshing the fix plan"), flush=True)
+                      + ("importing the signs of attack" if args.command == "attack-import" else "refreshing the fix plan"), flush=True)
             time.sleep(15)
             waited += 15
 
@@ -265,13 +265,9 @@ def main(argv: list[str] | None = None) -> int:
                 p.enrich()
                 p.analyse()
                 p.score()
-            elif args.command == "hunt":
-                p.hunt()
-                p.correlate()
-                p.score("rescore")
-            elif args.command == "attack-check":
-                result = p.attack_check()
-                print(f"\nAttack check {result['run_id']}: {result['status']}")
+            elif args.command == "attack-import":
+                result = p.attack_import()
+                print(f"\nAttack import {result['run_id']}: {result['status']}")
                 for name, s in result["steps"].items():
                     detail = s.get("result") if s["status"] == "ok" else s.get("error") or s.get("reason")
                     print(f"  {name:12s} {s['status']:8s} {str(detail)[:160]}")

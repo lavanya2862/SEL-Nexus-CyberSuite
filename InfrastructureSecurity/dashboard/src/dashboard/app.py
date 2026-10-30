@@ -33,13 +33,14 @@ from dashboard import activity, audit, devicenames, fixproxy, helpbot, helpready
 from dashboard.auth import COOKIE, Auth, AuthError
 from dashboard.config import SUITE_ENV, Settings, _load_env_file, load_settings
 from dashboard.runs import AGENT_NAMES, RunManager
+from dashboard.agents.attack_detection import AttackDetectionSource
 from dashboard.agents.alert_triage import AlertTriageSource
 from dashboard.agents.threat_intel import ThreatIntelSource
 from dashboard.agents.vulnerability import VulnerabilitySource
 from dashboard.summary import build_summary
 
 
-AGENT_KEYS = ("threat_intel", "vulnerability", "alert_triage", "attack_detection")     # attack = the Attack Detection Agent (Threat Intel's attack-check run)
+AGENT_KEYS = ("threat_intel", "vulnerability", "alert_triage", "attack_detection")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -351,20 +352,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/reports")
     def report_files() -> dict:
         return {"threat_intel": ThreatIntelSource(settings.threat_intel_dir).reports(), "vulnerability": VulnerabilitySource(settings.vulnerability_dir).downloads(),
-                "alert_triage": AlertTriageSource(settings.alert_triage_dir).reports()}
+                "alert_triage": AlertTriageSource(settings.alert_triage_dir).reports(),
+                "attack_detection": AttackDetectionSource(settings.attack_detection_dir).reports()}
 
     @app.get("/api/files/{uc}/{name}")
     def download(uc: str, name: str):
         """Download one listed report file. Only names the listing returns are served (no paths)."""
         listed = {"threat_intel": ThreatIntelSource(settings.threat_intel_dir).reports, "vulnerability": VulnerabilitySource(settings.vulnerability_dir).downloads,
-                  "alert_triage": AlertTriageSource(settings.alert_triage_dir).reports}.get(uc)
+                  "alert_triage": AlertTriageSource(settings.alert_triage_dir).reports,
+                  "attack_detection": AttackDetectionSource(settings.attack_detection_dir).reports}.get(uc)
         if listed is None or name not in {f["name"] for f in listed()}:
             return JSONResponse({"error": "not found"}, status_code=404)
         folder = {"threat_intel": settings.threat_intel_dir / "data" / "reports", "vulnerability": settings.vulnerability_dir / "data" / "reporting",
-                  "alert_triage": settings.alert_triage_dir / "data" / "reports"}[uc]
+                  "alert_triage": settings.alert_triage_dir / "data" / "reports",
+                  "attack_detection": settings.attack_detection_dir / "data" / "reports"}[uc]
         return FileResponse(folder / name, filename=name)
 
-    runs = RunManager({"threat_intel": settings.threat_intel_dir, "vulnerability": settings.vulnerability_dir, "alert_triage": settings.alert_triage_dir, "attack_detection": settings.threat_intel_dir},
+    runs = RunManager({"threat_intel": settings.threat_intel_dir, "vulnerability": settings.vulnerability_dir, "alert_triage": settings.alert_triage_dir, "attack_detection": settings.attack_detection_dir},
                       audit_dir=settings.audit_dir)
     app.state.runs = runs
 

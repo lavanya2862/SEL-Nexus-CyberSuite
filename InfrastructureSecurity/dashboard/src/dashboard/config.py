@@ -48,6 +48,7 @@ class Settings:
     # the shared SEL Nexus CyberSuite sign-in page (../../login). When set, people sign in and out there instead of
     # on this portal, and auth_dir should point at that page's data/auth so both check the same session cookie.
     login_url: str = ""
+    attack_detection_dir: Path | None = None
 
     @property
     def web_dist(self) -> Path:
@@ -79,4 +80,5 @@ def load_settings() -> Settings:
         cognito_client_id=env.get("PORTAL_COGNITO_CLIENT_ID", ""),
         auth_dir=(PORTAL_DIR / env["PORTAL_AUTH_DIR"]).resolve() if env.get("PORTAL_AUTH_DIR") else PORTAL_DIR / "data" / "auth",
         login_url=env.get("PORTAL_LOGIN_URL", "").strip().rstrip("/"),
+        attack_detection_dir=Path(env.get("DASHBOARD_ATTACK_DETECTION_DIR") or ROOT_DIR / "agents" / "attack_detection"),
     )

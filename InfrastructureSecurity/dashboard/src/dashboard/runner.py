@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 # Agents that are not a use case's plain `run`: the Attack Detection Agent is Threat Intel's `attack-check`.
-COMMANDS = {"attack_detection": ("threat_intel", "attack-check")}
+COMMANDS: dict[str, tuple[str, str]] = {}      # agent -> (module, command) when not (agent, "run")
 
 
 def _now() -> str:

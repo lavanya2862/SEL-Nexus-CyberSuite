@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from threat_intel.config import CONFIG_DIR
+from attack_detection.config import CONFIG_DIR
 
 TEMPLATE_DIR = CONFIG_DIR / "kql_templates"
 

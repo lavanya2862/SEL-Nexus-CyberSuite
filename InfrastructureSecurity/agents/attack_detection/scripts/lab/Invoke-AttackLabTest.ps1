@@ -30,7 +30,7 @@ if (-not $admin) { Write-Host 'Run this in PowerShell as administrator.' -Foregr
 function Done([string]$what) { Write-Host "  [done] $what" -ForegroundColor Green }
 
 if ($Cleanup) {
-    Write-Host 'Removing the Threat Intel lab test leftovers'
+    Write-Host 'Removing the Attack Detection lab test leftovers'
     & reg.exe delete $Run /v $Name /f 2>$null | Out-Null; Done "Run value $Name"
     Remove-Item $Startup -Force -ErrorAction SilentlyContinue; Done "Startup file $Name.cmd"
     Remove-LocalUser -Name $Name -ErrorAction SilentlyContinue; Done "local user $Name"
@@ -39,19 +39,19 @@ if ($Cleanup) {
 }
 
 $all = $Test -contains 'All'
-Write-Host 'Threat Intel lab tests (harmless)'
+Write-Host 'Attack Detection lab tests (harmless)'
 
 if ($all -or $Test -contains 'RunKey') {
     & reg.exe add $Run /v $Name /t REG_SZ /d "$Cmd /c rem $Name" /f | Out-Null
     Done 'Run key: a program set to start automatically'
 }
 if ($all -or $Test -contains 'StartupFile') {
-    & $Cmd /c "echo @rem threat_intel lab test> `"$Startup`""
+    & $Cmd /c "echo @rem attack detection lab test> `"$Startup`""
     Done 'Startup folder: a file that runs at every sign-in'
 }
 if ($all -or $Test -contains 'LocalUser') {
     if (-not (Get-LocalUser -Name $Name -ErrorAction SilentlyContinue)) {
-        New-LocalUser -Name $Name -NoPassword -Description 'threat_intel lab test' | Out-Null
+        New-LocalUser -Name $Name -NoPassword -Description 'attack detection lab test' | Out-Null
     }
     Disable-LocalUser -Name $Name
     Done 'New local user account (disabled, no password)'
