@@ -33,7 +33,9 @@ from dashboard import activity, audit, devicenames, fixproxy, helpbot, helpready
 from dashboard.auth import COOKIE, Auth, AuthError
 from dashboard.config import SUITE_ENV, Settings, _load_env_file, load_settings
 from dashboard.runs import AGENT_NAMES, RunManager
-from dashboard.sources import AlertTriageSource, ThreatIntelSource, VulnerabilitySource
+from dashboard.agents.alert_triage import AlertTriageSource
+from dashboard.agents.threat_intel import ThreatIntelSource
+from dashboard.agents.vulnerability import VulnerabilitySource
 from dashboard.summary import build_summary
 
 

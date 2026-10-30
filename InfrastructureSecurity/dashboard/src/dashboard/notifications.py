@@ -18,7 +18,9 @@ from urllib.parse import quote
 
 from dashboard import fixproxy, services
 from dashboard.audit import AuditLog
-from dashboard.sources import _jsonl, AlertTriageSource, ThreatIntelSource
+from dashboard.agents.alert_triage import AlertTriageSource
+from dashboard.agents.common import _jsonl
+from dashboard.agents.threat_intel import ThreatIntelSource
 
 AGENTS = {"threat_intel": "Threat Intel Agent", "vulnerability": "Vulnerability Agent", "alert_triage": "Alert Triage Agent", "attack_detection": "Attack Detection Agent"}
 VERDICT_WORDS = {"likely_true_positive": "true positive", "likely_false_positive": "false positive",

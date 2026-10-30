@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 from dashboard.config import Settings
-from dashboard.sources import AlertTriageSource, ThreatIntelSource, VulnerabilitySource
+from dashboard.agents.alert_triage import AlertTriageSource
+from dashboard.agents.threat_intel import ThreatIntelSource
+from dashboard.agents.vulnerability import VulnerabilitySource
 
 STALE_HOURS = 24          # older data than this shows amber on the Home page
 

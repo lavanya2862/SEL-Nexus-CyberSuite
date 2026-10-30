@@ -24,7 +24,8 @@ import httpx
 
 from dashboard import devicenames
 from dashboard.config import PORTAL_DIR, SUITE_ENV, _load_env_file
-from dashboard.sources import AlertTriageSource, ThreatIntelSource
+from dashboard.agents.alert_triage import AlertTriageSource
+from dashboard.agents.threat_intel import ThreatIntelSource
 
 log = logging.getLogger("dashboard.help")
 

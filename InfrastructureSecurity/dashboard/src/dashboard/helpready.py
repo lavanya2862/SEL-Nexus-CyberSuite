@@ -11,7 +11,9 @@ from datetime import datetime
 from urllib.parse import quote, unquote
 
 from dashboard import fixproxy
-from dashboard.sources import AlertTriageSource, ThreatIntelSource, VulnerabilitySource
+from dashboard.agents.alert_triage import AlertTriageSource
+from dashboard.agents.threat_intel import ThreatIntelSource
+from dashboard.agents.vulnerability import VulnerabilitySource
 
 VERDICT_WORDS = {"likely_true_positive": "true positive", "likely_false_positive": "false positive",
                  "benign_positive": "false positive", "needs_investigation": "needs review"}
