@@ -12,9 +12,10 @@ from pathlib import Path
 
 import yaml
 from dotenv import load_dotenv
+from infra_core.settings import env
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SUITE_ENV = PROJECT_ROOT.parents[1] / ".env"  # the one settings file for the whole suite
+SUITE_ENV = PROJECT_ROOT.parents[2] / ".env"  # the one settings file for the whole suite (agents/<agent> -> repository root)
 CONFIG_DIR = PROJECT_ROOT / "config"
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 DEFENDER_BASE = "https://api.security.microsoft.com"
@@ -24,9 +25,37 @@ class ConfigError(ValueError):
     """Raised when settings are missing or invalid."""
 
 
+# Setting names from before the agents got their names; they still work (infra_core.settings logs a hint once).
+OLD_NAMES = {
+    "TRIAGE_AI_ROWS": ("UC4_AI_ROWS",),
+    "TRIAGE_ASK_DAILY_CAP": ("UC4_ASK_DAILY_CAP",),
+    "TRIAGE_AUTO_ISOLATE": ("UC4_AUTO_ISOLATE",),
+    "TRIAGE_AUTO_RESOLVE": ("UC4_AUTO_RESOLVE",),
+    "TRIAGE_CLIENT_ID": ("UC4_CLIENT_ID",),
+    "TRIAGE_CLIENT_SECRET": ("UC4_CLIENT_SECRET",),
+    "TRIAGE_CLOSE": ("UC4_CLOSE",),
+    "TRIAGE_CONTAIN": ("UC4_CONTAIN",),
+    "TRIAGE_DATA_DIR": ("UC4_DATA_DIR",),
+    "TRIAGE_GEMINI_DAILY_CAP": ("UC4_GEMINI_DAILY_CAP",),
+    "TRIAGE_LAB_ALERT_TITLES": ("UC4_LAB_ALERT_TITLES",),
+    "TRIAGE_LAB_DEVICES": ("UC4_LAB_DEVICES",),
+    "TRIAGE_LOG_DIR": ("UC4_LOG_DIR",),
+    "TRIAGE_LOOKBACK_DAYS": ("UC4_LOOKBACK_DAYS",),
+    "TRIAGE_MAX_QUERIES": ("UC4_MAX_QUERIES",),
+    "TRIAGE_MAX_ROWS": ("UC4_MAX_ROWS",),
+    "TRIAGE_MAX_TI_LOOKUPS": ("UC4_MAX_TI_LOOKUPS",),
+    "TRIAGE_RESPOND": ("UC4_RESPOND",),
+    "TRIAGE_SCAN_TYPE": ("UC4_SCAN_TYPE",),
+    "TRIAGE_SENTINEL_WORKSPACE_ID": ("UC4_SENTINEL_WORKSPACE_ID",),
+    "TRIAGE_TENANT_ID": ("UC4_TENANT_ID",),
+    "TRIAGE_THREAT_INTEL_DIR": ("UC4_UC1_DIR",),
+    "TRIAGE_WINDOW_HOURS": ("UC4_WINDOW_HOURS",),
+    "TRIAGE_WRITEBACK": ("UC4_WRITEBACK",),
+}
+
+
 def _env(name: str) -> str | None:
-    value = os.getenv(name, "").strip()
-    return value or None
+    return env(name, *OLD_NAMES.get(name, ()))
 
 
 def _int(name: str, default: int) -> int:
@@ -198,9 +227,9 @@ class Settings:
     def describe(self) -> list[tuple[str, bool, str]]:
         """(setting, is_set, why it matters) for every secret/key. Never includes values."""
         return [
-            ("UC4_TENANT_ID", bool(self.tenant_id), "Microsoft login (incidents, searches, device info)"),
-            ("UC4_CLIENT_ID", bool(self.client_id), "Microsoft login (incidents, searches, device info)"),
-            ("UC4_CLIENT_SECRET", bool(self.client_secret), "Microsoft login (incidents, searches, device info)"),
+            ("TRIAGE_TENANT_ID", bool(self.tenant_id), "Microsoft login (incidents, searches, device info)"),
+            ("TRIAGE_CLIENT_ID", bool(self.client_id), "Microsoft login (incidents, searches, device info)"),
+            ("TRIAGE_CLIENT_SECRET", bool(self.client_secret), "Microsoft login (incidents, searches, device info)"),
             ("AZURE_FOUNDRY_API_KEY", self.has_azure, "AI verdicts via Azure AI Foundry (with ENDPOINT + DEPLOYMENT)"
              + (" - in use" if self.ai_provider == "azure" else "")),
             ("GEMINI_API_KEY", self.has_gemini, "AI verdicts via Gemini (without any AI: rules-only triage)"
@@ -217,19 +246,19 @@ def load_settings(env_file: Path | None = None) -> Settings:
     load_dotenv(env_file if env_file is not None else SUITE_ENV, override=False)
     models = tuple(m for m in (_env("GEMINI_MODEL") or "gemini-3.5-flash-lite",
                                _env("GEMINI_FALLBACK_MODEL") or "gemini-3.1-flash-lite") if m)
-    devices = tuple(d.strip().lower() for d in (_env("UC4_LAB_DEVICES") or "opca-wks-01,opcc-wks-01").split(",")
+    devices = tuple(d.strip().lower() for d in (_env("TRIAGE_LAB_DEVICES") or "opca-wks-01,opcc-wks-01").split(",")
                     if d.strip())
     return Settings(
-        data_dir=_resolve(_env("UC4_DATA_DIR") or "./data"),
-        log_dir=_resolve(_env("UC4_LOG_DIR") or "./logs"),
-        tenant_id=_env("UC4_TENANT_ID"),
-        client_id=_env("UC4_CLIENT_ID"),
-        client_secret=_env("UC4_CLIENT_SECRET"),
+        data_dir=_resolve(_env("TRIAGE_DATA_DIR") or "./data"),
+        log_dir=_resolve(_env("TRIAGE_LOG_DIR") or "./logs"),
+        tenant_id=_env("TRIAGE_TENANT_ID"),
+        client_id=_env("TRIAGE_CLIENT_ID"),
+        client_secret=_env("TRIAGE_CLIENT_SECRET"),
         gemini_api_key=_env("GEMINI_API_KEY"),
         gemini_extra_keys=_extra_gemini_keys(),
         gemini_models=models,
         gemini_rpm=_int("GEMINI_RPM", 15),
-        gemini_daily_cap=_int("UC4_GEMINI_DAILY_CAP", 1500),
+        gemini_daily_cap=_int("TRIAGE_GEMINI_DAILY_CAP", 1500),
         ai_provider_choice=_provider(),
         azure_endpoint=_env("AZURE_FOUNDRY_ENDPOINT"),
         azure_api_key=_env("AZURE_FOUNDRY_API_KEY"),
@@ -241,25 +270,25 @@ def load_settings(env_file: Path | None = None) -> Settings:
         otx_api_key=_env("OTX_API_KEY"),
         abuseipdb_api_key=_env("ABUSEIPDB_API_KEY"),
         greynoise_api_key=_env("GREYNOISE_API_KEY"),
-        lookback_days=_int("UC4_LOOKBACK_DAYS", 30),
-        window_hours=min(72, max(1, _int("UC4_WINDOW_HOURS", 24))),
-        max_queries=_int("UC4_MAX_QUERIES", 12),
-        max_rows=min(1000, _int("UC4_MAX_ROWS", 500)),
-        ai_rows=_int("UC4_AI_ROWS", 15),
-        max_ti_lookups=_int("UC4_MAX_TI_LOOKUPS", 20),
-        writeback=_flag("UC4_WRITEBACK"),
-        contain=_flag("UC4_CONTAIN"),
-        close=_flag("UC4_CLOSE"),
-        auto_resolve=_flag("UC4_AUTO_RESOLVE"),
-        respond=_flag("UC4_RESPOND"),
-        auto_isolate=_flag("UC4_AUTO_ISOLATE"),
-        ask_daily_cap=max(0, _int("UC4_ASK_DAILY_CAP", 100)),
-        scan_type="Quick" if (_env("UC4_SCAN_TYPE") or "").lower() == "quick" else "Full",
-        threat_intel_dir=_resolve(_env("UC4_UC1_DIR") or "../threat_intel"),
+        lookback_days=_int("TRIAGE_LOOKBACK_DAYS", 30),
+        window_hours=min(72, max(1, _int("TRIAGE_WINDOW_HOURS", 24))),
+        max_queries=_int("TRIAGE_MAX_QUERIES", 12),
+        max_rows=min(1000, _int("TRIAGE_MAX_ROWS", 500)),
+        ai_rows=_int("TRIAGE_AI_ROWS", 15),
+        max_ti_lookups=_int("TRIAGE_MAX_TI_LOOKUPS", 20),
+        writeback=_flag("TRIAGE_WRITEBACK"),
+        contain=_flag("TRIAGE_CONTAIN"),
+        close=_flag("TRIAGE_CLOSE"),
+        auto_resolve=_flag("TRIAGE_AUTO_RESOLVE"),
+        respond=_flag("TRIAGE_RESPOND"),
+        auto_isolate=_flag("TRIAGE_AUTO_ISOLATE"),
+        ask_daily_cap=max(0, _int("TRIAGE_ASK_DAILY_CAP", 100)),
+        scan_type="Quick" if (_env("TRIAGE_SCAN_TYPE") or "").lower() == "quick" else "Full",
+        threat_intel_dir=_resolve(_env("TRIAGE_THREAT_INTEL_DIR") or "../threat_intel"),
         lab_devices=devices,
-        lab_alert_titles=tuple(t.strip().lower() for t in (_env("UC4_LAB_ALERT_TITLES") or "").split("|") if t.strip())
+        lab_alert_titles=tuple(t.strip().lower() for t in (_env("TRIAGE_LAB_ALERT_TITLES") or "").split("|") if t.strip())
         or LAB_ALERT_TITLES,
-        sentinel_workspace_id=_env("UC4_SENTINEL_WORKSPACE_ID"),
+        sentinel_workspace_id=_env("TRIAGE_SENTINEL_WORKSPACE_ID"),
     )
 
 

@@ -23,21 +23,21 @@ PARTS = {
 REBUILDS = {
     "threat_intel": {
         "copy": ["threat_intel.duckdb"],
-        "env": {"UC1_DATA_DIR": "{data}"},
+        "env": {"THREAT_INTEL_DATA_DIR": "{data}"},
         "run": ["-m", "threat_intel", "dashboard"],
         "outputs": ["dashboard/dashboard_data.json", "dashboard/site_data.json", "dashboard/clues.json",
                     "dashboard/threat_matches.json"],
     },
     "vulnerability": {
         "copy": ["reporting", "status", "reference", "ai", "raw"],
-        "env": {"UC3_DATA_DIR": "{data}"},
+        "env": {"VULN_DATA_DIR": "{data}"},
         "run": ["-c", "from vulnerability.config import load_settings; from vulnerability.dashboard.build import build_dashboard; "
                       "build_dashboard(load_settings(require_credentials=False))"],
         "outputs": ["dashboard/dashboard_data.json"],
     },
     "alert_triage": {
         "copy": ["alert_triage.duckdb"],
-        "env": {"UC4_DATA_DIR": "{data}"},
+        "env": {"TRIAGE_DATA_DIR": "{data}"},
         "run": ["-c", "from alert_triage.config import load_settings; from alert_triage.store import Store; "
                       "from alert_triage.export import export_all; "
                       "s = load_settings(); export_all(Store(s.db_path), s)"],

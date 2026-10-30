@@ -1,4 +1,4 @@
-"""'Agree & close in Defender' (UC4_CLOSE=1): after a PERSON decides on the website, Alert Triage writes that decision into the
+"""'Agree & close in Defender' (TRIAGE_CLOSE=1): after a PERSON decides on the website, Alert Triage writes that decision into the
 Defender incident through Graph, so the analyst doesn't have to do it again in the portal.
 
   harmless (benign positive) -> status resolved, classification "informational, expected activity"

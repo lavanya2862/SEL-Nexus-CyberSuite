@@ -46,7 +46,7 @@ def run(settings: Settings) -> bool:
     print("Alert Triage live test (small real calls)\n")
     results = []
     if not settings.has_microsoft:
-        results.append(_line(False, "Microsoft login", "UC4_TENANT_ID / UC4_CLIENT_ID / UC4_CLIENT_SECRET missing in .env"))
+        results.append(_line(False, "Microsoft login", "TRIAGE_TENANT_ID / TRIAGE_CLIENT_ID / TRIAGE_CLIENT_SECRET missing in .env"))
     else:
         try:
             login = EntraLogin(settings)

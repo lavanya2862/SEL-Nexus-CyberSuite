@@ -4,7 +4,7 @@
                Compared with two no-AI baselines: "history only" and "always escalate".
   Lab set    - our own simulated incidents, graded against the lab ledger (ledger.py).
 
-Outputs: rows in the `backtest` table, data/export/backtest.json (website), data/reports/UC4_Backtest_<date>.xlsx.
+Outputs: rows in the `backtest` table, data/export/backtest.json (website), data/reports/Alert_Triage_Backtest_<date>.xlsx.
 """
 
 from __future__ import annotations

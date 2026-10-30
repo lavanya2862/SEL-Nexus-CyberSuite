@@ -9,7 +9,7 @@ POST /api/help/ask (header X-Portal: help) answers the help chatbot's free quest
 data with Gemini; it never acts. The portal itself never isolates a device; POST /api/alert-triage/decide (X-Portal: decide) writes an analyst's decision into
 Defender through Alert Triage (false positive closed, true positive in progress) and POST /api/alert-triage/reopen (X-Portal: reopen) lets
 a person undo an automatic close. (Alert Triage may close or escalate lab incidents by itself
-when its own UC4_AUTO_RESOLVE setting is on; the portal shows what it did and links to Alert Triage's Reopen.)
+when its own TRIAGE_AUTO_RESOLVE setting is on; the portal shows what it did and links to Alert Triage's Reopen.)
 
 Sign-in (auth.py): every /api/* call except /api/health and /api/auth/* needs a valid portal_session cookie, or gets
 401. The cookie comes from /api/auth/login or /signup (local accounts) or /api/auth/cognito (Amazon Cognito ID

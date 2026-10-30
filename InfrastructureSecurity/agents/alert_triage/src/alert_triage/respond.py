@@ -1,11 +1,11 @@
-"""Response playbook (UC4_RESPOND=1).
+"""Response playbook (TRIAGE_RESPOND=1).
 
 After triage, every incident is put in one situation, and Defender's OWN built-in actions are requested when needed:
 
   false positive / expected activity -> nothing on the computer (autoresolve.py closes the incident)
   true positive, already blocked     -> ask Defender for an antivirus scan of each lab device on the incident
   true positive, still active        -> antivirus scan + stop-and-quarantine of the file(s) involved (high confidence);
-                                        isolate only if UC4_AUTO_ISOLATE=1 and it's high severity + high confidence
+                                        isolate only if TRIAGE_AUTO_ISOLATE=1 and it's high severity + high confidence
   needs review                       -> nothing on the computer (a person decides)
 
 Defender's automated investigation ("Full" automation level in the device group) does its own clean-up in parallel.

@@ -1,4 +1,4 @@
-"""Automatic handling (UC4_AUTO_RESOLVE=1), policy in config/auto_resolve.yaml:
+"""Automatic handling (TRIAGE_AUTO_RESOLVE=1), policy in config/auto_resolve.yaml:
 
   harmless / false alarm, high confidence, no safety rule, not high severity -> RESOLVED in Defender (incident and
       its alerts) with a comment explaining why

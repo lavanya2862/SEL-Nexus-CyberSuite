@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-UC1_FIX_CENTRE = "http://127.0.0.1:8700/fix"
+FIX_CENTRE_URL = "http://127.0.0.1:8700/fix"
 STATUS_LABEL = {"done": "fixed", "approved": "approved, waiting to run", "running": "running now",
                 "failed": "failed - see Threat Intel", "verified": "fixed and verified"}
 
@@ -41,4 +41,4 @@ def fixes_for(threat_intel_dir: Path | None, device_names: list[str]) -> dict:
                     "open": status not in ("done", "verified")})
     out.sort(key=lambda f: (not f["open"], f["app"] or ""))
     return {"available": True, "fixes": out, "open": sum(f["open"] for f in out),
-            "fix_centre": UC1_FIX_CENTRE, "plan_time": plan.get("generated_at")}
+            "fix_centre": FIX_CENTRE_URL, "plan_time": plan.get("generated_at")}

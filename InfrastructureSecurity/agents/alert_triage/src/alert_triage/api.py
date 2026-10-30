@@ -26,7 +26,7 @@ log = logging.getLogger("alert_triage.api")
 
 RETRYABLE_STATUS = {500, 502, 503, 504}
 HINTS = {
-    401: "The token was rejected. Check the app registration and that UC4_TENANT_ID is your Defender trial tenant.",
+    401: "The token was rejected. Check the app registration and that TRIAGE_TENANT_ID is your Defender trial tenant.",
     403: "Access denied. In Entra ID, add these permissions (Graph SecurityIncident.Read.All, "
          "SecurityAlert.Read.All, ThreatHunting.Read.All; WindowsDefenderATP Machine.Read.All) and click "
          "'Grant admin consent'.",

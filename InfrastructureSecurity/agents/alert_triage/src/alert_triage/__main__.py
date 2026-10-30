@@ -37,8 +37,8 @@ def cmd_check(settings: Settings) -> int:
     print("Alert Triage settings check (values are never shown)\n")
     for name, is_set, why in settings.describe():
         print(f"  [{'set ' if is_set else '----'}] {name:20s} {why}")
-    print(f"\n  pilot comments (UC4_WRITEBACK): {'ON' if settings.writeback else 'off'}")
-    print(f"  isolate stretch (UC4_CONTAIN):  {'ON' if settings.contain else 'off'}  lab devices: "
+    print(f"\n  pilot comments (TRIAGE_WRITEBACK): {'ON' if settings.writeback else 'off'}")
+    print(f"  isolate stretch (TRIAGE_CONTAIN):  {'ON' if settings.contain else 'off'}  lab devices: "
           f"{', '.join(settings.lab_devices)}")
     settings.ensure_dirs()
     store = Store(settings.db_path)

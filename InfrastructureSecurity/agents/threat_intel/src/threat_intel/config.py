@@ -11,9 +11,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
+from infra_core.settings import env
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SUITE_ENV = PROJECT_ROOT.parents[1] / ".env"  # the one settings file for the whole suite
+SUITE_ENV = PROJECT_ROOT.parents[2] / ".env"  # the one settings file for the whole suite (agents/<agent> -> repository root)
 CONFIG_DIR = PROJECT_ROOT / "config"
 DEFAULT_API_BASE = "https://api.security.microsoft.com"
 
@@ -22,9 +23,16 @@ class ConfigError(ValueError):
     """Raised when settings are missing or invalid."""
 
 
+# Setting names from before the agents got their names; they still work (infra_core.settings logs a hint once).
+OLD_NAMES = {
+    "THREAT_INTEL_DATA_DIR": ("UC1_DATA_DIR",),
+    "THREAT_INTEL_LOG_DIR": ("UC1_LOG_DIR",),
+    "THREAT_INTEL_VULN_AGENT_DIR": ("UC1_VULN_AGENT_DIR",),
+}
+
+
 def _env(name: str) -> str | None:
-    value = os.getenv(name, "").strip()
-    return value or None
+    return env(name, *OLD_NAMES.get(name, ()))
 
 
 def _int(name: str, default: int) -> int:
@@ -190,8 +198,8 @@ def load_settings(env_file: Path | None = None) -> Settings:
     if not api_base.startswith("https://"):
         raise ConfigError("DEFENDER_API_BASE must be an https:// address")
     return Settings(
-        data_dir=_resolve(_env("UC1_DATA_DIR") or "./data"),
-        log_dir=_resolve(_env("UC1_LOG_DIR") or "./logs"),
+        data_dir=_resolve(_env("THREAT_INTEL_DATA_DIR") or "./data"),
+        log_dir=_resolve(_env("THREAT_INTEL_LOG_DIR") or "./logs"),
         api_base=api_base,
         tenant_id=_env("DEFENDER_TENANT_ID"),
         client_id=_env("DEFENDER_CLIENT_ID"),
@@ -225,7 +233,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         fix_start_vms=(_env("FIX_START_VMS") or "1") not in ("0", "false", "no"),
         fix_devices=tuple(d.strip().lower() for d in (_env("FIX_DEVICES") or "").split(",") if d.strip()),
         attack_auto_fix=(_env("ATTACK_AUTO_FIX") or "1").lower() not in ("0", "false", "no"),
-        vuln_agent_dir=_resolve(_env("UC1_VULN_AGENT_DIR") or "../vulnerability"),
+        vuln_agent_dir=_resolve(_env("THREAT_INTEL_VULN_AGENT_DIR") or "../vulnerability"),
     )
 
 

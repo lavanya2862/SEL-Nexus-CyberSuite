@@ -15,10 +15,10 @@ DEFENDER_SCOPE = "https://api.securitycenter.microsoft.com/.default"
 
 # Common Entra error codes -> what the user should check (the codes appear in msal's error_description)
 HINTS = {
-    "AADSTS7000215": "The client secret is wrong. Copy the secret *Value* (not the Secret ID) into UC4_CLIENT_SECRET.",
+    "AADSTS7000215": "The client secret is wrong. Copy the secret *Value* (not the Secret ID) into TRIAGE_CLIENT_SECRET.",
     "AADSTS7000222": "The client secret has expired. Create a new one under Certificates & secrets.",
-    "AADSTS700016": "Application (client) ID not found in this tenant. Check UC4_CLIENT_ID and UC4_TENANT_ID.",
-    "AADSTS90002": "Tenant not found. Check UC4_TENANT_ID (Directory (tenant) ID on the app's Overview page).",
+    "AADSTS700016": "Application (client) ID not found in this tenant. Check TRIAGE_CLIENT_ID and TRIAGE_TENANT_ID.",
+    "AADSTS90002": "Tenant not found. Check TRIAGE_TENANT_ID (Directory (tenant) ID on the app's Overview page).",
 }
 
 
@@ -36,7 +36,7 @@ class EntraLogin:
     def __init__(self, settings: Settings, app_factory=msal.ConfidentialClientApplication):
         if not settings.has_microsoft:
             raise AuthError("Microsoft login details are missing in .env "
-                            "(UC4_TENANT_ID, UC4_CLIENT_ID, UC4_CLIENT_SECRET).")
+                            "(TRIAGE_TENANT_ID, TRIAGE_CLIENT_ID, TRIAGE_CLIENT_SECRET).")
         self.app = app_factory(settings.client_id, client_credential=settings.client_secret,
                                authority=f"https://login.microsoftonline.com/{settings.tenant_id}")
         self._lock = threading.Lock()

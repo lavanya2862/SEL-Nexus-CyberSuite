@@ -1,4 +1,4 @@
-"""Pilot write-back (OFF by default; UC4_WRITEBACK=1 turns it on): post one 'AI-triage' comment on each triaged
+"""Pilot write-back (OFF by default; TRIAGE_WRITEBACK=1 turns it on): post one 'AI-triage' comment on each triaged
 lab incident through Graph. It never changes the incident's status, classification or assignment.
 Needs the extra Graph permission SecurityIncident.ReadWrite.All.
 """

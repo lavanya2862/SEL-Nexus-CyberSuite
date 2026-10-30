@@ -61,12 +61,13 @@ def _on(value: str | None, default: bool) -> bool:
 def load_settings() -> Settings:
     env = {**_load_env_file(SUITE_ENV), **os.environ}
     return Settings(
-        threat_intel_dir=Path(env.get("PORTAL_UC1_DIR", ROOT_DIR / "agents" / "threat_intel")),
-        vulnerability_dir=Path(env.get("PORTAL_UC3_DIR", ROOT_DIR / "agents" / "vulnerability")),
-        alert_triage_dir=Path(env.get("PORTAL_UC4_DIR", ROOT_DIR / "agents" / "alert_triage")),
+        # the PORTAL_UC* names are from before the agents got their names; they still work
+        threat_intel_dir=Path(env.get("DASHBOARD_THREAT_INTEL_DIR") or env.get("PORTAL_UC1_DIR") or ROOT_DIR / "agents" / "threat_intel"),
+        vulnerability_dir=Path(env.get("DASHBOARD_VULNERABILITY_DIR") or env.get("PORTAL_UC3_DIR") or ROOT_DIR / "agents" / "vulnerability"),
+        alert_triage_dir=Path(env.get("DASHBOARD_ALERT_TRIAGE_DIR") or env.get("PORTAL_UC4_DIR") or ROOT_DIR / "agents" / "alert_triage"),
         port=int(env.get("PORTAL_PORT", 8800)),
-        fix_site=env.get("PORTAL_UC1_SITE", "http://127.0.0.1:8700"),
-        triage_site=env.get("PORTAL_UC4_SITE", "http://127.0.0.1:8900"),
+        fix_site=env.get("DASHBOARD_FIX_SITE") or env.get("PORTAL_UC1_SITE") or "http://127.0.0.1:8700",
+        triage_site=env.get("DASHBOARD_TRIAGE_SITE") or env.get("PORTAL_UC4_SITE") or "http://127.0.0.1:8900",
         auth_mode=env.get("PORTAL_AUTH", "local").strip().lower(),
         signup_open=_on(env.get("PORTAL_SIGNUP"), True),
         allowed_email_domains=tuple(d.strip().lower().lstrip("@") for d in env.get("PORTAL_ALLOWED_EMAIL_DOMAINS", "").split(",")

@@ -3,7 +3,7 @@ only (data/verdicts/<id>.json + the "What Defender did" view), in plain words. I
 isolate or change anything, and text an attacker can influence stays fenced as evidence, never instructions.
 
 Questions and answers are appended to data/feedback/ask.jsonl (the website never opens the database). A daily cap
-(UC4_ASK_DAILY_CAP, default 100) keeps the free Gemini quota for the triage runs.
+(TRIAGE_ASK_DAILY_CAP, default 100) keeps the free Gemini quota for the triage runs.
 """
 
 from __future__ import annotations

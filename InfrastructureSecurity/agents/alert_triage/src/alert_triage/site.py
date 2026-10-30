@@ -5,9 +5,9 @@ The portal is the only user interface; this service has no web pages, only the A
   GET  /api/queue        every triaged incident with its verdict and the latest analyst feedback
   POST /api/run          start a run now (header X-Alert-Triage: run)
   POST /api/feedback     analyst agree/disagree (header X-Alert-Triage: feedback)
-  POST /api/contain      human-approved isolate/release of a LAB device (header X-Alert-Triage: contain; off unless UC4_CONTAIN=1)
+  POST /api/contain      human-approved isolate/release of a LAB device (header X-Alert-Triage: contain; off unless TRIAGE_CONTAIN=1)
   POST /api/close        an analyst's decision written to Defender: false positive -> closed, true positive ->
-                         in progress (header X-Alert-Triage: close; off unless UC4_CLOSE=1)
+                         in progress (header X-Alert-Triage: close; off unless TRIAGE_CLOSE=1)
   POST /api/reopen       reopen an automatically closed incident (header X-Alert-Triage: reopen)
   POST /api/ask          "Ask about this incident": the AI answers from the incident's saved evidence (header X-Alert-Triage: ask)
 

@@ -1,8 +1,8 @@
-"""Containment stretch (OFF by default; UC4_CONTAIN=1 turns it on): a HUMAN clicks "Approve isolate" on the
+"""Containment stretch (OFF by default; TRIAGE_CONTAIN=1 turns it on): a HUMAN clicks "Approve isolate" on the
 website, confirms, and only then is a LAB device isolated in Defender (Selective isolation: it keeps its link to
 Defender). "Release" undoes it. The AI and the schedule can never call this.
 
-Allowed only for device names in UC4_LAB_DEVICES (default opca-wks-01, opcc-wks-01) and only for a device that
+Allowed only for device names in TRIAGE_LAB_DEVICES (default opca-wks-01, opcc-wks-01) and only for a device that
 appears on the incident. Needs WindowsDefenderATP Machine.Isolate.
 """
 
