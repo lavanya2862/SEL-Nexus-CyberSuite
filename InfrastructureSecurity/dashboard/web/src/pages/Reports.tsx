@@ -1,0 +1,83 @@
+import { useQuery } from '@tanstack/react-query'
+import { Download, FileSpreadsheet, FileText, FileType } from 'lucide-react'
+import { Empty, Panel } from '@/components/kit'
+import { ago } from '@/lib/format'
+
+interface ReportFile { name: string; size: number; modified: string | null }
+
+async function fetchReports(): Promise<{ threat_intel: ReportFile[]; vulnerability: ReportFile[]; alert_triage?: ReportFile[]; attack_detection?: ReportFile[] }> {
+  const res = await fetch('/api/reports')
+  if (!res.ok) throw new Error(`CyberSuite could not complete the request (error ${res.status})`)
+  return res.json()
+}
+
+const KIND: Record<string, { icon: typeof FileText; label: string }> = {
+  xlsx: { icon: FileSpreadsheet, label: 'Excel' },
+  docx: { icon: FileText, label: 'Word' },
+  pdf: { icon: FileType, label: 'PDF' },
+  md: { icon: FileText, label: 'Text' },
+}
+
+const size = (b: number) => (b > 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`)
+
+function describe(name: string) {
+  if (name.startsWith('Vulnerability_Report') && name.endsWith('.xlsx')) return 'Every vulnerability with its remediation, agent remediation plan and charts'
+  if (name.startsWith('Vulnerability_Report')) return 'Vulnerability report: summary, charts, priorities and agent remediation guidance'
+  if (name.startsWith('Threat_Intel_Report')) return 'New threats from this run, applicable threats and agent remediation steps'
+  if (name.startsWith('Attack_Detection_Report')) return 'Detections, evidence and agent resolution steps'
+  if (name.startsWith('Alert_Triage_Report')) return 'Incidents triaged in this run, verdicts, evidence and actions'
+  if (name.startsWith('Threat_Intel_AI_Spotcheck') || name.startsWith('UC1_AI_Spotcheck')) return 'Worksheet for manual review of agent output'
+  return 'Report file'
+}
+
+export function Reports() {
+  const { data, error } = useQuery({ queryKey: ['reports'], queryFn: fetchReports, refetchInterval: 60_000 })
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
+        <p className="mt-1 text-sm text-ink-3">Agent-generated reports in Word, PDF and Excel, most recent first.</p>
+      </div>
+      {error && <Empty text={String((error as Error).message)} />}
+      {data && (
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+          <Section uc="vulnerability" title="Vulnerability Agent" files={data.vulnerability} />
+          <Section uc="threat_intel" title="Threat Intel Agent" files={data.threat_intel.filter((f) => !f.name.startsWith('Attack_Detection'))} />
+          <Section uc="attack_detection" title="Attack Detection Agent" files={data.attack_detection ?? []} />
+          <Section uc="alert_triage" title="Alert Triage Agent" files={data.alert_triage ?? []} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Section({ uc, title, files }: { uc: 'threat_intel' | 'vulnerability' | 'alert_triage' | 'attack_detection'; title: string; files: ReportFile[] }) {
+  return (
+    <Panel className="p-6">
+      <div className="flex items-center gap-2 text-xs font-medium text-ink-3">
+        <span className={uc === 'attack_detection' ? 'size-2 rounded-full bg-signal' : uc === 'threat_intel' ? 'size-2 rounded-full bg-violet' : uc === 'alert_triage' ? 'size-2 rounded-full bg-rose' : 'size-2 rounded-full bg-sky'} /> Reports
+      </div>
+      <h2 className="mt-1 font-semibold tracking-tight">{title}</h2>
+      {files.length ? (
+        <ul className="mt-4 flex flex-col divide-y divide-hairline">
+          {files.map((f) => {
+            const ext = f.name.split('.').pop()?.toLowerCase() ?? ''
+            const k = KIND[ext] ?? KIND.md
+            return (
+              <li key={f.name} className="flex items-center gap-3 py-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-well"><k.icon className="size-[18px] text-ink-2" /></span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium" title={f.name}>{f.name}</div>
+                  <div className="truncate text-xs text-ink-3">{describe(f.name)} · {k.label} · {size(f.size)} · {ago(f.modified)}</div>
+                </div>
+                <a href={`/api/files/${uc}/${encodeURIComponent(f.name)}`} className="flex shrink-0 items-center gap-1.5 rounded-lg border border-hairline px-3 py-1.5 text-xs font-medium hover:bg-well">
+                  <Download className="size-3.5" /> Download
+                </a>
+              </li>
+            )
+          })}
+        </ul>
+      ) : <div className="mt-4"><Empty text="No files yet." /></div>}
+    </Panel>
+  )
+}

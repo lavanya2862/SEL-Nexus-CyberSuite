@@ -1,0 +1,93 @@
+{
+ "out/findings.json": {
+  "findings": [
+   {
+    "alerts": [
+     {
+      "category": "str",
+      "id": "str",
+      "severity": "str",
+      "status": "str",
+      "techniques": [],
+      "time": "str",
+      "title": "str"
+     }
+    ],
+    "created_at": "str",
+    "detail": "str",
+    "device_id": "str",
+    "device_name": "str",
+    "finding_id": "str",
+    "first_hit": "str",
+    "hunt_id": "str",
+    "is_test": "bool",
+    "kind": "str",
+    "opco": "str",
+    "threat_id": "str",
+    "timeline": [
+     {
+      "account": "null|str",
+      "time": "str",
+      "what": "str"
+     }
+    ],
+    "users": []
+   }
+  ],
+  "generated_at": "str",
+  "hunts": [
+   {
+    "duration_s": "number",
+    "error": "null",
+    "hunt_id": "str",
+    "name": "str",
+    "origin": "str",
+    "row_count": "number",
+    "run_id": "str",
+    "started_at": "str",
+    "status": "str",
+    "technique": "str",
+    "template": "str",
+    "threat_id": "null|str"
+   }
+  ],
+  "resolutions": [
+   {
+    "created_at": "str",
+    "done_when": "str",
+    "dropped": [],
+    "finding_id": "str",
+    "model": "null|str",
+    "source": "str",
+    "steps": [
+     "str"
+    ],
+    "what_happened": "str"
+   }
+  ],
+  "run_id": "str",
+  "schema_version": "number",
+  "threat_links": [
+   {
+    "link_type": "str",
+    "origin": "str",
+    "threat_id": "str",
+    "value": "str"
+   }
+  ],
+  "threats": [
+   {
+    "content_hash": "str",
+    "first_seen_at": "str",
+    "is_test": "bool",
+    "kind": "str",
+    "published_at": "str",
+    "source": "str",
+    "text": "str",
+    "threat_id": "str",
+    "title": "str",
+    "url": "str"
+   }
+  ]
+ }
+}

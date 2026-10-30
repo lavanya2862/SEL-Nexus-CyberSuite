@@ -1,0 +1,425 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat_intel.dashboard_data.schema.json",
+  "title": "Threat Intel Dashboard Data",
+  "description": "Written by Threat Intel Agent (agents/threat_intel, data/dashboard/dashboard_data.json); read by dashboard (dashboard/src/dashboard/sources.py:ThreatIntelSource.dashboard)",
+  "x-schema-version": 1,
+  "type": "object",
+  "required": [
+    "alerts",
+    "apps",
+    "days",
+    "devices",
+    "explorer",
+    "feeds",
+    "fixes",
+    "funnel",
+    "generated",
+    "hits",
+    "hunts",
+    "ioc_hits",
+    "ioc_types",
+    "matrix",
+    "metrics",
+    "periods",
+    "posture",
+    "ratings",
+    "scatter",
+    "series",
+    "tactics",
+    "threats_collected",
+    "top"
+  ],
+  "properties": {
+    "alerts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["alert_id", "created_at", "delivered", "is_test", "message", "rating", "threat_id", "title"],
+        "properties": {
+          "alert_id": { "type": "string" },
+          "created_at": { "type": "string" },
+          "delivered": { "type": "string" },
+          "is_test": { "type": "boolean" },
+          "message": { "type": "string" },
+          "rating": { "type": "string" },
+          "threat_id": { "type": "string" },
+          "title": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "apps": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "days": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "devices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["device_name", "exposed", "hits", "last_seen", "opco", "os_platform", "test_hits", "vulns"],
+        "properties": {
+          "device_name": { "type": "string" },
+          "exposed": { "type": "number" },
+          "hits": { "type": "number" },
+          "last_seen": { "type": "string" },
+          "opco": { "type": "string" },
+          "os_platform": { "type": "string" },
+          "test_hits": { "type": "number" },
+          "vulns": { "type": "number" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "explorer": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "action",
+          "chips",
+          "devices",
+          "first_seen",
+          "hits",
+          "id",
+          "kind",
+          "published",
+          "rating",
+          "score",
+          "source",
+          "summary",
+          "test",
+          "title",
+          "url",
+          "why"
+        ],
+        "properties": {
+          "action": { "type": "string" },
+          "chips": { "type": "array", "items": { "type": "string" } },
+          "devices": { "type": "string" },
+          "first_seen": { "type": "string" },
+          "hits": { "type": "number" },
+          "id": { "type": "string" },
+          "kind": { "type": "string" },
+          "match": { "type": ["string", "null"] },
+          "on_us": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["announced", "app", "cve", "device", "known", "match", "version"],
+              "properties": {
+                "announced": { "type": "string" },
+                "app": { "type": "string" },
+                "cve": { "type": "string" },
+                "device": { "type": "string" },
+                "known": { "type": "string" },
+                "match": { "type": "string" },
+                "version": { "type": "string" }
+              },
+              "additionalProperties": true
+            }
+          },
+          "published": { "type": "string" },
+          "rating": { "type": "string" },
+          "score": { "type": "number" },
+          "source": { "type": "string" },
+          "summary": { "type": "string" },
+          "test": { "type": "boolean" },
+          "title": { "type": "string" },
+          "url": { "type": "string" },
+          "why": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "feeds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["feed", "last_count", "last_run_at", "last_status"],
+        "properties": {
+          "cursor": { "type": ["string", "null"] },
+          "feed": { "type": "string" },
+          "last_count": { "type": "number" },
+          "last_error": { "type": ["string", "null"] },
+          "last_run_at": { "type": "string" },
+          "last_status": { "type": "string" },
+          "last_success_at": { "type": ["string", "null"] }
+        },
+        "additionalProperties": true
+      }
+    },
+    "fixes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["app", "cves", "devices", "max_cvss", "versions"],
+        "properties": {
+          "app": { "type": "string" },
+          "cves": { "type": "number" },
+          "devices": { "type": "number" },
+          "max_cvss": { "type": "number" },
+          "versions": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "funnel": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["note", "stage", "value"],
+        "properties": {
+          "note": { "type": "string" },
+          "stage": { "type": "string" },
+          "value": { "type": "number" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "generated": { "type": "string" },
+    "hits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["alerts", "created_at", "detail", "device_id", "device_name", "finding_id", "first_hit", "hunt_id", "is_test", "kind", "opco", "resolution", "threat_id", "timeline", "title", "users"],
+        "properties": {
+          "alerts": { "type": "array", "items": { "type": "string" } },
+          "created_at": { "type": "string" },
+          "detail": { "type": "string" },
+          "device_id": { "type": "string" },
+          "device_name": { "type": "string" },
+          "finding_id": { "type": "string" },
+          "first_hit": { "type": "string" },
+          "hunt_id": { "type": "string" },
+          "is_test": { "type": "boolean" },
+          "kind": { "type": "string" },
+          "opco": { "type": "string" },
+          "resolution": {
+            "type": ["object", "null"],
+            "properties": {
+              "done_when": { "type": "string" },
+              "model": { "type": ["string", "null"] },
+              "source": { "type": "string" },
+              "steps": { "type": "array", "items": { "type": "string" } },
+              "what_happened": { "type": "string" }
+            }
+          },
+          "threat_id": { "type": "string" },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["time", "what"],
+              "properties": {
+                "account": { "type": ["string", "null"] },
+                "time": { "type": "string" },
+                "what": { "type": "string" }
+              },
+              "additionalProperties": true
+            }
+          },
+          "title": { "type": "string" },
+          "users": { "type": "array" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "hunts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "origin", "row_count", "status", "technique"],
+        "properties": {
+          "error": { "type": ["string", "null"] },
+          "name": { "type": "string" },
+          "origin": { "type": "string" },
+          "row_count": { "type": "number" },
+          "status": { "type": "string" },
+          "technique": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "ioc_hits": { "type": "number" },
+    "ioc_types": {
+      "type": "object",
+      "required": ["domain", "ip", "md5", "sha1", "sha256", "url"],
+      "properties": {
+        "domain": { "type": "number" },
+        "ip": { "type": "number" },
+        "md5": { "type": "number" },
+        "sha1": { "type": "number" },
+        "sha256": { "type": "number" },
+        "url": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "last_run": {
+      "type": ["object", "null"],
+      "properties": {
+        "command": { "type": "string" },
+        "finished_at": { "type": "string" },
+        "run_id": { "type": "string" },
+        "started_at": { "type": "string" },
+        "status": { "type": "string" },
+        "steps": { "type": "string" }
+      }
+    },
+    "matrix": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["app", "cves", "device_name"],
+        "properties": {
+          "app": { "type": "string" },
+          "cves": { "type": "number" },
+          "device_name": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "metrics": { "type": "object" },
+    "model": { "type": ["string", "null"] },
+    "periods": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["days", "earlier", "funnel", "ioc_types", "ratings", "series", "sources", "start", "tactics", "threats_collected"],
+        "properties": {
+          "days": { "type": "array", "items": { "type": "string" } },
+          "earlier": { "type": "object" },
+          "funnel": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["note", "stage", "value"],
+              "properties": {
+                "note": { "type": "string" },
+                "stage": { "type": "string" },
+                "value": { "type": "number" }
+              }
+            }
+          },
+          "ioc_types": { "type": "object" },
+          "ratings": { "type": "object" },
+          "series": { "type": "object" },
+          "sources": { "type": "object" },
+          "start": { "type": "string" },
+          "tactics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["tactic", "threats"],
+              "properties": {
+                "tactic": { "type": "string" },
+                "threats": { "type": "number" }
+              }
+            }
+          },
+          "threats_collected": { "type": "number" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "posture": {
+      "type": "object",
+      "required": ["affecting", "rating", "urgent"],
+      "properties": {
+        "affecting": { "type": "number" },
+        "rating": { "type": "string" },
+        "urgent": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "ratings": { "type": "object" },
+    "scatter": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": { "type": ["number", "string"] }
+      }
+    },
+    "series": { "type": "object" },
+    "tactics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tactic", "threats"],
+        "properties": {
+          "tactic": { "type": "string" },
+          "threats": { "type": "number" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "threats_collected": { "type": "number" },
+    "top": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "action",
+          "chips",
+          "devices",
+          "first_seen",
+          "hits",
+          "id",
+          "kind",
+          "match",
+          "published",
+          "rating",
+          "score",
+          "source",
+          "summary",
+          "test",
+          "title",
+          "url",
+          "why"
+        ],
+        "properties": {
+          "action": { "type": "string" },
+          "chips": { "type": "array", "items": { "type": "string" } },
+          "devices": { "type": "string" },
+          "first_seen": { "type": "string" },
+          "hits": { "type": "number" },
+          "id": { "type": "string" },
+          "kind": { "type": "string" },
+          "match": { "type": "string" },
+          "on_us": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["announced", "app", "cve", "device", "known", "match", "version"],
+              "properties": {
+                "announced": { "type": "string" },
+                "app": { "type": "string" },
+                "cve": { "type": "string" },
+                "device": { "type": "string" },
+                "known": { "type": "string" },
+                "match": { "type": "string" },
+                "version": { "type": "string" }
+              },
+              "additionalProperties": true
+            }
+          },
+          "published": { "type": "string" },
+          "rating": { "type": "string" },
+          "score": { "type": "number" },
+          "source": { "type": "string" },
+          "summary": { "type": "string" },
+          "test": { "type": "boolean" },
+          "title": { "type": "string" },
+          "url": { "type": "string" },
+          "why": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,68 @@
+"""Every module of every part imports with that part's own Python environment."""
+from __future__ import annotations
+
+import subprocess
+
+import pytest
+
+from layout import PARTS, part_dir, python
+
+WALK = """
+import importlib, pkgutil, sys, traceback
+pkg = importlib.import_module(sys.argv[1])
+bad = []
+for m in pkgutil.walk_packages(pkg.__path__, pkg.__name__ + "."):
+    try:
+        importlib.import_module(m.name)
+    except Exception:
+        bad.append(m.name + ": " + traceback.format_exc(limit=1).strip().splitlines()[-1])
+print("\\n".join(bad))
+sys.exit(1 if bad else 0)
+"""
+
+
+@pytest.mark.parametrize("part", sorted(PARTS))
+def test_every_module_imports(part):
+    py = python(part)
+    if not py.exists():
+        pytest.skip(f"{part} has no .venv yet (the Start script makes it)")
+    done = subprocess.run([str(py), "-c", WALK, PARTS[part]["package"]], cwd=part_dir(part), capture_output=True,
+                          text=True, encoding="utf-8", errors="replace", timeout=300)
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
+def test_every_launched_module_exists():
+    """Code that starts another part (`python -m <module>`) names a module that is really there."""
+    import re
+
+    from layout import ROOT
+
+    known = {spec["package"] for spec in PARTS.values()}
+    wrong = []
+    for f in [*ROOT.glob("agents/*/src/**/*.py"), *ROOT.glob("dashboard/src/**/*.py"), *ROOT.glob("shared/*/src/**/*.py")]:
+        for m in re.finditer(r'"-m", "([a-z_.]+)"', f.read_text(encoding="utf-8")):
+            if m.group(1).split(".")[0] not in known:
+                wrong.append(f"{f.relative_to(ROOT)}: -m {m.group(1)}")
+    assert wrong == []
+
+
+@pytest.mark.parametrize("part", sorted(PARTS))
+def test_shared_library_imports(part):
+    py = python(part)
+    if not py.exists():
+        pytest.skip(f"{part} has no .venv yet")
+    # agents use all of it; the dashboard writes no reports, so it lacks docstyle's libraries and imports only the rest
+    code = WALK if part != "dashboard" else "import infra_core, infra_core.settings"
+    done = subprocess.run([str(py), "-c", code, "infra_core"], cwd=part_dir(part), capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=300)
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
+@pytest.mark.parametrize("part", sorted(p for p in PARTS if p != "dashboard"))
+def test_command_line_answers(part):
+    py = python(part)
+    if not py.exists():
+        pytest.skip(f"{part} has no .venv yet")
+    done = subprocess.run([str(py), "-m", PARTS[part]["package"], "--help"], cwd=part_dir(part), capture_output=True,
+                          text=True, encoding="utf-8", errors="replace", timeout=120)
+    assert done.returncode == 0, done.stdout + done.stderr

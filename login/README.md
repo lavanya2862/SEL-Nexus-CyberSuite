@@ -51,4 +51,4 @@ Read the `portal_session` cookie. It is `<body>.<signature>`:
 Accept the cookie only if the signature matches, `exp` is in the future and (when there is a `domains` list) your
 module's id is in it. Otherwise redirect to
 `http://127.0.0.1:8000/?next=<the page's full address>`. `accounts.py` (`Sessions.read`) is the reference code;
-Infrastructure Security does the same in `InfrastructureSecurity/Unified_Cyber_Portal/src/portal/auth.py`.
+Infrastructure Security does the same in `InfrastructureSecurity/dashboard/src/dashboard/auth.py`.

@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "alert_triage.triage_data.schema.json",
+  "title": "Alert Triage Data",
+  "description": "Written by Alert Triage Agent (agents/alert_triage, data/export/triage_data.json); read by dashboard (dashboard/src/dashboard/sources.py:AlertTriageSource.queue)",
+  "x-schema-version": 1,
+  "type": "object",
+  "required": [
+    "by_verdict",
+    "generated_at",
+    "queue",
+    "totals"
+  ],
+  "properties": {
+    "by_verdict": {
+      "type": "object",
+      "required": [
+        "likely_false_positive",
+        "likely_true_positive",
+        "needs_investigation"
+      ],
+      "properties": {
+        "likely_false_positive": { "type": "number" },
+        "likely_true_positive": { "type": "number" },
+        "needs_investigation": { "type": "number" }
+      },
+      "additionalProperties": { "type": "number" }
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "last_run": {
+      "type": ["string", "null"]
+    },
+    "queue": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "accounts",
+          "ai_status",
+          "confidence",
+          "created_at",
+          "devices",
+          "escalate",
+          "guardrails",
+          "incident_id",
+          "is_lab",
+          "queries_run",
+          "recommended_severity",
+          "seconds",
+          "severity",
+          "sources",
+          "status",
+          "summary",
+          "ti_lookups",
+          "title",
+          "triaged_at",
+          "updated_at",
+          "verdict",
+          "web_url"
+        ],
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "ai_status": { "type": "string" },
+          "classification": { "type": ["string", "null"] },
+          "confidence": { "type": "string" },
+          "created_at": { "type": "string" },
+          "determination": { "type": ["string", "null"] },
+          "devices": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "escalate": { "type": "boolean" },
+          "feedback": {
+            "type": ["object", "null"],
+            "properties": {
+              "agree": { "type": "boolean" },
+              "analyst_verdict": { "type": ["string", "null"] }
+            }
+          },
+          "guardrails": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "incident_id": { "type": "string" },
+          "is_lab": { "type": "boolean" },
+          "last_action": {
+            "type": ["object", "null"],
+            "properties": {
+              "action": { "type": "string" },
+              "done_at": { "type": "string" },
+              "status": { "type": "string" }
+            }
+          },
+          "queries_run": { "type": "number" },
+          "recommended_severity": { "type": "string" },
+          "seconds": { "type": "number" },
+          "severity": { "type": "string" },
+          "sources": { "type": "string" },
+          "status": { "type": "string" },
+          "summary": { "type": "string" },
+          "ti_lookups": { "type": "number" },
+          "title": { "type": "string" },
+          "triaged_at": { "type": "string" },
+          "updated_at": { "type": "string" },
+          "verdict": { "type": "string" },
+          "web_url": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "totals": {
+      "type": "object",
+      "required": [
+        "auto_resolved",
+        "escalate",
+        "incidents",
+        "lab",
+        "resolved"
+      ],
+      "properties": {
+        "auto_resolved": { "type": "number" },
+        "escalate": { "type": "number" },
+        "incidents": { "type": "number" },
+        "lab": { "type": "number" },
+        "resolved": { "type": "number" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

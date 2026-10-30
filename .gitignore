@@ -34,6 +34,9 @@ __pycache__/
 # ---- Drafts, decks and notes (only READMEs are kept)
 *.md
 !README.md
+# ...and the guides every chat and person working on Infrastructure Security reads first
+!InfrastructureSecurity/CLAUDE.md
+!InfrastructureSecurity/docs/*.md
 *.ppt
 *.pptx
 ~$*
