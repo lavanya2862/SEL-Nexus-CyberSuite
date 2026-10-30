@@ -186,8 +186,14 @@ web/src/
 | Old | New |
 |---|---|
 | Routes `/uc1`, `/uc1/hunts`, `/uc3`, `/respond` | `/threat-intel`, `/attack-detection`, `/vulnerabilities`, `/alert-triage`, `/fixes` |
-| Env `UC1_*`, `UC3_*`, `UC4_*`, `PORTAL_UC*` | `THREAT_INTEL_*`, `ATTACK_*`, `VULN_*`, `TRIAGE_*`, `REMEDIATION_*`, `DASHBOARD_*` (old names accepted with a warning for one release) |
+| Env `UC1_*`, `UC3_*`, `UC4_*`, `PORTAL_UC*` | `THREAT_INTEL_*`, `ATTACK_*`, `VULN_*`, `TRIAGE_*`, `REMEDIATION_*`, `DASHBOARD_*` (old names accepted with a warning for one release). The sign-in settings `PORTAL_LOGIN_URL`, `PORTAL_AUTH_DIR` etc. stay: the sign-in page shares them |
 | Report files `UC1_*`, `UC3_*` | named after the agent |
+| Run keys `uc1`, `uc3`, `uc4`, `attack` | `threat_intel`, `vulnerability`, `alert_triage`, `attack_detection`. Runs saved under the old keys are still read (`OLD_KEYS` in `dashboard/src/dashboard/runs.py`) |
+| Databases `data/uc1.duckdb` etc. | `data/<agent>.duckdb`; the Start script renames an old file once |
+
+**Names that stay on purpose**, because they are names of real things outside the code: the lab objects Defender has
+already seen (`UC1LabTest`, the `UC4LAB` ledger lines), the Azure app registrations (`UC1-Hunting-Agent-Lab`,
+`UC1-ThreatIntel-PoC`, `UC4-Triage-Agent-Lab`) and the resource group `rg-uc3-lab`. Rename them in Azure first, then here.
 
 ## Phases
 
@@ -197,8 +203,8 @@ four agents are worked on in parallel, each in its own chat and branch.
 | Phase | What | Status |
 |---|---|---|
 | 0. Safety net | `tests/`: every module imports, every command line answers, each agent rebuilds its dashboard data from a copy of its database, and every read-only dashboard API keeps its shape (`tests/snapshots/`, keys and types only, no data). Run: `<dashboard venv>\Scripts\python.exe -m pytest tests -q` from this folder. When a phase moves things, update `tests/layout.py` only | done |
-| 1. Rename and move | New folders, package names, routes, labels, env names with aliases, Start/Stop scripts. `git mv` so history survives. Phase 0 tests still pass | not started |
-| 2. infra_core | Move the duplicated code into `shared/infra_core`; merge the duplicated catalogs | not started |
+| 1. Rename and move | `agents/threat_intel`, `agents/vulnerability`, `agents/alert_triage` and `dashboard` with their packages; website pages in `web/src/agents/<agent>/`; routes and API paths by agent name; service headers `X-Threat-Intel`, `X-Alert-Triage`; databases and logs named after the agent; the Start script moves data out of the old folders once. Phase 0 tests pass with only the run, report and summary keys renamed | done |
+| 2. infra_core | Move the duplicated code into `shared/infra_core`; merge the duplicated catalogs; rename the environment settings (old names still accepted) | not started |
 | 3. Split | Attack Detection out of Threat Intel; fix engine to `shared/remediation`; `contracts/`; dashboard adapters and progress events | not started |
 | 4. Make each agent work | One chat per agent, in parallel (see below) | not started |
 
@@ -232,4 +238,5 @@ outside its own folder.
 - Today it lives inside the Threat Intel folder (`hunting/`, `correlate.py`, `attack_report.py`, `resolve.py`).
 
 ### Alert Triage Agent
-- `uc1link.py` reads the Threat Intel folder's private fix plan; replace it with the Fix Centre in phase 3.
+- `fixlink.py` (was `uc1link.py`) reads the Threat Intel folder's private fix plan; replace it with the Fix Centre in
+  phase 3. Its key in the triage context is now `fixes` (was `uc1`); verdicts saved before phase 1 still say `uc1`.

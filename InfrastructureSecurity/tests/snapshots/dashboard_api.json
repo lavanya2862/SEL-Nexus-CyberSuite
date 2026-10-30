@@ -524,21 +524,21 @@
   ]
  },
  "reports": {
-  "uc1": [
+  "alert_triage": [
    {
     "modified": "str",
     "name": "str",
     "size": "number"
    }
   ],
-  "uc3": [
+  "threat_intel": [
    {
     "modified": "str",
     "name": "str",
     "size": "number"
    }
   ],
-  "uc4": [
+  "vulnerability": [
    {
     "modified": "str",
     "name": "str",
@@ -547,7 +547,46 @@
   ]
  },
  "runs": {
-  "attack": {
+  "alert_triage": {
+   "exit_code": "number",
+   "facts": [
+    {
+     "hint": "str",
+     "label": "str",
+     "value": "str"
+    }
+   ],
+   "files_from": "str",
+   "finished_at": "str",
+   "fix": "null",
+   "lines": "number",
+   "log_tail": [
+    "str"
+   ],
+   "message": "str",
+   "new_ids": {},
+   "report_file": "str",
+   "report_files": [
+    "str"
+   ],
+   "run_id": "str",
+   "started_at": "str",
+   "status": "str",
+   "steps": [
+    {
+     "description": "str",
+     "detail": "str",
+     "finished_at": "str",
+     "key": "str",
+     "label": "str",
+     "started_at": "str",
+     "status": "str"
+    }
+   ],
+   "typical_seconds": "number",
+   "uc": "str"
+  },
+  "attack_detection": {
    "exit_code": "number",
    "facts": [
     {
@@ -609,7 +648,7 @@
    "uc": "str",
    "waiting_for_you": "bool"
   },
-  "uc1": {
+  "threat_intel": {
    "exit_code": "number",
    "facts": [
     {
@@ -686,7 +725,7 @@
    "uc": "str",
    "waiting_for_you": "bool"
   },
-  "uc3": {
+  "vulnerability": {
    "exit_code": "number",
    "facts": [
     {
@@ -748,45 +787,6 @@
    "typical_seconds": "number",
    "uc": "str",
    "waiting_for_you": "bool"
-  },
-  "uc4": {
-   "exit_code": "number",
-   "facts": [
-    {
-     "hint": "str",
-     "label": "str",
-     "value": "str"
-    }
-   ],
-   "files_from": "str",
-   "finished_at": "str",
-   "fix": "null",
-   "lines": "number",
-   "log_tail": [
-    "str"
-   ],
-   "message": "str",
-   "new_ids": {},
-   "report_file": "str",
-   "report_files": [
-    "str"
-   ],
-   "run_id": "str",
-   "started_at": "str",
-   "status": "str",
-   "steps": [
-    {
-     "description": "str",
-     "detail": "str",
-     "finished_at": "str",
-     "key": "str",
-     "label": "str",
-     "started_at": "str",
-     "status": "str"
-    }
-   ],
-   "typical_seconds": "number",
-   "uc": "str"
   }
  },
  "runs.history": [
@@ -851,6 +851,34 @@
   }
  ],
  "summary": {
+  "alert_triage": {
+   "latest": [
+    {
+     "confidence": "str",
+     "devices": [
+      "str"
+     ],
+     "escalate": "bool",
+     "incident_id": "str",
+     "is_lab": "bool",
+     "title": "str",
+     "triaged_at": "str",
+     "verdict": "str"
+    }
+   ],
+   "totals": {
+    "awaiting_review": "number",
+    "by_verdict": {
+     "likely_false_positive": "number",
+     "likely_true_positive": "number",
+     "needs_investigation": "number"
+    },
+    "closed": "number",
+    "escalate": "number",
+    "incidents": "number",
+    "lab": "number"
+   }
+  },
   "devices": [
    {
     "critical": "number",
@@ -884,11 +912,11 @@
    }
   ],
   "reports": {
-   "uc1": "number",
-   "uc3": "number"
+   "threat_intel": "number",
+   "vulnerability": "number"
   },
   "stale_hours": "number",
-  "uc1": {
+  "threat_intel": {
    "devices": [
     {
      "device_name": "str",
@@ -962,7 +990,7 @@
     "urgent": "number"
    }
   },
-  "uc3": {
+  "vulnerability": {
    "ai_fixes": {
     "ai_enabled": "bool",
     "built_at": "str",
@@ -1096,34 +1124,6 @@
      "total": "number"
     }
    ]
-  },
-  "uc4": {
-   "latest": [
-    {
-     "confidence": "str",
-     "devices": [
-      "str"
-     ],
-     "escalate": "bool",
-     "incident_id": "str",
-     "is_lab": "bool",
-     "title": "str",
-     "triaged_at": "str",
-     "verdict": "str"
-    }
-   ],
-   "totals": {
-    "awaiting_review": "number",
-    "by_verdict": {
-     "likely_false_positive": "number",
-     "likely_true_positive": "number",
-     "needs_investigation": "number"
-    },
-    "closed": "number",
-    "escalate": "number",
-    "incidents": "number",
-    "lab": "number"
-   }
   }
  },
  "threat_intel.clues": [

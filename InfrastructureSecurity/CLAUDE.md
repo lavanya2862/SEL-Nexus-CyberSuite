@@ -4,7 +4,9 @@ Read `docs/ARCHITECTURE.md` before changing anything here. It holds the target s
 and the notes for each agent.
 
 - Say Threat Intel Agent, Vulnerability Agent, Attack Detection Agent and Alert Triage Agent. Never UC1, UC3 or UC4
-  in code, labels, routes, file names or messages.
+  in code, labels, routes, file names or messages (except the real external names listed under Naming in the guide).
+- Check every change with `dashboard\.venv\Scripts\python.exe -m pytest tests -q` from this folder, and build the
+  website (`npm run build` in `dashboard\web`) when pages changed.
 - When working on one agent, change only that agent's folder, its dashboard pages and its dashboard adapter. Anything
   outside that (infra_core, contracts, the Fix Centre, the dashboard shell, Start/Stop scripts) is a separate small
   change: describe it in the agent's notes in `docs/ARCHITECTURE.md` and ask before making it.

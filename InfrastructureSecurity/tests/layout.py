@@ -11,10 +11,10 @@ ROOT = Path(__file__).resolve().parents[1]           # InfrastructureSecurity/
 
 # part -> folder, Python package, and the venv that runs it
 PARTS = {
-    "threat_intel": {"dir": "UC1_Threat_Intel_Hunting_Agent", "package": "uc1"},
-    "vulnerability": {"dir": "UC3_MDE_Vuln_Extraction", "package": "uc3"},
-    "alert_triage": {"dir": "UC4_Alert_Triage_Agent", "package": "uc4"},
-    "dashboard": {"dir": "Unified_Cyber_Portal", "package": "portal"},
+    "threat_intel": {"dir": "agents/threat_intel", "package": "threat_intel"},
+    "vulnerability": {"dir": "agents/vulnerability", "package": "vulnerability"},
+    "alert_triage": {"dir": "agents/alert_triage", "package": "alert_triage"},
+    "dashboard": {"dir": "dashboard", "package": "dashboard"},
 }
 
 # How each agent rebuilds the data the dashboard shows, from a COPY of its database (never the live one).
@@ -22,23 +22,24 @@ PARTS = {
 # env: points the agent at that temporary folder; run: arguments after `python`; outputs: files it must write there
 REBUILDS = {
     "threat_intel": {
-        "copy": ["uc1.duckdb"],
+        "copy": ["threat_intel.duckdb"],
         "env": {"UC1_DATA_DIR": "{data}"},
-        "run": ["-m", "uc1", "dashboard"],
+        "run": ["-m", "threat_intel", "dashboard"],
         "outputs": ["dashboard/dashboard_data.json", "dashboard/site_data.json", "dashboard/clues.json",
                     "dashboard/threat_matches.json"],
     },
     "vulnerability": {
         "copy": ["reporting", "status", "reference", "ai", "raw"],
         "env": {"UC3_DATA_DIR": "{data}"},
-        "run": ["-c", "from uc3.config import load_settings; from uc3.dashboard.build import build_dashboard; "
+        "run": ["-c", "from vulnerability.config import load_settings; from vulnerability.dashboard.build import build_dashboard; "
                       "build_dashboard(load_settings(require_credentials=False))"],
         "outputs": ["dashboard/dashboard_data.json"],
     },
     "alert_triage": {
-        "copy": ["uc4.duckdb"],
+        "copy": ["alert_triage.duckdb"],
         "env": {"UC4_DATA_DIR": "{data}"},
-        "run": ["-c", "from uc4.config import load_settings; from uc4.store import Store; from uc4.export import export_all; "
+        "run": ["-c", "from alert_triage.config import load_settings; from alert_triage.store import Store; "
+                      "from alert_triage.export import export_all; "
                       "s = load_settings(); export_all(Store(s.db_path), s)"],
         "outputs": ["export/triage_data.json"],
     },
@@ -49,15 +50,15 @@ REBUILDS = {
 API = {
     "summary": "/api/summary",
     "device_names": "/api/device-names",
-    "vulnerability.dashboard": "/api/uc3/dashboard",
-    "threat_intel.dashboard": "/api/uc1/dashboard",
-    "threat_intel.clues": "/api/uc1/clues",
-    "threat_intel.matches": "/api/uc1/matches",
-    "threat_intel.matches_one": "/api/uc1/matches/{software}",
-    "threat_intel.threat": "/api/uc1/threats/{threat}",
-    "alert_triage.queue": "/api/uc4/queue",
-    "alert_triage.case": "/api/uc4/cases/{incident}",
-    "alert_triage.quality": "/api/uc4/quality",
+    "vulnerability.dashboard": "/api/vulnerability/dashboard",
+    "threat_intel.dashboard": "/api/threat-intel/dashboard",
+    "threat_intel.clues": "/api/threat-intel/clues",
+    "threat_intel.matches": "/api/threat-intel/matches",
+    "threat_intel.matches_one": "/api/threat-intel/matches/{software}",
+    "threat_intel.threat": "/api/threat-intel/threats/{threat}",
+    "alert_triage.queue": "/api/alert-triage/queue",
+    "alert_triage.case": "/api/alert-triage/cases/{incident}",
+    "alert_triage.quality": "/api/alert-triage/quality",
     "reports": "/api/reports",
     "runs": "/api/runs",
     "runs.history": "/api/runs/history",

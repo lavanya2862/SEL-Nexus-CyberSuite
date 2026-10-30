@@ -5,7 +5,7 @@ good sign-in the browser gets a signed, HttpOnly `portal_session` cookie. Browse
 same host, so every module on 127.0.0.1 (Infrastructure Security on :8800, Application Security on :8500) receives the
 same cookie and checks it with the same key in data/auth/session.key.
 
-The file formats match InfrastructureSecurity/Unified_Cyber_Portal/src/portal/auth.py, which reads the same folder
+The file formats match InfrastructureSecurity/dashboard/src/dashboard/auth.py, which reads the same folder
 (PORTAL_AUTH_DIR) to check the cookie. Change one, change the other.
 
 Sign-in, sign-up and sign-out are written to data/auth/signins.jsonl (who, when, from where, ok or not; never a password).
