@@ -22,7 +22,7 @@ from sqlalchemy import func, select, text
 
 from . import __version__, activity, credentials, jobqueue, testloop
 from .activity import LOCAL, Actor
-from .config import (RUNTIME_KEYS, SECRET_KEYS, Settings, base_settings, current_user, get_settings,
+from .config import (AI_KEYS, RUNTIME_KEYS, SECRET_KEYS, Settings, base_settings, current_user, get_settings,
                      load_runtime_overrides, save_runtime_overrides, user_scope)
 from .db import Job, JobArtifact, JobEvent, as_aware, engine, session_scope
 from .github import GitHubClient, RepoAccessError, RepoURLError, parse_repo_url
@@ -652,7 +652,8 @@ def _settings_view(me: str | None) -> dict:
         out[key] = {"value": _mask(value) if key in SECRET_KEYS and value else value,
                     "configured": value not in ("", None), "source": source, "secret": key in SECRET_KEYS}
     return {"settings": out, "llm_enabled": s.llm_enabled, "llm_provider": s.resolved_llm_provider,
-            "llm_endpoint": s.effective_llm_base_url, "per_user": me is not None, "user": me}
+            "llm_endpoint": s.effective_llm_base_url, "per_user": me is not None, "user": me,
+            "ai_managed": s.ai_managed, "llm_model": s.llm_model if s.ai_managed else None}
 
 
 @app.get("/api/v1/settings")
@@ -668,6 +669,8 @@ _SETTING_NAMES = {"github_token": "GitHub token", "llm_api_key": "AI key", "llm_
 @app.put("/api/v1/settings")
 def write_settings(body: SettingsUpdate, me: str | None = Depends(_settings_owner), who: Actor = Depends(actor)):
     updates = body.model_dump(exclude_unset=True)
+    if get_settings().ai_managed:  # the organisation's AI model is set on the server, not by each person
+        updates = {k: v for k, v in updates.items() if k not in AI_KEYS}
     for key in SECRET_KEYS:  # masked placeholders mean "unchanged"
         if isinstance(updates.get(key), str) and updates[key].startswith("•"):
             updates.pop(key)
@@ -912,7 +915,9 @@ def attention(_: str = Depends(require_api_key), me: str | None = Depends(owner)
     if not s.llm_enabled:
         config_errors.append({"severity": "medium", "kind": "No AI model configured",
                               "message": "AI-assisted remediation of source code findings is unavailable.",
-                              "action": "Configure an AI provider, model and API key in Settings.", "link": "/settings"})
+                              "action": "Ask the administrator to configure the organisation's AI model "
+                                        "(APPSEC_AZURE_FOUNDRY_* in the suite .env), then restart Application Security.",
+                              "link": None})
     if not s.github_token:
         config_errors.append({"severity": "medium", "kind": "No GitHub token",
                               "message": "Remediation branches cannot be pushed and pull requests cannot be raised.",

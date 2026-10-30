@@ -47,6 +47,19 @@ class ProjectInfo:
     manifests: list[str] = field(default_factory=list)
     primary_language: str | None = None
     test_command: str | None = None
+    lines_of_code: int = 0  # lines in source files (vendored and generated folders skipped)
+
+
+def _count_lines(path: Path, max_bytes: int = 2_000_000) -> int:
+    """Lines in one source file; very large files (generated or minified) are left out."""
+    try:
+        if path.stat().st_size > max_bytes:
+            return 0
+        with open(path, "rb") as fh:
+            data = fh.read()
+    except OSError:
+        return 0
+    return data.count(b"\n") + (1 if data and not data.endswith(b"\n") else 0)
 
 
 def detect_project(root: Path) -> ProjectInfo:
@@ -56,13 +69,16 @@ def detect_project(root: Path) -> ProjectInfo:
                       "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "go.mod", "Cargo.toml",
                       "Cargo.lock", "pom.xml", "build.gradle", "build.gradle.kts", "Gemfile", "Gemfile.lock",
                       "composer.json", "composer.lock", "Dockerfile"}
+    lines = 0
     for path in iter_files(root):
         lang = LANGUAGE_BY_SUFFIX.get(path.suffix.lower())
         if lang:
             counts[lang] += 1
+            if not is_vendored(path.relative_to(root).as_posix()):
+                lines += _count_lines(path)
         if path.name in manifest_names or (path.name.startswith("requirements") and path.suffix == ".txt"):
             manifests.append(path.relative_to(root).as_posix())
-    info = ProjectInfo(languages=dict(counts.most_common()), manifests=sorted(manifests))
+    info = ProjectInfo(languages=dict(counts.most_common()), manifests=sorted(manifests), lines_of_code=lines)
     info.primary_language = counts.most_common(1)[0][0] if counts else None
     _detect_test_command(root, info)
     return info
@@ -103,6 +119,14 @@ _VENDOR_FILE = re.compile(r"(^|/)(jquery|bootstrap|materialize|angular|react(-do
                           r"three|swiper|slick|semantic|foundation|bulma|axios|handlebars|mustache|knockout|zepto|"
                           r"prototype|mootools|modernizr|require|polyfills?|fontawesome|font-awesome)([.-][\w.-]*)?"
                           r"\.(js|mjs|css)$", re.I)
+
+
+# Test code, fixtures, examples and docs: findings there are reported but ranked lower and not patched
+TEST_PATH = re.compile(r"(^|/)(tests?|spec|__tests__|testdata|fixtures|examples?|docs?)/|(^|/)test_[^/]*$|_test\.\w+$|\.(spec|test)\.\w+$")
+
+
+def is_test_path(path: str) -> bool:
+    return bool(TEST_PATH.search(path.replace("\\", "/")))
 
 
 def is_vendored(path: str) -> bool:

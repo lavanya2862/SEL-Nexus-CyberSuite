@@ -211,6 +211,8 @@ class RemediationReport(BaseModel):
     finished_at: str | None = None
     duration_seconds: float = 0.0
     languages: dict[str, int] = Field(default_factory=dict)
+    lines_of_code: int = 0
+    ai_workers: int = 0  # AI remediation calls at the same time in this scan
     scanners: list[ScannerRun] = Field(default_factory=list)
     findings_input: int = 0
     findings_selected: int = 0

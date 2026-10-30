@@ -93,6 +93,20 @@ def commit_all(repo: Path, message: str, paths: list[str] | None = None) -> str 
     return head_sha(repo)
 
 
+def revert_commit(repo: Path, sha: str, message: str) -> str | None:
+    """Undo one commit with a new commit on top (history stays reviewable). None when it does not revert cleanly."""
+    res = git(["revert", "--no-edit", "--no-commit", sha], repo, extra_config=git_identity())
+    if not res.ok:
+        git(["revert", "--abort"], repo)
+        discard_changes(repo)
+        return None
+    res = git(["commit", "-q", "--no-verify", "-m", message], repo, extra_config=git_identity())
+    if not res.ok:
+        discard_changes(repo)
+        return None
+    return head_sha(repo)
+
+
 def discard_changes(repo: Path) -> None:
     git(["reset", "-q", "--hard", "HEAD"], repo)
     git(["clean", "-q", "-fd"], repo)

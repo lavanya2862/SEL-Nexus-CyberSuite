@@ -208,12 +208,39 @@ function ApprovalBox({ job }: { job: Job }) {
   )
 }
 
+/** Every stage counts findings (a dependency upgrade can resolve several at once), and the findings that were never
+ *  attempted are explained by cause instead of disappearing between two stages. */
+function remediationFunnel(findings: Finding[]) {
+  const note = (f: Finding) => (f.fix_note ?? '').toLowerCase()
+  const count = (test: (f: Finding) => boolean) => findings.filter(test).length
+  const tests = (f: Finding) => f.fix_status === 'skipped' && note(f).includes('test code')
+  const vendored = (f: Finding) => f.fix_status === 'skipped' && note(f).includes('third-party library')
+  const outOfScope = (f: Finding) => f.fix_status === 'not_attempted' || tests(f) || vendored(f)
+  const notTried = (f: Finding) => f.fix_status === 'skipped' || f.fix_status === 'not_attempted'
+  const remediated = (f: Finding) => f.fix_status === 'fixed' || f.fix_status === 'verified'
+  const funnel: [string, number][] = [
+    ['Findings identified', findings.length],
+    ['In remediation scope', count((f) => !outOfScope(f))],
+    ['Remediation attempted', count((f) => !notTried(f))],
+    ['Remediated', count(remediated)],
+    ['Verified resolved', count((f) => f.fix_status === 'verified')],
+  ]
+  const gaps = ([
+    [count((f) => f.fix_status === 'not_attempted'), 'below the severity threshold'],
+    [count(tests), 'in test code'],
+    [count(vendored), 'in third-party library code'],
+    [count((f) => f.fix_status === 'skipped' && note(f).includes('budget')), 'over the per-scan limit'],
+    [count((f) => f.fix_status === 'skipped' && /ai model|llm|turned off/.test(note(f))), 'waiting for an AI model'],
+  ] as [number, string][]).filter(([n]) => n > 0).map(([n, why]) => `${n} ${why}`)
+  return { funnel, gaps }
+}
+
 /* ───────── tabs ───────── */
 
 function SummaryTab({ job, report: r, findings, agents }: { job: Job; report: Report; findings: Finding[]; agents?: Record<AgentId, AgentView> }) {
   const { theme } = useTheme()
   const sev = SEVERITIES.filter((s) => r.severity_counts[s]).map((s) => ({ name: sevLabel(s), value: r.severity_counts[s] ?? 0, itemStyle: { color: sevColor(theme, s) } }))
-  const funnel: [string, number][] = [['Findings identified', r.findings_input], ['In remediation scope', r.findings_selected], ['Remediations attempted', r.patches_proposed], ['Remediations applied', r.patches_applied], ['Verified resolved', r.verified_fixed]]
+  const { funnel, gaps } = remediationFunnel(findings)
   const max = Math.max(1, ...funnel.map((x) => x[1]))
   const statusCounts: Record<string, number> = {}
   findings.forEach((f) => { statusCounts[f.fix_status] = (statusCounts[f.fix_status] ?? 0) + 1 })
@@ -231,16 +258,17 @@ function SummaryTab({ job, report: r, findings, agents }: { job: Job; report: Re
             </div>
           ) : <p className="text-sm text-ink-3">No findings were identified in this repository.</p>}
         </Card>
-        <Card title="Remediation funnel" description="Findings carried through each stage.">
+        <Card title="Remediation funnel" description="Findings carried through each stage; every number counts findings.">
           <div className="flex flex-col gap-2.5">
             {funnel.map(([l, n]) => (
-              <div key={l} className="grid grid-cols-[130px_1fr_40px] items-center gap-3 text-sm">
+              <div key={l} className="grid grid-cols-[150px_1fr_40px] items-center gap-3 text-sm">
                 <span className="text-ink-2">{l}</span>
                 <span className="h-2 overflow-hidden rounded-full bg-well"><span className="rank-bar block h-full rounded-full bg-blue" style={{ width: `${(n / max) * 100}%` }} /></span>
                 <b className="tabular text-right font-medium">{n}</b>
               </div>
             ))}
           </div>
+          {gaps.length > 0 && <p className="mt-3 text-xs leading-relaxed text-ink-3">Not attempted: {gaps.join(' · ')}.</p>}
           <div className="mt-4 flex flex-wrap gap-1.5">{Object.entries(statusCounts).map(([k, n]) => <span key={k} className="inline-flex items-center gap-1"><FixStatusTag s={k} /><span className="text-xs text-ink-3">{n}</span></span>)}</div>
         </Card>
         <Card title="Validation verdict" description="Outcome of remediation validation."><Verdict report={r} /></Card>
@@ -345,7 +373,7 @@ function RemediationExtra({ job, report: r, findings }: { job: Job; report: Repo
     const skipped = findings.filter((f) => f.fix_status === 'skipped').length
     return (
       <Empty text="No remediations were applied in this scan.">
-        {skipped > 0 && !r.llm_enabled && <span>{skipped} code finding(s) require AI-assisted remediation. <Link to="/settings" className="text-sky underline">Configure an AI model</Link> and re-run the scan.</span>}
+        {skipped > 0 && !r.llm_enabled && <span>{skipped} code finding(s) require AI-assisted remediation. The organisation’s AI model was not available for this scan; re-run the scan.</span>}
       </Empty>
     )
   }

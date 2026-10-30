@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,15 +26,31 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=Path(__file__).resolve().parents[2] / ".env", env_file_encoding="utf-8", extra="ignore")
 
     # --- LLM -------------------------------------------------------------------------------
-    llm_provider: Literal["auto", "openai", "anthropic", "gemini", "none"] = "auto"
+    # The organisation's AI model, set on the server for everyone (APPSEC_AZURE_FOUNDRY_*, below): when it is set,
+    # people only bring their GitHub token and the LLM_* settings and anyone's own AI settings are ignored.
+    appsec_azure_foundry_endpoint: str = ""      # https://<resource>.services.ai.azure.com/openai/v1/
+    appsec_azure_foundry_api_key: str = ""
+    appsec_azure_foundry_deployment: str = ""    # the deployment name, e.g. gpt-5
+    appsec_azure_foundry_rpm: int = 0            # requests per minute the deployment allows (0 = no pacing)
+    appsec_azure_foundry_reasoning_effort: str = ""  # minimal | low | medium | high (reasoning models)
+    appsec_azure_foundry_workers: str = ""       # AI calls at the same time in one scan: "auto" or a number
+    appsec_azure_foundry_max_workers: int = 0    # ceiling for "auto" (0 = keep LLM_MAX_WORKERS)
+
+    llm_provider: Literal["auto", "openai", "anthropic", "gemini", "azure", "none"] = "auto"
     llm_base_url: str = "https://api.openai.com/v1"
     llm_api_key: str = ""
     llm_model: str = ""
-    llm_timeout_seconds: int = 120
+    llm_timeout_seconds: int = 300  # pro / reasoning models can think for minutes
     llm_max_retries: int = 4
     llm_max_concurrency: int = 4
-    llm_max_tokens: int = 4096
+    llm_max_tokens: int = 16384  # reasoning models spend part of it thinking before the JSON answer
     llm_fix_attempts: int = 2
+    llm_reasoning_effort: str = ""  # sent to reasoning models (GPT-5, o-series) when set
+    llm_rpm: int = 0                # pace requests to this many per minute (0 = no pacing)
+    # AI remediation calls at the same time in one scan: "auto" sizes them from the repository's lines of code
+    # (remediation.agents.remediation.ai_workers), up to llm_max_workers; or a fixed number
+    llm_workers: str = "auto"
+    llm_max_workers: int = 8
 
     # --- GitHub ------------------------------------------------------------------------------
     github_token: str = ""
@@ -52,9 +68,10 @@ class Settings(BaseSettings):
     # --- Limits ------------------------------------------------------------------------------
     max_repo_size_mb: int = 750
     clone_timeout_seconds: int = 600
-    scanner_timeout_seconds: int = 1200
-    job_timeout_seconds: int = 3600
-    max_findings_per_run: int = 15
+    scanner_timeout_seconds: int = 2700  # 45 min: CodeQL on a large repository builds a database first
+    job_timeout_seconds: int = 10800     # 3 h for the whole scan, including the confirmation scan
+    # Optional ceiling on AI-assisted remediations per scan; 0 = every finding in the severities chosen for the scan
+    max_findings_per_run: int = 0
     max_queued_jobs: int = 500
     max_job_attempts: int = 2
     rate_limit_per_minute: int = 30
@@ -117,6 +134,31 @@ class Settings(BaseSettings):
     @classmethod
     def _empty_is_default(cls, value):
         return value or None  # CREDENTIALS_KEY_FILE= in a .env means the default, not the current folder
+
+    @model_validator(mode="after")
+    def _organisation_ai_model(self):
+        """APPSEC_AZURE_FOUNDRY_* set: that deployment is the AI model for every scan and the Security Assistant."""
+        if self.appsec_azure_foundry_endpoint and self.appsec_azure_foundry_api_key:
+            self.llm_provider = "azure"
+            self.llm_base_url = self.appsec_azure_foundry_endpoint.strip().rstrip("/")
+            self.llm_api_key = self.appsec_azure_foundry_api_key.strip()
+            self.llm_model = self.appsec_azure_foundry_deployment.strip() or "gpt-5"
+            if self.appsec_azure_foundry_rpm:
+                self.llm_rpm = self.appsec_azure_foundry_rpm
+            if self.appsec_azure_foundry_workers.strip():
+                self.llm_workers = self.appsec_azure_foundry_workers.strip().lower()
+            if self.appsec_azure_foundry_max_workers:
+                self.llm_max_workers = self.appsec_azure_foundry_max_workers
+            # the process-wide ceiling: every scan running at once may use its full share of workers
+            self.llm_max_concurrency = max(self.llm_max_concurrency, self.llm_max_workers * max(1, self.worker_concurrency))
+            if self.appsec_azure_foundry_reasoning_effort:
+                self.llm_reasoning_effort = self.appsec_azure_foundry_reasoning_effort.strip().lower()
+        return self
+
+    @property
+    def ai_managed(self) -> bool:
+        """The AI model is the organisation's (set on the server), not each person's own."""
+        return bool(self.appsec_azure_foundry_endpoint and self.appsec_azure_foundry_api_key)
 
     @property
     def per_user(self) -> bool:
@@ -188,6 +230,7 @@ class Settings(BaseSettings):
 RUNTIME_KEYS = {"llm_provider", "llm_base_url", "llm_model", "llm_api_key", "github_token", "max_findings_per_run",
                 "llm_fix_attempts"}
 SECRET_KEYS = {"llm_api_key", "github_token"}
+AI_KEYS = {"llm_provider", "llm_base_url", "llm_model", "llm_api_key", "llm_fix_attempts"}  # the organisation's, when managed
 _runtime_lock = threading.Lock()
 _runtime_cache: tuple[tuple, Settings] | None = None
 
@@ -279,7 +322,8 @@ def get_settings() -> Settings:
         return base
     with _runtime_lock:
         if _runtime_cache is None or _runtime_cache[0] != stamp:
-            overrides = load_runtime_overrides()
+            overrides = {k: v for k, v in load_runtime_overrides().items()
+                         if not (base.ai_managed and k in AI_KEYS)}
             _runtime_cache = (stamp, base.model_copy(update=overrides) if overrides else base)
         return _runtime_cache[1]
 
@@ -301,7 +345,8 @@ class _LazySettings:
 settings = _LazySettings()
 
 
-SECRET_ENV_NAMES = ("LLM_API_KEY", "GITHUB_TOKEN", "API_KEYS", "DATABASE_URL", "CREDENTIALS_KEY")
+SECRET_ENV_NAMES = ("LLM_API_KEY", "GITHUB_TOKEN", "API_KEYS", "DATABASE_URL", "CREDENTIALS_KEY",
+                    "APPSEC_AZURE_FOUNDRY_API_KEY")
 
 
 def scrubbed_env(extra: dict[str, str] | None = None) -> dict[str, str]:

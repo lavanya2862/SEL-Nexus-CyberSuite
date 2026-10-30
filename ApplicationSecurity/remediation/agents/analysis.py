@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..detect import is_vendored
+from ..detect import is_test_path, is_vendored
 from ..models import SEVERITY_ORDER, Finding, ScannerRun
 from ..parsers import deduplicate, parse_codeql, parse_trivy_data
 from ..prioritize import prioritize
@@ -61,6 +61,7 @@ class AnalysisAgent:
             return [], []
         findings, runs = self.scan("rescan", only)
         # Identify findings exactly as in the first scan, so "still present" / "new" comparisons are like-for-like.
+        findings, _, _ = self.mark_test_code(findings)
         self.attach_snippets(findings)
         return findings, runs
 
@@ -123,6 +124,22 @@ class AnalysisAgent:
                 n += 1
         return n
 
+    @staticmethod
+    def mark_test_code(findings: list[Finding]) -> tuple[list[Finding], int, int]:
+        """Flag findings in test code for every scanner (only the built-in rules did), so they are ranked lower and
+        not sent for remediation. Bandit's assert check (B101) in test code is dropped: asserts are how tests work."""
+        kept, marked, dropped = [], 0, 0
+        for f in findings:
+            if not f.is_dependency and f.file_path and is_test_path(f.file_path):
+                if (f.rule_id or "").upper() == "B101":
+                    dropped += 1
+                    continue
+                if not (f.raw or {}).get("in_tests"):
+                    f.raw = {**(f.raw or {}), "in_tests": True}
+                    marked += 1
+            kept.append(f)
+        return kept, marked, dropped
+
     # -- main --------------------------------------------------------------------------------
     def run(self) -> list[Finding]:
         ctx = self.ctx
@@ -163,6 +180,11 @@ class AnalysisAgent:
                  detail=f"{raw_total} raw results → {len(merged)} unique findings (CVE/GHSA aliases, CWE categories, "
                         "file/line merged across scanners)")
         self.attach_snippets(merged)
+        merged, in_tests, asserts = self.mark_test_code(merged)
+        if in_tests or asserts:
+            ctx.step(self.stage_id, "Recognise test code",
+                     detail=f"{in_tests} finding(s) in test code ranked lower and not patched"
+                            + (f"; {asserts} assert statement(s) in tests ignored (Bandit B101)" if asserts else ""))
         vendored = self.mark_vendored(merged)
         if vendored:
             ctx.step(self.stage_id, "Recognise third-party library code",

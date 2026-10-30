@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..detect import iter_files
+from ..detect import TEST_PATH, iter_files
 from ..models import Finding
 from .base import Scanner
 
@@ -136,7 +136,7 @@ RULES: list[Rule] = [
 ]
 
 _COMMENT = re.compile(r"^\s*(#|//|\*|/\*|<!--)")
-_TEST_PATH = re.compile(r"(^|/)(tests?|spec|__tests__|testdata|fixtures|examples?|docs?)/|(^|/)test_[^/]*$|_test\.\w+$|\.(spec|test)\.\w+$")
+_TEST_PATH = TEST_PATH
 
 
 def looks_minified(lines: list[str]) -> bool:

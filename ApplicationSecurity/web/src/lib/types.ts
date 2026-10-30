@@ -291,6 +291,8 @@ export interface SettingsView {
   /** Shared sign-in on: these are the signed-in person's own keys, used only for the scans they start. */
   per_user: boolean
   user: string | null
+  ai_managed?: boolean   // the AI model is the organisation's, set on the server
+  llm_model?: string | null
 }
 
 export interface AgentHistory {

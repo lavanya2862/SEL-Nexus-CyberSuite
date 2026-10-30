@@ -11,7 +11,7 @@ const REASON_HUE: Record<string, Hue> = {
   transitive: 'orange', no_upstream: 'orange', vendored: 'orange',                  // depends on someone else's package
   llm_quota: 'violet', llm_unavailable: 'violet', llm_rejected: 'violet', ai_off: 'violet', needs_llm: 'violet',
   ai_failed: 'violet', ai_declined: 'violet', budget: 'violet',                     // the Remediation Agent was held back
-  below_threshold: 'blue', tests: 'blue',                                           // left out on purpose
+  below_threshold: 'blue', tests: 'blue', false_positive: 'blue',                  // left out on purpose, or likely not real
 }
 const hueOf = (key?: string): Hue => REASON_HUE[key ?? ''] ?? 'amber'
 

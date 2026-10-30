@@ -8,6 +8,7 @@ import secrets
 import threading
 import time
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -238,3 +239,47 @@ def test_pull_requests_and_tests_use_the_owners_token(suite, fake_world, monkeyp
     monkeypatch.setattr(testloop, "run_loop", fake_loop)
     assert testloop.start(job_id)  # a thread of its own, started outside any request
     assert done.wait(5) and used["tests"] == "ghp_ana_secret_123456"
+
+
+ORG_AI = {"APPSEC_AZURE_FOUNDRY_ENDPOINT": "https://acme.services.ai.azure.com/openai/v1/",
+          "APPSEC_AZURE_FOUNDRY_API_KEY": "org-ai-key", "APPSEC_AZURE_FOUNDRY_DEPLOYMENT": "gpt-5",
+          "APPSEC_AZURE_FOUNDRY_RPM": "2500", "APPSEC_AZURE_FOUNDRY_REASONING_EFFORT": "low",
+          "APPSEC_AZURE_FOUNDRY_WORKERS": "auto", "APPSEC_AZURE_FOUNDRY_MAX_WORKERS": "32"}
+
+
+def test_organisation_ai_model_is_used_by_everyone_and_people_bring_only_github(suite, monkeypatch):
+    """With the organisation's model set on the server, everyone's scans and the assistant use it; a person's own AI
+    settings are ignored and cannot be saved; their GitHub token stays personal."""
+    from remediation import credentials, llm
+    for k, v in ORG_AI.items():
+        monkeypatch.setenv(k, v)
+    config.reset_settings_cache()
+    ana = suite("ana@example.com")
+    view = ana.put("/api/v1/settings", headers=WRITE, json={"github_token": "ghp_ana", "llm_provider": "gemini",
+                                                             "llm_model": "gemini-x", "llm_api_key": "ana-ai"}).json()
+    assert view["ai_managed"] is True and view["llm_model"] == "gpt-5" and view["llm_enabled"] is True
+    assert set(credentials.load("ana@example.com")) == {"github_token"}  # the AI settings were not saved
+
+    with config.user_scope("ana@example.com"):
+        s = config.get_settings()
+    assert s.github_token == "ghp_ana" and s.llm_api_key == "org-ai-key" and s.resolved_llm_provider == "azure"
+    assert s.llm_workers == "auto" and s.llm_max_workers == 32 and s.llm_rpm == 2500 and s.llm_reasoning_effort == "low"
+    assert s.llm_max_concurrency >= 32  # room for every scan running at once
+
+    sent = []
+
+    def post(url, headers=None, json=None, timeout=None):
+        sent.append((url, headers, json))
+        return httpx.Response(200, json={"model": "gpt-5-2025-08-07", "choices": [{"message": {"content": "OK"}}]},
+                              request=httpx.Request("POST", url))
+    monkeypatch.setattr(llm.httpx, "post", post)
+    assert llm.chat_with(s, "sys", [{"role": "user", "content": "ping"}]) == ("OK", "gpt-5-2025-08-07")
+    url, headers, body = sent[0]
+    assert url == "https://acme.services.ai.azure.com/openai/v1/chat/completions"
+    assert headers["api-key"] == "org-ai-key" and headers["Authorization"] == "Bearer org-ai-key"
+    assert body["model"] == "gpt-5" and body["reasoning_effort"] == "low" and "max_completion_tokens" in body
+    assert "temperature" not in body and "max_tokens" not in body  # GPT-5 rejects both
+
+    # nobody signed in (a background thread without a person): still the organisation's model, never a GitHub token
+    s = config.get_settings()
+    assert s.llm_api_key == "org-ai-key" and s.github_token == ""

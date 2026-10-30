@@ -87,7 +87,7 @@ export function TestsTab({ job }: { job: Job }) {
           ))}
         </ol>
         {!tokenOk && <div className="mt-4"><Notice tone="warn" title="A GitHub token is required">CI test validation pushes the remediation branch and requires Contents and Workflows (read &amp; write) and Actions (read) on the repository. <Link to="/settings" className="text-sky underline">Open Settings</Link></Notice></div>}
-        {tokenOk && caps.data && !caps.data.llm.enabled && <div className="mt-4"><Notice tone="warn" title="No AI model connected">Tests will run, but failures must be resolved manually. <Link to="/settings" className="text-sky underline">Configure a model in Settings</Link>.</Notice></div>}
+        {tokenOk && caps.data && !caps.data.llm.enabled && <div className="mt-4"><Notice tone="warn" title="No AI model connected">Tests will run, but failures must be resolved manually. Ask your administrator to configure the organisation’s AI model.</Notice></div>}
       </Card>
 
       {!t ? <Empty text="CI test validation has not been run for this scan yet." /> : <Progress job={job} t={t} />}

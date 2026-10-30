@@ -2,7 +2,6 @@
 // Infrastructure portal's chat). It knows what you are looking at: a whole run, one finding, or nothing in particular,
 // and answers from that run's findings, fixes and validation results (POST /api/v1/assistant/chat).
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { ArrowRight, Bot, Loader2, SendHorizonal, Sparkles, X } from 'lucide-react'
 import { Markdown } from '@/components/Code'
 import { post, useCaps } from '@/lib/api'
@@ -116,8 +115,7 @@ export function Assistant() {
           <div ref={listRef} className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
             {llm && !llm.enabled ? (
               <div className="rounded-xl bg-well px-3.5 py-3 text-sm text-ink-2">
-                <b className="text-ink">Connect an AI model to use the Security Assistant.</b> It uses the same model as the Remediation Agent.{' '}
-                <Link to="/settings" onClick={closeChat} className="inline-flex items-center gap-1 font-medium text-sky">Open Settings <ArrowRight className="size-3" /></Link>
+                <b className="text-ink">The Security Assistant is unavailable.</b> It uses the organisation’s AI model, which is not configured on this server. Ask your administrator to configure the organisation’s AI model.
               </div>
             ) : (
               <Bubble from="bot">{INTRO[ctx.type]}</Bubble>

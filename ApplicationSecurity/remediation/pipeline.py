@@ -94,9 +94,11 @@ class RepositoryPipeline:
         ctx.progress("ingest", 12)
         ctx.info = detect_project(ctx.src)
         self.report.languages = ctx.info.languages
+        self.report.lines_of_code = ctx.info.lines_of_code
         langs = ", ".join(f"{k} ({v})" for k, v in list(ctx.info.languages.items())[:6]) or "none detected"
         ctx.step("ingest", "Detect languages & manifests",
-                 detail=f"{langs}; manifests: {', '.join(ctx.info.manifests[:8]) or 'none'}")
+                 detail=f"{langs}; {ctx.info.lines_of_code:,} lines of code; "
+                        f"manifests: {', '.join(ctx.info.manifests[:8]) or 'none'}")
         ctx.finish_stage("ingest", "completed", f"{self.repo.full_name}@{sha[:8]} · {langs}",
                          commit=sha[:12], files_languages=sum(ctx.info.languages.values()))
 

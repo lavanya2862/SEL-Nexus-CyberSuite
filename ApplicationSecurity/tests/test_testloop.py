@@ -209,7 +209,7 @@ def test_the_ai_sees_the_code_the_failing_tests_import(tmp_path):
              "tests/test_security.py": "from app.routes import utilities\n\n\ndef test_ping():\n    assert utilities.ping('a;b') is None\n"}
     repo = make_git_repo(tmp_path / "r", files)
     log = "FAILED tests/test_security.py::test_ping - assert 'a;b' is None\ntests/test_security.py:5: AssertionError\n"
-    chosen = testloop.files_for_fix(repo, log)
+    chosen = testloop.files_for_fix(repo, log, budget=60000)  # app/big.py makes it too big to show whole
     assert chosen[0] == "tests/test_security.py" and "app/routes/utilities.py" in chosen and "app/big.py" not in chosen
 
 
@@ -258,3 +258,56 @@ def test_run_again_with_nothing_new_starts_the_workflow_directly(monkeypatch):
     assert testloop._start_run(None, None, "b", "abc", st) == {7} and calls == [("dispatch", "b")]
     calls.clear()
     assert testloop._start_run(None, None, "b", "new-sha", st) == set() and calls == ["push"]
+
+
+# --- Java / Gradle: the AI gets the code it needs -----------------------------------------------------------------
+
+JAVA = {
+    "build.gradle": "plugins { id 'java' }\n",
+    "src/main/java/org/acme/billing/Invoice.java":
+        "package org.acme.billing;\n\nimport org.acme.billing.model.Line;\n\npublic class Invoice {\n"
+        "    public int total(Line a, Line b) { return a.amount() - b.amount(); }\n}\n",
+    "src/main/java/org/acme/billing/model/Line.java":
+        "package org.acme.billing.model;\n\npublic record Line(int amount) {}\n",
+    "src/test/java/org/acme/billing/InvoiceTest.java":
+        "package org.acme.billing;\n\nclass InvoiceTest {\n    void totalAddsLines() { }\n}\n",
+}
+GRADLE_LOG = """> Task :test
+
+InvoiceTest > totalAddsLines() FAILED
+    org.opentest4j.AssertionFailedError at InvoiceTest.java:4
+        at org.acme.billing.Invoice.total(Invoice.java:6)
+
+1 test completed, 1 failed
+
+FAILURE: Build failed with an exception.
+"""
+
+
+def test_gradle_failures_point_at_the_java_code_under_test(tmp_path):
+    repo = make_git_repo(tmp_path / "j", JAVA)
+    assert testloop.failed_tests(GRADLE_LOG) == ["InvoiceTest > totalAddsLines()"]
+    refs = testloop.referenced_files(repo, GRADLE_LOG)
+    assert refs[:2] == ["src/main/java/org/acme/billing/Invoice.java", "src/test/java/org/acme/billing/InvoiceTest.java"]
+    files = testloop.files_for_fix(repo, GRADLE_LOG, budget=10)  # too big to send whole: follow the references
+    assert "src/main/java/org/acme/billing/model/Line.java" in files and "build.gradle" in files
+    index = testloop.RepoIndex(repo)
+    assert index.find("org.acme.billing.Invoice") == index.find("Invoice.java") == index.find("Invoice") \
+        == index.find("src/main/java/.../Invoice.java") == "src/main/java/org/acme/billing/Invoice.java"
+    assert index.find("../../etc/passwd") is None
+
+
+def test_the_ai_can_ask_for_files_it_has_not_seen(tmp_path, monkeypatch):
+    repo = make_git_repo(tmp_path / "j", JAVA)
+    seen = []
+    replies = [{"status": "need_files", "files": ["org.acme.billing.model.Line", "Nope.java"]},
+               {"explanation": "total() subtracted.", "edits": [{"file": "src/main/java/org/acme/billing/Invoice.java",
+                                                                 "search": "a.amount() - b.amount()",
+                                                                 "replace": "a.amount() + b.amount()"}]}]
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL", "gpt-test")
+    config.reset_settings_cache()
+    monkeypatch.setattr(testloop, "chat", lambda system, messages: seen.append(messages[-1]["content"]) or json.dumps(replies.pop(0)))
+    out = testloop.ai_fix(repo, {"test": "./gradlew test"}, GRADLE_LOG, [], tries=1)  # asking does not use up the try
+    assert out["ok"] and "a.amount() + b.amount()" in (repo / "src/main/java/org/acme/billing/Invoice.java").read_text()
+    assert "public record Line(int amount)" in seen[1] and "Not found in the repository: Nope.java" in seen[1]

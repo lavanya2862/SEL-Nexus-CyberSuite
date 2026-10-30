@@ -21,7 +21,7 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from .config import RUNTIME_KEYS, SECRET_KEYS, Settings, base_settings
+from .config import AI_KEYS, RUNTIME_KEYS, SECRET_KEYS, Settings, base_settings
 
 log = logging.getLogger(__name__)
 
@@ -88,7 +88,10 @@ def _entry(email: str) -> tuple[float, dict, Settings]:
             log.error("the saved keys of %s cannot be decrypted (was the encryption key changed?); they must be "
                       "entered again", email)
     data = {k: v for k, v in data.items() if k in RUNTIME_KEYS and v not in (None, "")}
-    entry = (now, data, base_settings().model_copy(update={**_NO_SECRETS, **data}))
+    base = base_settings()
+    if base.ai_managed:  # everyone uses the organisation's AI model; only their own GitHub token is personal
+        data = {k: v for k, v in data.items() if k not in AI_KEYS}
+    entry = (now, data, base.model_copy(update={**_secrets_to_clear(base), **data}))
     with _lock:
         _cache[email] = entry
     return entry
@@ -97,8 +100,13 @@ def _entry(email: str) -> tuple[float, dict, Settings]:
 def settings_for(base: Settings, email: str | None) -> Settings:
     """``base`` with this person's own settings applied; without a person, ``base`` without any keys."""
     if not email:
-        return base.model_copy(update=_NO_SECRETS)
+        return base.model_copy(update=_secrets_to_clear(base))
     return _entry(email.strip().lower())[2]
+
+
+def _secrets_to_clear(base: Settings) -> dict:
+    """The server's own keys nobody may use: its GitHub token always, its AI key unless the AI is the organisation's."""
+    return {k: v for k, v in _NO_SECRETS.items() if not (base.ai_managed and k == "llm_api_key")}
 
 
 def save(email: str, updates: dict) -> dict:

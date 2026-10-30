@@ -143,7 +143,12 @@ _FAILED_PATTERNS = [
     re.compile(r"^\s*● (.+ › .+)$", re.M),                        # jest summary
     re.compile(r"^\[ERROR\]\s+(\w[\w.$]*[.:]\w+)", re.M),          # maven surefire
     re.compile(r"^test (\S+) \.\.\. FAILED$", re.M),               # cargo test
+    re.compile(r"^\s*(\S+ > .+?) FAILED\s*$", re.M),               # gradle: "FooTest > bar() FAILED"
 ]
+# Java / Kotlin / Scala stack frame: "at org.acme.web.Foo.bar(Foo.java:42)" -> org/acme/web/Foo.java
+_JVM_FRAME = re.compile(r"\bat ([\w$.]+)\.[\w$<>-]+\(([\w$-]+\.(?:java|kt|scala|groovy)):\d+\)")
+_JVM_IMPORT = re.compile(r"^\s*import\s+(?:static\s+)?([\w.]+)\s*;?\s*$", re.M)
+_JVM_SUFFIXES = (".java", ".kt", ".scala", ".groovy")
 _FILE_REFS = [
     re.compile(r'File "([^"]+)", line (\d+)'),
     re.compile(r"((?:[\w.-]+/)*[\w.-]+\.(?:py|js|jsx|ts|tsx|mjs|cjs|go|java|kt|rb|rs|php|cs)):(\d+)"),
@@ -164,28 +169,85 @@ def failed_tests(log_text: str, limit: int = 40) -> list[str]:
     return names[:limit]
 
 
-def failure_excerpt(log_text: str, limit: int = 14000) -> str:
-    """The part of the log that explains the failure (pytest's FAILURES section when there is one)."""
+def failure_excerpt(log_text: str, limit: int = 30000) -> str:
+    """The part of the log that explains the failure: pytest's FAILURES section, else from the first failing test or
+    compile error (Gradle, Maven, Go, Jest print them before a long summary), else the end of the log."""
     for marker in ("= FAILURES =", "= ERRORS ="):
         idx = log_text.find(marker)
         if idx != -1:
             start = log_text.rfind("\n", 0, idx) + 1
             return log_text[start:start + limit]
+    m = re.search(r"^.*(?: FAILED\s*$|^\[ERROR\]|^--- FAIL|: error:|^FAILURE: )", log_text, re.M)
+    if m and len(log_text) - m.start() > limit // 3:
+        start = log_text.rfind("\n", 0, max(0, m.start() - 2000)) + 1
+        return log_text[start:start + limit]
     return log_text[-limit:]
 
 
-def referenced_files(root: Path, log_text: str, limit: int = 6) -> list[str]:
-    """Repository files the failure points at (tracebacks, file:line), most mentioned first."""
+class RepoIndex:
+    """Find repository files from what logs and models name them by: a path, a bare file name ("Foo.java", as Java and
+    Gradle print them), a class ("org.acme.Foo" or "Foo"), or a path missing its source root."""
+
+    def __init__(self, root: Path):
+        self.root = root
+        self.files = [p.relative_to(root).as_posix() for p in iter_files(root, max_files=20000)
+                      if not p.relative_to(root).as_posix().startswith(".git/")]
+        self.by_name: dict[str, list[str]] = {}
+        for rel in self.files:
+            self.by_name.setdefault(rel.rsplit("/", 1)[-1], []).append(rel)
+
+    @staticmethod
+    def _rank(rel: str) -> tuple:
+        # application code before tests, and the usual source roots first
+        return (bool(TEST_PATH.search(rel)), "src/main/" not in rel and "/main/" not in rel, len(rel))
+
+    def find(self, name: str) -> str | None:
+        name = name.strip().strip("`'\"").replace("\\", "/").lstrip("./")
+        if not name or ".." in name.split("/"):
+            return None
+        target = resolve_in_repo(self.root, name)
+        if target and target.is_file():
+            return target.relative_to(self.root.resolve()).as_posix()
+        if "/" in name:  # a path missing its prefix: src/main/java/... named as org/acme/Foo.java, or ... in the middle
+            tail = name.split("...")[-1].lstrip("/")
+            hits = sorted((f for f in self.files if f.endswith("/" + tail) or f == tail), key=self._rank)
+            return hits[0] if hits else None
+        if "." in name and not name.endswith(_JVM_SUFFIXES) and re.fullmatch(r"[\w$.]+", name):
+            fqn = name.split("$")[0]
+            for suffix in _JVM_SUFFIXES:  # org.acme.web.Foo -> org/acme/web/Foo.java
+                hit = self.find(fqn.replace(".", "/") + suffix)
+                if hit:
+                    return hit
+            name = fqn.rsplit(".", 1)[-1]
+        candidates = self.by_name.get(name) or [h for s in _JVM_SUFFIXES for h in self.by_name.get(name + s, [])]
+        return sorted(candidates, key=self._rank)[0] if candidates else None
+
+
+def referenced_files(root: Path, log_text: str, limit: int = 8, index: RepoIndex | None = None) -> list[str]:
+    """Repository files the failure points at (tracebacks, file:line, JVM stack frames), most mentioned first."""
+    index = index or RepoIndex(root)
     counts: dict[str, int] = {}
+
+    def add(rel: str | None, weight: int = 1) -> None:
+        if rel:
+            counts[rel] = counts.get(rel, 0) + weight
     for pattern in _FILE_REFS:
         for m in pattern.finditer(log_text):
             raw = m.group(1)
             if "site-packages" in raw or "node_modules" in raw or "hostedtoolcache" in raw or raw.startswith(("/usr/", "/opt/")):
                 continue
-            target = resolve_in_repo(root, raw.lstrip("/") if raw.startswith("/") else raw)
-            if target:
-                rel = target.relative_to(root.resolve()).as_posix()
-                counts[rel] = counts.get(rel, 0) + 1
+            add(index.find(raw.lstrip("/") if raw.startswith("/") else raw))
+    for m in _JVM_FRAME.finditer(log_text):
+        if not m.group(1).startswith(("java.", "javax.", "jdk.", "sun.", "org.junit", "org.springframework", "kotlin.")):
+            add(index.find(m.group(1)) or index.find(m.group(2)))
+    # each failing test, and the class it tests (FooTest -> Foo): the cause is usually in the code under test
+    for test in failed_tests(log_text):
+        cls = re.split(r" > |[#:(]| ", test)[0].strip()
+        add(index.find(cls), 2)
+        short = cls.rsplit(".", 1)[-1]
+        under_test = re.sub(r"(Tests?|IT|Spec)$", "", short)
+        if under_test and under_test != short:
+            add(index.find(cls[: len(cls) - len(short)] + under_test) or index.find(under_test), 2)
     return [f for f, _ in sorted(counts.items(), key=lambda kv: -kv[1])][:limit]
 
 
@@ -196,13 +258,19 @@ _LOCK_FILES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock"
 _MANIFEST = re.compile(r"(^|/)(requirements[\w.-]*\.txt|Pipfile|go\.mod|pom\.xml|Gemfile|Cargo\.toml|build\.gradle(\.kts)?)$")
 
 
-def _imported_files(root: Path, rel: str) -> list[str]:
-    """Repository modules a Python file imports (``from app.routes import utilities`` -> app/routes/utilities.py)."""
-    if not rel.endswith(".py"):
-        return []
+def _imported_files(root: Path, rel: str, index: RepoIndex | None = None) -> list[str]:
+    """Repository modules a file imports: Python (``from app.routes import utilities`` -> app/routes/utilities.py) and
+    Java / Kotlin (``import org.acme.web.Foo;`` -> src/main/java/org/acme/web/Foo.java)."""
     try:
         text = (root / rel).read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
+        return []
+    if rel.endswith(_JVM_SUFFIXES):
+        index = index or RepoIndex(root)
+        hits = [index.find(m.group(1)) for m in _JVM_IMPORT.finditer(text)
+                if not m.group(1).startswith(("java.", "javax.", "jakarta.", "kotlin.", "org.junit", "org.springframework"))]
+        return list(dict.fromkeys(h for h in hits if h))
+    if not rel.endswith(".py"):
         return []
     found: list[str] = []
     for m in _PY_IMPORT.finditer(text):
@@ -215,23 +283,31 @@ def _imported_files(root: Path, rel: str) -> list[str]:
     return found
 
 
-def files_for_fix(root: Path, log_text: str, budget: int = 60000) -> list[str]:
+# What the AI is shown of the code: GPT-5 class models read hundreds of thousands of characters, so a failure in a
+# mid-size repository is fixed with the code it needs, not a guess
+CONTEXT_BUDGET = 240_000
+FILE_LIMIT = 40_000
+
+
+def files_for_fix(root: Path, log_text: str, budget: int = CONTEXT_BUDGET, index: RepoIndex | None = None) -> list[str]:
     """The files the AI sees: the whole source when the repository is small, otherwise the files the failure points at
     plus what they import (the code under test rarely appears in the failure log itself). Referenced files come first."""
+    index = index or RepoIndex(root)
     sources = []
-    for p in iter_files(root, max_files=2000, max_bytes=200_000):
+    for p in iter_files(root, max_files=5000, max_bytes=200_000):
         rel = p.relative_to(root).as_posix()
         if ((p.suffix.lower() in _SOURCE_SUFFIXES or _MANIFEST.search(rel)) and p.name not in _LOCK_FILES
                 and not rel.startswith((".github/", ".git/"))):
             sources.append(rel)
-    referenced = referenced_files(root, log_text)
+    referenced = referenced_files(root, log_text, index=index)
     total = sum((root / rel).stat().st_size for rel in sources)
     if total <= budget:
         return referenced + [s for s in sorted(sources) if s not in referenced]
     chosen = list(referenced)
     for rel in referenced:
-        chosen += [imp for imp in _imported_files(root, rel) if imp not in chosen]
-    return chosen
+        chosen += [imp for imp in _imported_files(root, rel, index) if imp not in chosen]
+    manifests = [s for s in sources if _MANIFEST.search(s) and s.count("/") <= 1]  # build files explain dependencies
+    return chosen + [m for m in manifests if m not in chosen]
 
 
 # --- 3. The AI fix -------------------------------------------------------------------------------------------------
@@ -247,47 +323,58 @@ Reply with ONE JSON object only:
  "edits": [{"file": "<path relative to the repository root>", "search": "<exact text copied from the file>",
             "replace": "<the new text>"}]}
 "search" must be copied verbatim from the file contents you are given and match exactly once. Keep edits minimal.
-If the failure cannot be fixed in the repository (missing service, network, secrets, broken CI infrastructure), reply
-{"status": "cannot_fix", "explanation": "<why>"}."""
+If you need to see a file that is not shown (for example the class under test), do not give up: reply
+{"status": "need_files", "files": ["<path, file name or fully qualified class name>", ...]} and you will be shown them.
+Only if the failure cannot be fixed in the repository (missing service, network, secrets, broken CI infrastructure),
+reply {"status": "cannot_fix", "explanation": "<why>"}."""
 
 
-def _fix_prompt(root: Path, setup: dict, log_text: str, history: list[str]) -> str:
+def _fix_prompt(root: Path, setup: dict, log_text: str, history: list[str], index: RepoIndex | None = None) -> str:
+    index = index or RepoIndex(root)
     failing = failed_tests(log_text)
-    files = files_for_fix(root, log_text)
+    files = files_for_fix(root, log_text, index=index)
     parts = [f"Test command: {setup['test']}",
              "Failing tests:\n" + ("\n".join(f"- {t}" for t in failing) if failing else "- (see the output)"),
              f"Test output (trimmed):\n```\n{redact(failure_excerpt(log_text))}\n```"]
     if history:
         parts.append("Earlier fix attempts that did not make the tests pass (do not repeat them):\n"
                      + "\n".join(f"- {h}" for h in history))
-    budget, shown = 60000, set()
+    budget, shown = CONTEXT_BUDGET, set()
     for rel in files:
         try:
             content = (root / rel).read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        content = redact(content[:12000])
+        content = redact(content[:FILE_LIMIT])
         if len(content) > budget:
             continue
         budget -= len(content)
         shown.add(rel)
         parts.append(f"File {rel}:\n```\n{content}\n```")
-    others = [p.relative_to(root).as_posix() for p in iter_files(root, max_files=400)
-              if p.relative_to(root).as_posix() not in shown and not p.relative_to(root).as_posix().startswith(".git/")]
-    parts.append("Other files in the repository (to fix one of them, edit it anyway: you will be shown its exact "
-                 "contents and asked again):\n" + "\n".join(others[:200]))
+    # application code first, so the list still names it in a large repository
+    others = sorted((f for f in index.files if f not in shown and Path(f).suffix.lower() in _SOURCE_SUFFIXES),
+                    key=lambda f: (bool(TEST_PATH.search(f)), f))
+    parts.append("Other source files in the repository (ask for any of them with need_files, or edit one directly: you "
+                 "will be shown its exact contents):\n" + "\n".join(others[:600]))
     return "\n\n".join(parts)
 
 
-def _show_files(root: Path, files: list[str]) -> str:
-    """The exact current contents of files whose edits did not apply (the AI had not seen them, or misquoted them)."""
-    out = []
-    for rel in dict.fromkeys(files):
+def _show_files(root: Path, files: list[str], index: RepoIndex | None = None) -> str:
+    """The exact current contents of files the AI asked for or whose edits did not apply (it had not seen them, or
+    misquoted them). Names are resolved like a developer would: path, file name or class name."""
+    out, missing = [], []
+    for name in dict.fromkeys(files):
+        rel = (index or RepoIndex(root)).find(name) if index or not (root / name).is_file() else name
         try:
-            content = (root / rel).read_text(encoding="utf-8")
+            content = (root / rel).read_text(encoding="utf-8") if rel else None
         except (OSError, UnicodeDecodeError, ValueError):
+            content = None
+        if content is None:
+            missing.append(name)
             continue
-        out.append(f"\nHere is {rel} exactly as it is now; copy the search text from it:\n```\n{redact(content[:15000])}\n```")
+        out.append(f"\nHere is {rel} exactly as it is now; copy the search text from it:\n```\n{redact(content[:FILE_LIMIT])}\n```")
+    if missing:
+        out.append(f"\nNot found in the repository: {', '.join(missing[:20])}.")
     return "".join(out)
 
 
@@ -308,12 +395,24 @@ def ai_fix(root: Path, setup: dict, log_text: str, history: list[str], tries: in
     """Ask the AI for a fix and apply it to the working tree (not committed). Returns
     {"ok", "files", "explanation", "touched_tests", "error"}. If some edits keep failing to apply, the last try keeps
     the ones that did (the next test run shows what is still failing)."""
-    messages = [{"role": "user", "content": _fix_prompt(root, setup, log_text, history)}]
+    index = RepoIndex(root)
+    messages = [{"role": "user", "content": _fix_prompt(root, setup, log_text, history, index)}]
     error = ""
-    for attempt in range(1, tries + 1):
+    attempt, lookups = 0, 0
+    while attempt < tries:
+        attempt += 1
         reply = chat(SYSTEM_PROMPT, messages)
         data = extract_json(reply)
         failed: list[tuple[str, str]] = []
+        # the AI asks to see more of the code: show it (up to 4 rounds, not counted as fix attempts)
+        if data is not None and str(data.get("status", "")).lower() == "need_files" and lookups < 4:
+            lookups += 1
+            attempt -= 1
+            wanted = [str(f) for f in (data.get("files") or []) if str(f).strip()][:25]
+            messages += [{"role": "assistant", "content": reply[:8000]},
+                         {"role": "user", "content": (_show_files(root, wanted, index) or "No file names were given.")
+                          + "\nNow return the JSON object with ALL edits (or ask for more files with need_files)."}]
+            continue
         try:
             if data is None:
                 raise EditError("The reply was not the requested JSON object.")
@@ -340,7 +439,7 @@ def ai_fix(root: Path, setup: dict, log_text: str, history: list[str], tries: in
             discard_changes(root)
             error = str(exc)
             messages += [{"role": "assistant", "content": reply[:8000]},
-                         {"role": "user", "content": f"That could not be used: {error}{_show_files(root, [f for f, _ in failed])}\n"
+                         {"role": "user", "content": f"That could not be used: {error}{_show_files(root, [f for f, _ in failed], index)}\n"
                                                      "Return the corrected JSON object with ALL edits only."}]
     return {"ok": False, "error": error}
 

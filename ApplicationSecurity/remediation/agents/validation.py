@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 
+from ..gitops import revert_commit
 from ..models import FixRecord, ValidationCheck
 from ..validate import static_check
 from .base import RunContext
@@ -98,6 +99,48 @@ class ValidationAgent:
         self.ctx = ctx
         self.analysis = analysis_agent
 
+    def revert_regressions(self, introduced: list) -> tuple[list[FixRecord], list]:
+        """A remediation must never leave the code worse. Every applied remediation that changed a file in which the
+        rescan reports a new finding is reverted (so the file is back to its original state), and its findings go
+        back to manual remediation. Returns the reverted remediations and the new findings still unexplained."""
+        ctx, rep = self.ctx, self.ctx.report
+        def new_in(fix):
+            changed = {p.replace("\\", "/") for p in fix.files}
+            return [f for f in introduced if (f.file_path or "").replace("\\", "/") in changed]
+        # Revert when the change made things worse (a new medium-or-higher finding), or when it added any new finding
+        # without resolving its own target. A working fix that only adds low-severity noise (e.g. Bandit's note on
+        # every subprocess call, which the correct fix for shell=True triggers) is kept and the note reported.
+        culprits = [fix for fix in rep.fixes if fix.status == "applied" and fix.method != "dependency" and new_in(fix)
+                    and (fix.verified is False or any(f.severity in ("critical", "high", "medium") for f in new_in(fix)))]
+        reverted = []
+        for fix in reversed(culprits):  # newest first, so each revert applies cleanly
+            new = [f for f in introduced if (f.file_path or "").replace("\\", "/") in {p.replace("\\", "/") for p in fix.files}]
+            sha = revert_commit(ctx.src, fix.commit, f"Revert remediation: {fix.summary[:120]}\n\nThe Validation "
+                                f"Agent's rescan reported a new finding in the changed code: {new[0].title[:150]}"
+                                if new else f"Revert remediation: {fix.summary[:120]}")
+            if not sha:
+                continue
+            fix.status, fix.verified = "reverted", False
+            fix.detail = (f"Reverted by the Validation Agent: the change introduced a new finding "
+                          f"({new[0].title[:120]} in {new[0].file_path}). " + fix.detail)[:2000] if new else fix.detail
+            for f in ctx.findings:
+                if f.finding_id in fix.finding_ids:
+                    f.fix_status = "manual"
+                    f.fix_note = (f"Reverted: the automated remediation introduced a new finding "
+                                  f"({new[0].title[:120]}); a different remediation is required.") if new else \
+                                 "Reverted: the automated remediation could not be kept; remediate manually."
+            reverted.append(fix)
+            ctx.log(f"Reverted remediation {fix.commit[:10]} ({fix.summary[:100]}): it introduced a new finding", "warning")
+        gone = {p.replace("\\", "/") for fix in reverted for p in fix.files}
+        still = {p.replace("\\", "/") for fix in rep.fixes if fix.status == "applied" for p in fix.files}
+        # a file whose every remediation was reverted is back to its original content: its new findings are gone
+        remaining = [f for f in introduced if not ((f.file_path or "").replace("\\", "/") in gone
+                                                   and (f.file_path or "").replace("\\", "/") not in still)]
+        if reverted:
+            ctx.step(self.stage_id, "Revert remediations that introduced new findings", "warning",
+                     f"{len(reverted)} remediation(s) reverted; their findings need a different remediation")
+        return list(reversed(reverted)), remaining
+
     # -- main -----------------------------------------------------------------------------
     def run(self) -> None:
         ctx = self.ctx
@@ -169,7 +212,14 @@ class ValidationAgent:
             # just because the version changed; it is an advisory without a usable fix.
             before_issues = {issue_key(f) for f in ctx.findings}
             introduced = [f for f in after if f.fingerprint() not in before and issue_key(f) not in before_issues]
+            reverted, introduced = self.revert_regressions(introduced)
+            verified = sum(1 for f in ctx.findings if f.fix_status == "verified")
             severe = [f for f in introduced if f.severity in ("critical", "high")]
+            if reverted:
+                checks.append(ValidationCheck(
+                    name="Remediations that introduced new findings were reverted", category="security-rescan",
+                    status="warning",
+                    detail="; ".join(f"#{rep.fixes.index(fix) + 1} {fix.summary[:80]}" for fix in reverted)[:600]))
             if introduced:
                 checks.append(ValidationCheck(
                     name="No new vulnerabilities introduced", category="security-rescan",
@@ -193,7 +243,8 @@ class ValidationAgent:
                 fix.validation_status = "passed"
         rep.validation_checks = checks
         global_fail = any(c.status == "failed" and c.fix_index is None for c in checks)
-        any_flagged = any(f.validation_status == "flagged" for f in rep.fixes)
+        # a reverted remediation is no longer part of the change set, so it does not hold up the pull request
+        any_flagged = any(f.validation_status == "flagged" for f in rep.fixes if f.status == "applied")
         rep.validation_status = "flagged" if (global_fail or any_flagged) else ("passed" if applied else "not_run")
         failed = sum(c.status == "failed" for c in checks)
         ctx.finish_stage(self.stage_id, "warning" if rep.validation_status == "flagged" else "completed",

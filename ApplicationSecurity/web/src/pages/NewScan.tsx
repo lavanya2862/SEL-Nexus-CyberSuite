@@ -4,11 +4,19 @@ import { ArrowRight, Check, FlaskConical, Loader2 } from 'lucide-react'
 import { AgentTile } from '@/components/Agents'
 import { Btn, Card, Choice, Field, Notice, PageHeader, Panel, inputCls } from '@/components/kit'
 import { post, useCaps } from '@/lib/api'
-import { SEVERITIES, sevLabel } from '@/lib/labels'
 import { useToast } from '@/lib/toast'
 import type { Job } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { Link } from 'react-router-dom'
+
+// Which findings the agents remediate: the chosen severity and everything more severe
+const SCOPES = [
+  { value: 'critical', label: 'Critical only' },
+  { value: 'high', label: 'Critical and high' },
+  { value: 'medium', label: 'Critical, high and medium' },
+  { value: 'low', label: 'All severities (critical to low)' },
+  { value: 'info', label: 'All, including informational' },
+]
 
 export function NewScan() {
   const caps = useCaps()
@@ -64,15 +72,14 @@ export function NewScan() {
             </Field>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Branch, tag or commit"><input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Default branch" className={inputCls} /></Field>
-              <Field label="Minimum severity to remediate">
-                <Choice field label="Minimum severity to remediate" value={minSev} onChange={setMinSev}
-                  options={SEVERITIES.slice(0, 5).map((s) => ({ value: s, label: `${sevLabel(s)} and above` }))} />
+              <Field label="Remediation scope" hint="Every finding in the chosen severities is remediated.">
+                <Choice field label="Remediation scope" value={minSev} onChange={setMinSev} options={SCOPES} />
               </Field>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Switch on={autoFix} set={setAutoFix} title="Automated remediation" text="The Remediation Agent remediates findings on an isolated branch." />
               <Switch on={llm} set={setUseLlm} disabled={!c?.llm.enabled} title="AI-assisted remediation"
-                text={c?.llm.enabled ? `Uses ${c.llm.model}.` : <>Requires an AI model. Configure one in <Link to="/settings" className="text-sky underline">Settings</Link>.</>} />
+                text={c?.llm.enabled ? `Uses the organisation’s model (${c.llm.model}).` : 'Ask your administrator to configure the organisation’s AI model.'} />
               <Switch on={pr} set={setCreatePr} disabled={!c?.github_token_configured} title="Raise the pull request automatically"
                 text={c?.github_token_configured ? 'When off, remediations wait for approval in Approvals. Scans that require review are raised as draft pull requests.' : <>Requires a GitHub token. Configure one in <Link to="/settings" className="text-sky underline">Settings</Link>.</>} />
               <Switch on={github} set={setGhTests} disabled={!c?.github_token_configured} title="CI test validation on GitHub Actions"
@@ -81,7 +88,7 @@ export function NewScan() {
             <details className="rounded-xl border border-hairline p-4">
               <summary className="cursor-pointer text-sm font-medium text-ink-2">Advanced options</summary>
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Maximum remediations per scan"><input type="number" min={1} max={200} value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="Organisation default" className={inputCls} /></Field>
+                <Field label="Maximum AI-assisted remediations (optional)"><input type="number" min={1} max={200} value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="All findings in scope" className={inputCls} /></Field>
                 <Field label="When validation requires review">
                   <Choice field label="When validation requires review" value={onFlag} onChange={setOnFlag} options={[
                     { value: 'draft', label: 'Raise a draft pull request for investigation' },
@@ -120,7 +127,7 @@ export function NewScan() {
             </ol>
           </Card>
           {c && !sc.codeql?.available && <Notice tone="warn" title="CodeQL is not installed in this environment">Code analysis falls back to Semgrep, Bandit and the built-in SAST rules. Run <code className="font-mono">scripts/install-codeql.ps1</code> to install it.</Notice>}
-          {c && !c.llm.enabled && <Notice tone="warn" title="AI-assisted remediation is unavailable">No AI model is configured. Dependency upgrades and rule-based remediations still apply. <Link to="/settings" className="text-sky underline">Configure a model in Settings</Link>.</Notice>}
+          {c && !c.llm.enabled && <Notice tone="warn" title="AI-assisted remediation is unavailable">No AI model is configured on this server. Dependency upgrades and rule-based remediations still apply. Ask your administrator to configure the organisation’s AI model.</Notice>}
           {c && !c.github_token_configured && <Notice tone="warn" title="Remediations cannot be pushed to GitHub">No GitHub token is configured. The patch remains available for download. <Link to="/settings" className="text-sky underline">Configure a token in Settings</Link>.</Notice>}
         </div>
       </div>

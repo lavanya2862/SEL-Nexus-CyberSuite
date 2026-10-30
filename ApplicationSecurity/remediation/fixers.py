@@ -237,16 +237,83 @@ def fix_with_rule(root: Path, finding: Finding) -> FixAttempt | None:
     return None
 
 
+# --- 2b. GitHub Actions pinned to a commit SHA --------------------------------------------------
+
+_USES = re.compile(r"^(?P<pre>\s*(?:-\s*)?uses:\s*)(?P<q>['\"]?)(?P<repo>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)"
+                   r"(?P<sub>/[^@\s'\"]*)?@(?P<ref>[^\s'\"#]+)(?P=q)(?P<rest>.*)$")
+_SHA = re.compile(r"^[0-9a-f]{40}$")
+
+
+def is_mutable_action_finding(finding: Finding) -> bool:
+    rule = (finding.rule_id or "").lower()
+    path = (finding.file_path or "").replace("\\", "/")
+    return ".github/workflows/" in f"/{path}" and any(k in rule for k in ("mutable-action-tag", "not-pinned", "unpinned"))
+
+
+def resolve_action_ref(root: Path, repo: str, ref: str) -> str | None:
+    """The commit an action tag or branch points to now, from GitHub itself (git ls-remote, no API token needed)."""
+    if "github.com" not in get_settings().allowed_hosts:
+        return None
+    res = run_cmd(["git", "ls-remote", f"https://github.com/{repo}.git", f"refs/tags/{ref}", f"refs/tags/{ref}^{{}}",
+                   f"refs/heads/{ref}"], cwd=root, timeout=60)
+    if not res.ok:
+        return None
+    refs = {name: sha for sha, name in (line.split("\t", 1) for line in res.stdout.splitlines() if "\t" in line)}
+    sha = refs.get(f"refs/tags/{ref}^{{}}") or refs.get(f"refs/tags/{ref}") or refs.get(f"refs/heads/{ref}")
+    return sha if sha and _SHA.match(sha) else None
+
+
+def fix_action_pin(root: Path, finding: Finding) -> FixAttempt | None:
+    """Pin `uses: owner/repo@v4` to the commit v4 points to now, keeping the tag as a comment for readers and for
+    Dependabot. Returns None when the line is not a pinnable action reference."""
+    target = resolve_in_repo(root, finding.file_path)
+    if not target or not finding.line:
+        return None
+    with open(target, encoding="utf-8", errors="strict", newline="") as fh:
+        lines = fh.read().splitlines(keepends=True)
+    for idx in [finding.line - 1, finding.line, finding.line - 2]:  # scanners differ by a line on multi-line steps
+        if not 0 <= idx < len(lines):
+            continue
+        body = lines[idx].rstrip("\r\n")
+        m = _USES.match(body)
+        if not m or _SHA.match(m["ref"]):
+            continue
+        sha = resolve_action_ref(root, m["repo"], m["ref"])
+        if not sha:
+            return FixAttempt(False, manual=True, detail=f"Could not resolve {m['repo']}@{m['ref']} to a commit on "
+                                                         "GitHub; pin it to the release's full commit SHA by hand.")
+        rest = m["rest"] if "#" in m["rest"] else f" # {m['ref']}{m['rest']}"
+        new = f"{m['pre']}{m['q']}{m['repo']}{m['sub'] or ''}@{sha}{m['q']}{rest}"
+        lines[idx] = new + lines[idx][len(body):]
+        with open(target, "w", encoding="utf-8", newline="") as fh:
+            fh.write("".join(lines))
+        rel = target.relative_to(root.resolve()).as_posix()
+        return FixAttempt(True, [rel], f"Pin {m['repo']}{m['sub'] or ''} to commit {sha[:12]} ({m['ref']}) in {rel}",
+                          f"`{body.strip()}` -> `{new.strip()}`. A full commit SHA cannot be moved by whoever "
+                          "controls the tag, so a compromised release cannot run in this workflow.")
+    return None
+
+
 # --- 3. LLM ----------------------------------------------------------------------------------
 
+def propose_fix(root: Path, finding: Finding) -> tuple[list[dict], str]:
+    """Ask the model for one finding's remediation without touching the code, so many findings can be asked at the
+    same time; fix_with_llm(..., proposal=...) applies the answer later. Raises LLMError / LLMQuotaExhausted."""
+    messages = [{"role": "user", "content": finding_prompt(finding, collect_context(root, finding))}]
+    return messages, chat(SYSTEM_PROMPT, messages)
+
+
 def fix_with_llm(root: Path, finding: Finding, attempts: int = 2,
-                 log: Callable[[str], None] | None = None) -> FixAttempt:
-    context = collect_context(root, finding)
-    messages = [{"role": "user", "content": finding_prompt(finding, context)}]
+                 log: Callable[[str], None] | None = None,
+                 proposal: tuple[list[dict], str] | None = None) -> FixAttempt:
+    if proposal:
+        messages, first = list(proposal[0]), proposal[1]
+    else:
+        messages, first = [{"role": "user", "content": finding_prompt(finding, collect_context(root, finding))}], None
     last_error = ""
     for attempt in range(1, attempts + 1):
         try:
-            reply = chat(SYSTEM_PROMPT, messages)
+            reply = first if attempt == 1 and first is not None else chat(SYSTEM_PROMPT, messages)
         except LLMQuotaExhausted:
             raise  # the caller stops using the LLM for the rest of the run
         except LLMError as exc:
@@ -262,6 +329,9 @@ def fix_with_llm(root: Path, finding: Finding, attempts: int = 2,
                     raise EditError(f"Unified diff did not apply: {message[:500]}")
                 files, explanation = changed_files(root), "Applied unified diff from model."
             else:
+                if str(data.get("status", "")).lower() == "false_positive":
+                    return FixAttempt(False, manual=True, detail=f"Likely false positive (AI assessment): "
+                                                                 f"{str(data.get('explanation', ''))[:500]}")
                 if str(data.get("status", "")).lower() == "cannot_fix":
                     return FixAttempt(False, manual=True,
                                       detail=f"Model declined: {str(data.get('explanation', ''))[:500]}")
@@ -277,8 +347,12 @@ def fix_with_llm(root: Path, finding: Finding, attempts: int = 2,
             last_error = str(exc)
             if log:
                 log(f"{finding.finding_id}: attempt {attempt} rejected: {last_error[:200]}")
+            # the code may have changed since the context was taken (other remediations are applied first), so the
+            # model gets the file as it is now
             messages += [{"role": "assistant", "content": reply[:8000]},
                          {"role": "user", "content": f"That response could not be applied: {last_error}\n"
-                                                     "Copy the search text verbatim from the context (without the "
+                                                     "Here is the current code (it may have changed):\n"
+                                                     f"{collect_context(root, finding)}\n\n"
+                                                     "Copy the search text verbatim from this context (without the "
                                                      "line-number prefix) and return the corrected JSON object only."}]
     return FixAttempt(False, detail=f"Could not produce an applicable fix: {last_error}")

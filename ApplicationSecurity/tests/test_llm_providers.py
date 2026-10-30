@@ -122,7 +122,7 @@ def test_list_models_per_provider(monkeypatch):
     from remediation.llm import LLMError, list_models
     get = _Get(200, GEMINI_MODELS)
     monkeypatch.setattr("remediation.llm.httpx.get", get)
-    assert list_models("gemini", "k") == ["gemini-3-pro-preview", "gemini-2.5-flash-lite", "gemini-2.5-flash"]
+    assert list_models("gemini", "k") == ["gemini-3-pro-preview"]  # Gemini 2.5 is limited to earlier users
     assert get.calls[0]["url"] == "https://generativelanguage.googleapis.com/v1beta/openai/models"
     assert get.calls[0]["headers"] == {"Authorization": "Bearer k"}
 

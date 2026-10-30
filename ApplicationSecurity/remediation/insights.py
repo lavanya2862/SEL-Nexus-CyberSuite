@@ -55,6 +55,8 @@ REASONS = [
      "Configure an AI model in Settings and re-run the scan to enable AI-assisted remediation."),
     (r"search text not found|could not produce|did not apply|syntax error|neither the requested",
      "ai_failed", "Automated remediation could not be applied", "Remediate manually using the finding details, or re-run the scan."),
+    (r"false positive", "false_positive", "Assessed as likely false positive",
+     "Confirm the assessment, then suppress the rule for this location or dismiss the finding."),
     (r"declined", "ai_declined", "Automated remediation assessed as unsafe", "Review the finding and remediate manually."),
     (r"No patched version", "no_upstream", "No patched version available",
      "Replace the package or apply compensating controls, and monitor for a patched release."),
@@ -62,12 +64,14 @@ REASONS = [
      "Upgrade the parent package, or run the lockfile command provided in the note."),
     (r"Still reported after", "partial", "Still reported after remediation",
      "Requires a larger upgrade or a code change."),
-    (r"reverted|broke", "reverted", "Remediation reverted after test failures", "Remediate manually."),
+    (r"reverted|broke", "reverted", "Remediation reverted by validation",
+     "The automated change introduced a new finding or broke tests; remediate manually."),
     (r"secret|credential|rotate", "secret", "Exposed secret", "Rotate the credential and remove it from the Git history."),
     (r"Third-party library", "vendored", "Vendored third-party code",
      "Update the bundled library (for example, replace the vendored .js file) to a supported version."),
     (r"test code", "tests", "Located in test code", "Low priority; remediate as part of routine maintenance."),
-    (r"budget", "budget", "Per-scan remediation limit reached", "Increase 'Maximum remediations per scan' in Settings and re-run the scan."),
+    (r"budget", "budget", "Per-scan remediation limit reached",
+     "Increase 'Medium and lower findings per scan' in Settings and re-run the scan."),
 ]
 OPEN_STATUSES = ("manual", "failed", "skipped", "not_attempted")
 
