@@ -31,6 +31,21 @@ def test_every_module_imports(part):
     assert done.returncode == 0, done.stdout + done.stderr
 
 
+def test_every_launched_module_exists():
+    """Code that starts another part (`python -m <module>`) names a module that is really there."""
+    import re
+
+    from layout import ROOT
+
+    known = {spec["package"] for spec in PARTS.values()}
+    wrong = []
+    for f in [*ROOT.glob("agents/*/src/**/*.py"), *ROOT.glob("dashboard/src/**/*.py"), *ROOT.glob("shared/*/src/**/*.py")]:
+        for m in re.finditer(r'"-m", "([a-z_.]+)"', f.read_text(encoding="utf-8")):
+            if m.group(1).split(".")[0] not in known:
+                wrong.append(f"{f.relative_to(ROOT)}: -m {m.group(1)}")
+    assert wrong == []
+
+
 @pytest.mark.parametrize("part", sorted(PARTS))
 def test_shared_library_imports(part):
     py = python(part)
