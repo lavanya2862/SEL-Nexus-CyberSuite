@@ -240,3 +240,46 @@ outside its own folder.
 ### Alert Triage Agent
 - `fixlink.py` (was `uc1link.py`) reads the Threat Intel folder's private fix plan; replace it with the Fix Centre in
   phase 3. Its key in the triage context is now `fixes` (was `uc1`); verdicts saved before phase 1 still say `uc1`.
+
+### Cross-folder reads (found 31 Oct 2026)
+
+| Reader file:line | What it reads (path) | Owner folder |
+|---|---|---|
+| `agents/threat_intel/src/threat_intel/exposure.py:95` | `data/dashboard/dashboard_data.json` (via `vuln_agent_dir`) | `agents/vulnerability` |
+| `agents/alert_triage/src/alert_triage/fixlink.py:26` | `data/fix/plan.json` (via `threat_intel_dir`) | `agents/threat_intel` |
+| `agents/alert_triage/src/alert_triage/fixlink.py:27` | `data/fix/state.json` (via `threat_intel_dir`) | `agents/threat_intel` |
+| `agents/vulnerability/src/vulnerability/pipeline.py:142` | `.venv` Python executable to invoke `fixes fix-refresh` (via `fix_engine_dir`) | `agents/threat_intel` |
+| `dashboard/src/dashboard/activity.py:81` | `data/fix/state.json` (via `threat_intel_dir`) | `agents/threat_intel` |
+| `dashboard/src/dashboard/app.py:64` | `data/fix/plan.json` (via `threat_intel_dir`) | `agents/threat_intel` |
+| `dashboard/src/dashboard/app.py:65` | `data/fix/state.json` (via `threat_intel_dir`) | `agents/threat_intel` |
+| `dashboard/src/dashboard/app.py:363` | `data/reports/` (via `threat_intel_dir`) | `agents/threat_intel` |
+| `dashboard/src/dashboard/app.py:363` | `data/reporting/` (via `vulnerability_dir`) | `agents/vulnerability` |
+| `dashboard/src/dashboard/app.py:364` | `data/reports/` (via `alert_triage_dir`) | `agents/alert_triage` |
+| `dashboard/src/dashboard/notifications.py:95` | `data/feedback/actions.jsonl` (via `alert_triage_dir`) | `agents/alert_triage` |
+| `dashboard/src/dashboard/runs.py:846` | `data/fix/state.json` (via `fix_dir`) | `agents/threat_intel` |
+| `dashboard/src/dashboard/runs.py:847` | `data/fix/plan.json` (via `fix_dir`) | `agents/threat_intel` |
+| `dashboard/src/dashboard/runs.py:1004` | `data/dashboard/dashboard_data.json` (via `uc_dirs[uc]`) | `agents/threat_intel`, `agents/vulnerability` |
+| `dashboard/src/dashboard/services.py:64` | `data/fix/.fix.lock` (via `threat_intel_dir`) | `agents/threat_intel` |
+| `dashboard/src/dashboard/fixproxy.py:137` | `.venv` Python executable to start `threat_intel serve` (via `threat_intel_dir`) | `agents/threat_intel` |
+| `dashboard/src/dashboard/triageproxy.py:112` | `.venv` Python executable to start `alert_triage serve` (via `alert_triage_dir`) | `agents/alert_triage` |
+| `dashboard/src/dashboard/agents/threat_intel.py:21` | `data/dashboard/dashboard_data.json` | `agents/threat_intel` |
+| `dashboard/src/dashboard/agents/threat_intel.py:25` | `data/last_run.json` | `agents/threat_intel` |
+| `dashboard/src/dashboard/agents/threat_intel.py:29` | `data/dashboard/clues.json` | `agents/threat_intel` |
+| `dashboard/src/dashboard/agents/threat_intel.py:36` | `data/dashboard/site_data.json` | `agents/threat_intel` |
+| `dashboard/src/dashboard/agents/threat_intel.py:53` | `data/dashboard/threat_matches.json` | `agents/threat_intel` |
+| `dashboard/src/dashboard/agents/threat_intel.py:113` | `data/reports/*.*` | `agents/threat_intel` |
+| `dashboard/src/dashboard/agents/vulnerability.py:23` | `data/reporting/{name}.parquet` | `agents/vulnerability` |
+| `dashboard/src/dashboard/agents/vulnerability.py:43` | `data/status/last_run.json` | `agents/vulnerability` |
+| `dashboard/src/dashboard/agents/vulnerability.py:47` | `data/dashboard/dashboard_data.json` | `agents/vulnerability` |
+| `dashboard/src/dashboard/agents/vulnerability.py:97` | `data/reporting/ai_fixes.json` | `agents/vulnerability` |
+| `dashboard/src/dashboard/agents/vulnerability.py:109` | `data/reporting/*.*` | `agents/vulnerability` |
+| `dashboard/src/dashboard/agents/alert_triage.py:83` | `data/reports/Alert_Triage_Report_*.*` | `agents/alert_triage` |
+| `dashboard/src/dashboard/agents/alert_triage.py:89` | `data/last_run.json` | `agents/alert_triage` |
+| `dashboard/src/dashboard/agents/alert_triage.py:92` | `data/feedback/feedback.jsonl` | `agents/alert_triage` |
+| `dashboard/src/dashboard/agents/alert_triage.py:98` | `data/export/triage_data.json` | `agents/alert_triage` |
+| `dashboard/src/dashboard/agents/alert_triage.py:103` | `data/feedback/actions.jsonl` | `agents/alert_triage` |
+| `dashboard/src/dashboard/agents/alert_triage.py:129` | `data/verdicts/{incident_id}.json` | `agents/alert_triage` |
+| `dashboard/src/dashboard/agents/alert_triage.py:139` | `data/feedback/ask.jsonl` | `agents/alert_triage` |
+| `dashboard/src/dashboard/agents/alert_triage.py:156` | `data/export/metrics.json` | `agents/alert_triage` |
+| `dashboard/src/dashboard/agents/alert_triage.py:159` | `data/export/backtest.json` | `agents/alert_triage` |
+

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat_intel.threat_matches.schema.json",
+  "title": "Threat Intel Threat Matches",
+  "description": "Written by Threat Intel Agent (agents/threat_intel, data/dashboard/threat_matches.json); read by dashboard (dashboard/src/dashboard/sources.py:ThreatIntelSource._matches)",
+  "x-schema-version": 1,
+  "type": "object",
+  "required": [
+    "built_at",
+    "cols",
+    "rows",
+    "threats"
+  ],
+  "properties": {
+    "built_at": {
+      "type": "string"
+    },
+    "cols": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "threats": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": ["string", "number", "null"]
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}
