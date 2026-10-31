@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     appsec_azure_foundry_workers: str = ""       # AI calls at the same time in one scan: "auto" or a number
     appsec_azure_foundry_max_workers: int = 0    # ceiling for "auto" (0 = keep LLM_MAX_WORKERS)
 
+    # Shared suite fallback (AZURE_FOUNDRY_* from the root .env)
+    azure_foundry_endpoint: str = ""
+    azure_foundry_api_key: str = ""
+    azure_foundry_deployment: str = ""
+    azure_foundry_rpm: int = 0
+    azure_foundry_reasoning_effort: str = ""
+
     llm_provider: Literal["auto", "openai", "anthropic", "gemini", "azure", "none"] = "auto"
     llm_base_url: str = "https://api.openai.com/v1"
     llm_api_key: str = ""
@@ -115,6 +122,7 @@ class Settings(BaseSettings):
 
     # --- SEL Nexus CyberSuite shared sign-in (see suite_auth.py) ------------------------------
     suite_login_url: str = ""  # e.g. http://127.0.0.1:8000; empty = no shared sign-in (local use, tests)
+    portal_login_url: str = ""  # fallback from PORTAL_LOGIN_URL in root .env
     suite_auth_dir: Path = Path("../login/data/auth")  # the sign-in page's folder holding session.key
 
     # Who sees a scan when the shared sign-in is on: everyone (the activity log shows who started and approved what),
@@ -137,28 +145,45 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _organisation_ai_model(self):
-        """APPSEC_AZURE_FOUNDRY_* set: that deployment is the AI model for every scan and the Security Assistant."""
-        if self.appsec_azure_foundry_endpoint and self.appsec_azure_foundry_api_key:
+        """APPSEC_AZURE_FOUNDRY_* or shared AZURE_FOUNDRY_* set: that deployment is the AI model for every scan."""
+        endpoint = (self.appsec_azure_foundry_endpoint or self.azure_foundry_endpoint).strip()
+        api_key = (self.appsec_azure_foundry_api_key or self.azure_foundry_api_key).strip()
+        deployment = (self.appsec_azure_foundry_deployment or self.azure_foundry_deployment).strip()
+        rpm = self.appsec_azure_foundry_rpm or self.azure_foundry_rpm
+        workers = (self.appsec_azure_foundry_workers or "").strip()
+        reasoning_effort = (self.appsec_azure_foundry_reasoning_effort or self.azure_foundry_reasoning_effort).strip()
+
+        if endpoint and api_key:
             self.llm_provider = "azure"
-            self.llm_base_url = self.appsec_azure_foundry_endpoint.strip().rstrip("/")
-            self.llm_api_key = self.appsec_azure_foundry_api_key.strip()
-            self.llm_model = self.appsec_azure_foundry_deployment.strip() or "gpt-5"
-            if self.appsec_azure_foundry_rpm:
-                self.llm_rpm = self.appsec_azure_foundry_rpm
-            if self.appsec_azure_foundry_workers.strip():
-                self.llm_workers = self.appsec_azure_foundry_workers.strip().lower()
+            endpoint_url = endpoint.rstrip("/")
+            if not endpoint_url.endswith("/openai/v1") and "/chat/completions" not in endpoint_url:
+                endpoint_url += "/openai/v1"
+            self.llm_base_url = endpoint_url
+            self.llm_api_key = api_key
+            self.llm_model = deployment or "gpt-5"
+            if rpm:
+                self.llm_rpm = rpm
+            if workers:
+                self.llm_workers = workers.lower()
             if self.appsec_azure_foundry_max_workers:
                 self.llm_max_workers = self.appsec_azure_foundry_max_workers
             # the process-wide ceiling: every scan running at once may use its full share of workers
             self.llm_max_concurrency = max(self.llm_max_concurrency, self.llm_max_workers * max(1, self.worker_concurrency))
-            if self.appsec_azure_foundry_reasoning_effort:
-                self.llm_reasoning_effort = self.appsec_azure_foundry_reasoning_effort.strip().lower()
+            if reasoning_effort:
+                self.llm_reasoning_effort = reasoning_effort.lower()
+        if not self.suite_login_url and self.portal_login_url:
+            self.suite_login_url = self.portal_login_url
+        if not (self.suite_auth_dir / "session.key").exists():
+            repo_auth = Path(__file__).resolve().parents[2] / "login" / "data" / "auth"
+            if (repo_auth / "session.key").exists():
+                self.suite_auth_dir = repo_auth
         return self
 
     @property
     def ai_managed(self) -> bool:
         """The AI model is the organisation's (set on the server), not each person's own."""
-        return bool(self.appsec_azure_foundry_endpoint and self.appsec_azure_foundry_api_key)
+        return bool((self.appsec_azure_foundry_endpoint or self.azure_foundry_endpoint) and
+                    (self.appsec_azure_foundry_api_key or self.azure_foundry_api_key))
 
     @property
     def per_user(self) -> bool:

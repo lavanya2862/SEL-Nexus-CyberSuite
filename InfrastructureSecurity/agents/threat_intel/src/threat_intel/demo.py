@@ -34,9 +34,10 @@ def notes(store: Store, settings: Settings) -> str:
     report = store.scalar("SELECT pdf_path FROM reports ORDER BY created_at DESC LIMIT 1")
     spot = latest_result(settings)
 
+    feed_str = ", ".join(f"{f['feed']} ({f['last_status']})" for f in feeds)
     lines = ["# Threat Intel demo notes (live numbers)", "",
              "## 1. It collects real threats",
-             f"- Feeds: {', '.join(f'{f['feed']} ({f['last_status']})' for f in feeds)}",
+             f"- Feeds: {feed_str}",
              f"- {m['new_threats']} threats in the last {m['window_days']} days; {iocs} fresh indicators (IPs, domains, URLs, hashes)", "",
              "## 2. It understands them (AI)"]
     if dutch:

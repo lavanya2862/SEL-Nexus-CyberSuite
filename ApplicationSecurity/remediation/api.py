@@ -234,7 +234,8 @@ def _mine(stmt, me: str | None):
 def auth_me(request: Request):
     """Who is signed in, and where the suite's sign-in page (the module chooser) is."""
     s = get_settings()
-    return {"user": _suite_user(request), "login_url": s.suite_login_url.rstrip("/") or None}
+    login_url = (s.suite_login_url or getattr(s, "portal_login_url", "") or "http://127.0.0.1:8000").rstrip("/")
+    return {"user": _suite_user(request), "login_url": login_url}
 
 
 @app.post("/api/v1/auth/logout")

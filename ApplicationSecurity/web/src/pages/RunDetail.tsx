@@ -16,7 +16,7 @@ import { FindingsTable } from '@/components/Tables'
 import { RunTestsButton, TestsTab } from '@/components/TestLoop'
 import { PDF_FILES, TOOL_FILES, api, artifactUrl, isLive, post, testsActive, useCaps, useJob, useJobAgents, useJobEvents, useJobResults } from '@/lib/api'
 import { ago, personLabel, stamp } from '@/lib/format'
-import { AGENT_IDS, METHOD, SEVERITIES, dur, mergedStages, sevLabel, where } from '@/lib/labels'
+import { AGENT_IDS, METHOD, SEVERITIES, dur, mergedStages, sevLabel, scopeLabel, where } from '@/lib/labels'
 import { useApprove, usePanels } from '@/lib/panels'
 import { useTheme } from '@/lib/theme'
 import { useToast } from '@/lib/toast'
@@ -146,7 +146,36 @@ function RunHeader({ job, report }: { job: Job; report?: Report }) {
         </Notice>
       )}
       {job.error && <Notice tone="bad" title={`Scan ${job.status}`}>{job.error}</Notice>}
+      <ScopeBanner job={job} />
     </Panel>
+  )
+}
+
+/* ───────── scope notice ───────── */
+
+/** Tells the user which severity scope was chosen at scan start so they are not surprised when
+ *  lower-severity findings are present but were not remediated. Hidden when scope is "all" (low). */
+function ScopeBanner({ job }: { job: Job }) {
+  const minSev = (job.options as Record<string, unknown> | undefined)?.min_severity as string | undefined
+  // Only show when the scope is *not* the default "all" (low), so every finding is remediated by default
+  if (!minSev || minSev === 'low' || minSev === 'info') return null
+  const label = scopeLabel(minSev)
+  const skippedSevs: Record<string, string[]> = {
+    critical: ['high', 'medium', 'low'],
+    high: ['medium', 'low'],
+    medium: ['low'],
+  }
+  const skipped = (skippedSevs[minSev] ?? []).map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+  return (
+    <Notice tone="info" title={`Remediation scope: ${label}`}>
+      Only findings with severity <strong>{label.toLowerCase()}</strong> were selected for automated
+      remediation in this scan.{skipped.length > 0 && (
+        <> {skipped.join(', ')} severity findings were detected but intentionally excluded — they
+        appear in &ldquo;All findings&rdquo; for your reference but were not remediated.</>
+      )}{' '}
+      To include them in a future scan, choose a broader scope on the{' '}
+      <a href="/scan" className="text-sky underline">New scan</a> page.
+    </Notice>
   )
 }
 

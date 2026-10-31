@@ -99,6 +99,7 @@ function useCounts(): Counts {
 export function AppShell() {
   const { pathname } = useLocation()
   const { theme, toggle } = useTheme()
+  const { loginUrl } = useAuth()
   const keys = useKeysPrompt()
   const [collapsed, setCollapsed] = useCollapsedNav()
   const counts = useCounts()
@@ -129,6 +130,18 @@ export function AppShell() {
             {counts.live ? 'Scan in progress…' : 'New scan'}
           </NavLink>
           <AttentionBell />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => { window.location.href = `${loginUrl || 'http://127.0.0.1:8000'}/?switch=1` }}
+                className="grid size-9 place-items-center rounded-lg text-ink-2 hover:bg-well hover:text-ink"
+                aria-label="Switch workspace"
+              >
+                <Grip className="size-[18px]" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Switch workspace</TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <button onClick={toggle} className="grid size-9 place-items-center rounded-lg text-ink-2 hover:bg-well hover:text-ink" aria-label="Switch between light and dark mode">
@@ -248,14 +261,36 @@ function PhoneMenu({ activeItem, counts }: { activeItem?: string; counts: Counts
     bottom of the side menu. Collapsed menu: the initials and the buttons. Hidden when there is no shared sign-in. */
 function ProfileBox({ compact }: { compact?: boolean }) {
   const { user, loginUrl, signOut } = useAuth()
-  if (!user || user.via === 'off' || !loginUrl) return null
-  const initials = (user.name || user.email).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('')
+  const switchTarget = loginUrl || 'http://127.0.0.1:8000'
+  const modules = () => { window.location.href = `${switchTarget}/?switch=1` }
   const out = async () => {
     await signOut()
-    goToSharedLogin(loginUrl)
+    goToSharedLogin(switchTarget)
   }
-  // accounts made before domains existed have no list and may open every domain
-  const modules = !user.domains || user.domains.length > 1 ? () => { window.location.href = `${loginUrl}/?switch=1` } : null
+
+  if (!user || user.via === 'off') {
+    if (compact) {
+      return (
+        <div className="flex flex-col items-center gap-1.5 border-t border-hairline py-3">
+          <RailButton label="Switch workspace" onClick={modules}><Grip className="size-4" /></RailButton>
+        </div>
+      )
+    }
+    return (
+      <div className="border-t border-hairline p-3">
+        <button
+          onClick={modules}
+          title="Switch to another CyberSuite workspace"
+          className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-hairline-strong text-sm font-medium text-ink-2 transition-colors hover:border-blue/60 hover:bg-blue/10 hover:text-ink"
+        >
+          <Grip className="size-4" /> Switch workspace
+        </button>
+      </div>
+    )
+  }
+
+  const initials = (user.name || user.email).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('')
+
   if (compact) {
     return (
       <div className="flex flex-col items-center gap-1.5 border-t border-hairline py-3">
@@ -265,7 +300,7 @@ function ProfileBox({ compact }: { compact?: boolean }) {
           </TooltipTrigger>
           <TooltipContent side="right">{user.name}<span className="text-ink-3"> · {user.email}</span></TooltipContent>
         </Tooltip>
-        {modules && <RailButton label="Switch domain" onClick={modules}><Grip className="size-4" /></RailButton>}
+        <RailButton label="Switch workspace" onClick={modules}><Grip className="size-4" /></RailButton>
         <RailButton label="Sign out" onClick={out}><LogOut className="size-4" /></RailButton>
       </div>
     )
@@ -281,14 +316,17 @@ function ProfileBox({ compact }: { compact?: boolean }) {
           </span>
         </div>
         <div className="mt-3 flex gap-2">
-          {modules && (
-            <button onClick={modules} title="Switch to another CyberSuite domain"
-              className="flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-hairline-strong text-sm font-medium text-ink-2 transition-colors hover:border-blue/60 hover:bg-blue/10 hover:text-ink">
-              <Grip className="size-4" /> Switch
-            </button>
-          )}
-          <button onClick={out}
-            className="flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-hairline-strong text-sm font-medium text-ink-2 transition-colors hover:border-rose/60 hover:bg-rose/10 hover:text-ink">
+          <button
+            onClick={modules}
+            title="Switch to another CyberSuite workspace"
+            className="flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-hairline-strong text-sm font-medium text-ink-2 transition-colors hover:border-blue/60 hover:bg-blue/10 hover:text-ink"
+          >
+            <Grip className="size-4" /> Switch
+          </button>
+          <button
+            onClick={out}
+            className="flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-hairline-strong text-sm font-medium text-ink-2 transition-colors hover:border-rose/60 hover:bg-rose/10 hover:text-ink"
+          >
             <LogOut className="size-4" /> Sign out
           </button>
         </div>

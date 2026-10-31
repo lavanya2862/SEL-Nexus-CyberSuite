@@ -5,6 +5,20 @@ import type { AgentId, Finding, Severity, Stage } from '@/lib/types'
 export const SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low', 'info', 'unknown']
 export const sevLabel = (s: string) => (s === 'unknown' || s === 'info' ? (s === 'info' ? 'Info' : 'Unrated') : s[0].toUpperCase() + s.slice(1))
 
+/** Map a min_severity value to a human-readable scope label shown on the scan detail page. */
+export const SCOPE_LABELS: Record<string, string> = {
+  critical: 'Critical only',
+  high: 'Critical and high',
+  medium: 'Critical, high and medium',
+  low: 'All severities (critical to low)',
+  info: 'All severities including informational',
+}
+
+/** Returns a human-readable string for a given min_severity value. */
+export function scopeLabel(minSeverity: string | undefined | null): string {
+  return SCOPE_LABELS[minSeverity ?? 'low'] ?? `${minSeverity ?? 'low'} and above`
+}
+
 /** The six steps of every scan, in order. The names come from here so old scans read the same as new ones. */
 export const STAGES: { id: string; name: string; short: string; agent: string | null; description: string; icon: LucideIcon }[] = [
   { id: 'ingest', name: 'Repository Ingestion', short: 'Ingest source', agent: null, icon: Download,
