@@ -1,6 +1,6 @@
 # The ONLY containment options the agent may recommend. The AI cannot invent others; the checker drops anything
 # not listed here. None of these are performed automatically - a human acts, and only the lab-device isolate is
-# wired to a real API call (behind the UC4_CONTAIN flag and a confirm click).
+# wired to a real API call (behind the TRIAGE_CONTAIN flag and a confirm click).
 options:
   isolate_device:
     label: Isolate the device from the network

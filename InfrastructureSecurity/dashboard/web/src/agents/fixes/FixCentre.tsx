@@ -1,17 +1,25 @@
+import { ExpandableCard } from '@/components/DetailDialog'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
-  AlertTriangle, Check, ChevronDown, ChevronRight, Copy, Monitor, RotateCcw, ExternalLink, ListChecks, Loader2, Play, Search, ShieldCheck, ShoppingBasket,
-  SlidersHorizontal, Sparkles, Undo2, UserRound, X, Zap,
+  AlertTriangle, Bot, Check, ChevronDown, ChevronRight, Copy, Monitor, ExternalLink, ListChecks, Loader2, Play, ShieldCheck, ShoppingBasket,
+  SlidersHorizontal, Sparkles, Undo2, UserCog, UserRound, Wrench, X, Zap,
 } from 'lucide-react'
 import { ConfirmDialog, StatusPill } from '@/components/FixLoop'
-import { Choice, Empty, HopLink, Panel, Tabs, Tag } from '@/components/kit'
+import {
+  DateFilter, Empty, FilterBar, FilterChoice, FilterSearch, HopLink, Panel, StatBox, Tabs, Tag, choiceChip, dateChip, inDateRange,
+  type ActiveFilter, type DateRange,
+} from '@/components/kit'
 import { FixHistory } from '@/agents/fixes/FixHistory'
 import { AttackResponses } from '@/agents/fixes/AttackResponses'
-import { AgentFilterBar, AgentTags, RowFound, RunBanner, belongs, useAgentFilter } from '@/components/AgentTags'
+import { AgentTags, RowFound, RunBanner, belongs, useAgentFilter } from '@/components/AgentTags'
 import { VulnList } from '@/components/VulnList'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { FixDown, canApprove, isSetting, settingChange, useFix, useFixAction, type FixRow, type FixView } from '@/agents/fixes/data'
+import { FixProgress } from '@/agents/fixes/FixProgress'
+import { ManualAction, PersonLine } from '@/components/ManualAction'
+import { QuickActions } from '@/agents/fixes/QuickActions'
+import { RecordLink } from '@/components/FixRecord'
 import { useFilters } from '@/lib/filters'
 import { ago, num, shortDate } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
@@ -36,8 +44,8 @@ const findApp = (apps: VulnFixApp[], focus: string) => {
     ?? apps.find((a) => softwareOf(a).startsWith(f))
 }
 
-type View = 'cards' | 'settings' | 'attacks' | 'history'
-const VIEWS: [View, string][] = [['cards', 'Updates & upgrades'], ['settings', 'Security configuration'], ['attacks', 'Attack responses'], ['history', 'Remediation history']]
+type View = 'cards' | 'settings' | 'indicators' | 'attacks' | 'progress' | 'history'
+const VIEWS: [View, string][] = [['cards', 'Updates & upgrades'], ['settings', 'Security configuration'], ['indicators', 'Indicator responses'], ['attacks', 'Attack responses'], ['progress', 'Remediation progress'], ['history', 'Remediation history']]
 
 /** The fix-type chips on Updates & upgrades (?type= picks one, e.g. from the Vulnerabilities overview). */
 const KINDS: [FixKind, string, string][] = [
@@ -55,7 +63,7 @@ const KIND_PHRASE: Record<FixKind, [string, string]> = {
 export function FixCentre() {
   const { tab } = useParams()
   const navigate = useNavigate()
-  const view: View = tab === 'history' || tab === 'settings' || tab === 'attacks' ? tab : 'cards'
+  const view: View = VIEWS.some(([v]) => v === tab) ? (tab as View) : 'cards'
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -65,7 +73,7 @@ export function FixCentre() {
         </div>
       </div>
       <Tabs<View> tabs={VIEWS} value={view} onChange={(t) => navigate(t === 'cards' ? '/fixes' : `/fixes/${t}`)} />
-      {view === 'attacks' ? <AttackResponses /> : view === 'history' ? <FixHistory /> : view === 'settings' ? <SettingsCards /> : <FixCards />}
+      {view === 'attacks' ? <AttackResponses /> : view === 'indicators' ? <AttackResponses owner="threat_intel" /> : view === 'history' ? <FixHistory /> : view === 'progress' ? <FixProgress embedded /> : view === 'settings' ? <SettingsCards /> : <FixCards />}
     </div>
   )
 }
@@ -87,7 +95,10 @@ function FixCards() {
   const typeParam = params.get('type')
   const [kind, setKind] = useState<'all' | FixKind>(KINDS.some(([k]) => k === typeParam) ? (typeParam as FixKind) : 'all')
   const [q, setQ] = useState('')
+  const [found, setFound] = useState<DateRange>({ preset: 'any' })
   const [vm, setVm] = useState('all')
+  // ?status=manual_required (from the progress page or the bell): only the remediations waiting for a person
+  const [state, setState] = useState(['manual_required', 'awaiting_vendor', 'info'].includes(params.get('status') ?? '') ? params.get('status')! : 'all')
   const [showDone, setShowDone] = useState(false)
   const agentFilter = useAgentFilter()
   const rows = useVulnView(data).rows
@@ -173,7 +184,14 @@ function FixCards() {
   const inVm = inAgent.filter((u) => vm === 'all' || u.device === vm)
   const ofKind = (k: FixKind) => inVm.filter((u) => fixKind(u.a) === k).length
   const inKind = inVm.filter((u) => kind === 'all' || fixKind(u.a) === kind)
-  const cards = inKind.filter((u) => (level === 0 || u.a.urgency.level === level) && matchesText(u))
+  const firstFound = (u: Unit) => {
+    const t = Object.values(u.r?.found_by ?? {}).filter((x): x is string => !!x).sort()[0]
+    return t ? new Date(t.replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(t) ? '' : 'Z')) : null
+  }
+  const cards = inKind.filter((u) => (level === 0 || u.a.urgency.level === level) && matchesText(u) && inDateRange(firstFound(u), found)
+    && (state === 'all' || u.r?.status === state))
+    // a remediation waiting for a person stays at the top until someone marks it fixed
+    .sort((x, y) => Number(y.r?.status === 'manual_required') - Number(x.r?.status === 'manual_required'))
   const count = (l: number) => inKind.filter((u) => u.a.urgency.level === l).length
   // the summary follows the filters: what these cards' remediations clear, in all and from threat intel
   const shownVulns = inVm.reduce((n, u) => n + (u.d?.cves.length ?? 0), 0)
@@ -191,13 +209,35 @@ function FixCards() {
     setParams(n, { replace: true })
   }
   const clearFilters = () => {
-    setQ(''); setLevel(0); setKind('all'); setVm('all')
+    setQ(''); setLevel(0); setKind('all'); setVm('all'); setFound({ preset: 'any' }); setState('all')
     const n = new URLSearchParams(params)
     for (const key of ['type', 'agent', 'since']) n.delete(key)
     setParams(n, { replace: true })
   }
+  const vmOptions = [{ value: 'all', label: 'All VMs', count: inAgent.length },
+    ...vmNames.map((d) => ({ value: d, label: d, count: inAgent.filter((u) => u.device === d).length }))]
+  const agentOptions = [{ value: 'all', label: 'All agents', count: inOpcoAll.length },
+    { value: 'vulnerability', label: AGENT_NAME.vulnerability, count: agentCounts.vulnerability, dot: 'var(--sky)' },
+    { value: 'threat_intel', label: AGENT_NAME.threat_intel, count: agentCounts.threat_intel, dot: 'var(--violet)' }]
+  const kindOptions = [{ value: 'all', label: 'All types', count: inVm.length }, ...KINDS.map(([k, l]) => ({ value: k, label: l, count: ofKind(k) }))]
+  const stateOptions = [{ value: 'all', label: 'All statuses', count: inKind.length },
+    { value: 'manual_required', label: 'Waiting for a person', count: inKind.filter((u) => u.r?.status === 'manual_required').length, dot: statusColor.critical },
+    { value: 'awaiting_vendor', label: 'Awaiting vendor package', count: inKind.filter((u) => u.r?.status === 'awaiting_vendor').length, dot: '#b37400' },
+    { value: 'info', label: 'No automatic fix', count: inKind.filter((u) => u.r?.status === 'info').length, dot: 'var(--ink-3)' }]
+  const levelOptions = [{ value: '0', label: 'All priorities', count: inKind.length },
+    ...([1, 2, 3] as const).map((l) => ({ value: String(l), label: LEVEL[l].label, count: count(l), dot: LEVEL[l].color }))]
+  const chips: ActiveFilter[] = [
+    ...(q ? [{ key: 'q', label: `“${q}”`, onRemove: () => setQ('') }] : []),
+    ...dateChip(found, () => setFound({ preset: 'any' })),
+    ...choiceChip('vm', vmOptions, vm, () => setVm('all')),
+    ...choiceChip('agent', agentOptions, agentFilter.agent ?? 'all', () => agentFilter.set(null)),
+    ...choiceChip('kind', kindOptions, kind, () => pickKind('all')),
+    ...choiceChip('lvl', levelOptions, String(level), () => setLevel(0)),
+    ...choiceChip('state', stateOptions, state, () => setState('all')),
+  ]
   const approve = (ids: string[]) => v && act.mutate({ action: 'approve', ids, method: v.default_method })
   const withdraw = (ids: string[]) => act.mutate({ action: 'unapprove', ids })
+  const handOver = (ids: string[]) => act.mutate({ action: 'handover', ids })
   const highlighted = focus ? findApp(X.apps, focus) : undefined
   const settings = (X.settings ?? []).filter((s) => opco === 'all' || s.opcos.includes(opco)).length
   const verified = (v?.rows ?? []).filter((r) => r.status === 'verified')
@@ -220,10 +260,16 @@ function FixCards() {
   const listAt = listApp ? apps.indexOf(listApp) : -1
   const step = (a: VulnFixApp | undefined) => (a ? { name: a.app, go: () => showList(a, undefined, true) } : undefined)
   const card = (u: Unit, i: number) => (
-    <VmCard key={u.key} u={u} rank={i + 1} today={today} engine={!!v} busy={act.isPending} highlight={highlighted === u.a} anchor={anchors.has(u.key)}
-      onApprove={approve} onWithdraw={withdraw} onList={() => showList(u.a, u.device)} fresh={!!u.r && agentFilter.isNew(u.r)}
-      news={newsOn(u) ?? (u.r?.threats?.length ? newsOf(u.a) : 0)} agent={agentFilter.agent}
-      otherVersions={(versionsOn.get(`${u.device}|${softwareOf(u.a)}`) ?? []).filter((x) => x !== u.version)} />
+    <ExpandableCard key={u.key} id={anchors.has(u.key) ? `fix-${softwareOf(u.a)}` : undefined} highlight={highlighted === u.a}
+      accent={LEVEL[u.a.urgency.level].color} title={`${u.a.app} ${u.version}`.trim()} subtitle={[u.device, u.opco].filter(Boolean).join(' · ')}
+      eyebrow={<><span className="font-medium" style={{ color: LEVEL[u.a.urgency.level].color }}>{LEVEL[u.a.urgency.level].label} priority</span><span className="text-ink-3">{KINDS.find(([k]) => k === fixKind(u.a))?.[1]}</span></>}
+      summary={<UnitSummary u={u} today={today} />}
+      actions={u.r && v ? <QuickActions rows={[u.r]} busy={act.isPending} onApprove={approve} onWithdraw={withdraw} onSave={(ids) => act.mutate({ action: 'save', ids })} onHandOver={handOver} /> : null}>
+      <VmCard u={u} rank={i + 1} today={today} engine={!!v} busy={act.isPending} highlight={false} anchor={false}
+        onApprove={approve} onWithdraw={withdraw} onList={() => showList(u.a, u.device)} fresh={!!u.r && agentFilter.isNew(u.r)}
+        news={newsOn(u) ?? (u.r?.threats?.length ? newsOf(u.a) : 0)} agent={agentFilter.agent}
+        otherVersions={(versionsOn.get(`${u.device}|${softwareOf(u.a)}`) ?? []).filter((x) => x !== u.version)} />
+    </ExpandableCard>
   )
 
   return (
@@ -267,51 +313,22 @@ function FixCards() {
         </div>
       </section>
 
-      {/* one filter panel: search, then labelled choices (each option shows how many cards it has) */}
-      <Panel className="flex flex-col gap-3 p-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.3fr)_repeat(4,minmax(0,1fr))]">
-          <Field label="Find an app or VM">
-            <label className="flex items-center gap-2 rounded-lg border border-hairline-strong bg-field px-3 py-2 text-sm transition-[border-color,box-shadow] focus-within:border-blue/60 focus-within:ring-3 focus-within:ring-blue/15">
-              <Search className="size-3.5 shrink-0 text-ink-3" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Firefox, opcb-wks-01…" aria-label="Find an app or VM" className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-ink-3" />
-            </label>
-          </Field>
-          <Field label="VM">
-            <Choice label="VM" value={vm} onChange={setVm} options={[
-              { value: 'all', label: 'All VMs', count: inAgent.length },
-              ...vmNames.map((d) => ({ value: d, label: d, count: inAgent.filter((u) => u.device === d).length }))]} />
-          </Field>
-          <Field label="Found by">
-            <Choice label="Found by" value={agentFilter.agent ?? 'all'} onChange={(a) => agentFilter.set(a === 'all' ? null : a as 'vulnerability' | 'threat_intel')} options={[
-              { value: 'all', label: 'All agents', count: inOpcoAll.length },
-              { value: 'vulnerability', label: AGENT_NAME.vulnerability, count: agentCounts.vulnerability, dot: 'var(--sky)' },
-              { value: 'threat_intel', label: AGENT_NAME.threat_intel, count: agentCounts.threat_intel, dot: 'var(--violet)' }]} />
-          </Field>
-          <Field label="Remediation type">
-            <Choice label="Remediation type" value={kind} onChange={(k) => pickKind(k as 'all' | FixKind)}
-              options={[{ value: 'all', label: 'All remediation types', count: inVm.length }, ...KINDS.map(([k, l]) => ({ value: k, label: l, count: ofKind(k) }))]} />
-          </Field>
-          <Field label="Remediation priority">
-            <Choice label="Remediation priority" value={String(level)} onChange={(l) => setLevel(Number(l) as 0 | 1 | 2 | 3)} options={[
-              { value: '0', label: 'All priorities', count: inKind.length },
-              ...([1, 2, 3] as const).map((l) => ({ value: String(l), label: LEVEL[l].label, count: count(l), dot: LEVEL[l].color }))]} />
-          </Field>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
-          <span>Showing <b className="text-ink-2">{num(cards.length)}</b> of {num(inOpcoAll.length)} remediations</span>
-          {kind !== 'all' && <span>· {KINDS.find(([k]) => k === kind)?.[2]}</span>}
-          {(q || level || kind !== 'all' || vm !== 'all' || agentFilter.agent) && (
-            <button onClick={clearFilters}
-              className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-ink-2 hover:bg-well hover:text-ink">
-              <RotateCcw className="size-3.5" /> Clear filters
-            </button>
-          )}
-        </div>
-      </Panel>
+      <FilterBar chips={chips} onClear={clearFilters} count={`${num(cards.length)} of ${num(inOpcoAll.length)} remediations`}>
+        <FilterSearch value={q} onChange={setQ} placeholder="Search app or VM…" label="Find an app or VM" />
+        <DateFilter label="Found" value={found} onChange={setFound} />
+        <FilterChoice label="VM" icon={Monitor} value={vm} onChange={setVm} options={vmOptions} />
+        <FilterChoice label="Found by" icon={Bot} value={agentFilter.agent ?? 'all'} onChange={(a) => agentFilter.set(a === 'all' ? null : a as 'vulnerability' | 'threat_intel')} options={agentOptions} />
+        <FilterChoice label="Remediation type" icon={Wrench} value={kind} onChange={(k) => pickKind(k as 'all' | FixKind)} options={kindOptions} />
+        <FilterChoice label="Priority" icon={AlertTriangle} value={String(level)} onChange={(l) => setLevel(Number(l) as 0 | 1 | 2 | 3)} options={levelOptions} />
+        <FilterChoice label="Status" icon={UserCog} value={state} onChange={setState} options={stateOptions} />
+      </FilterBar>
       <RunBanner filter={agentFilter} what="software remediations" />
 
+      {state === 'info' && v && cards.some((u) => u.r?.status === 'info') && (
+        <HandOverAll ids={cards.flatMap((u) => (u.r?.status === 'info' ? [u.r.fix_id] : []))} busy={act.isPending} onHandOver={handOver} />
+      )}
       {cards.length ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">{cards.map(card)}</div>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3">{cards.map(card)}</div>
       ) : <Empty text={agentFilter.agent ? 'No remediations from this agent match these filters.' : kind === 'none' ? 'No items: a security update is available for every vulnerability.' : kind === 'os' ? 'No Windows updates needed: Defender found no vulnerabilities in Windows itself.' : 'No remediations match this filter.'} />}
 
       {doneCards.length > 0 && (
@@ -359,7 +376,7 @@ const TRACK = ['Found', 'Explained', 'Approved', 'Remediated', 'Verified'] as co
 function rowStep(r: FixRow, explained: boolean): number {
   if (r.status === 'verified' || r.status === 'gone') return 5
   if (r.status === 'done' || r.status === 'still_there') return 4
-  if (['approved', 'queued', 'running', 'failed'].includes(r.status)) return 3
+  if (['approved', 'queued', 'running', 'failed', 'manual_required', 'awaiting_vendor'].includes(r.status)) return 3
   return explained ? 2 : 1
 }
 
@@ -405,6 +422,55 @@ function Tracker({ total, reached }: { total: number; reached: number[] }) {
 
 /** One app version on one VM, in the Remediation card's usual look: numbers, vulnerabilities button, tracker, the
  *  Remediate button, and the longer advice folded under Why now / Manual remediation steps / Verification. */
+/** The small card in the Updates & upgrades grid: what, where, three numbers and the state; the full VmCard opens on click. */
+function UnitSummary({ u, today }: { u: Unit; today: string }) {
+  const lv = LEVEL[u.a.urgency.level]
+  const vulns = u.d?.cves.length || u.r?.findings || 0
+  const severe = (u.d?.cves ?? []).filter((c) => c.sev === 'Critical' || c.sev === 'High').length
+  const left = u.d?.due && !(u.r && cleared(u.r)) ? daysBetween(today, u.d.due) : null
+  const late = left != null && left < 0
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2 text-[11px] font-medium">
+        <span className="truncate" style={{ color: lv.color }}>{lv.label} priority · <span className="font-normal text-ink-3">{KINDS.find(([k]) => k === fixKind(u.a))?.[1]}</span></span>
+        <span className="shrink-0 rounded-md bg-well px-1.5 py-0.5 text-ink-2">{u.device}</span>
+      </div>
+      <div className="truncate font-semibold leading-snug">{u.a.app} <span className="font-normal text-ink-3">{u.version}</span></div>
+      <div className="grid grid-cols-3 gap-2">
+        <StatBox value={vulns} label="Vulnerabilities" />
+        <StatBox value={severe} label="Critical / high" color={severe ? statusColor.critical : undefined} />
+        {left != null
+          ? <StatBox value={Math.abs(left)} label={late ? 'Days overdue' : left === 0 ? 'Due today' : 'Days left'} color={late ? statusColor.critical : undefined} />
+          : <StatBox value="–" label="No deadline" />}
+      </div>
+      {u.r && <div className="flex min-w-0 items-center gap-2"><StatusPill r={u.r} /><PersonLine r={u.r} short /></div>}
+    </>
+  )
+}
+
+/** The small card in the Security configuration grid: the setting, three numbers and the state; the full SettingCard opens on click. */
+function SettingSummary({ s, rows }: { s: VulnFixSetting; rows: FixRow[] }) {
+  const lv = LEVEL[s.urgency.level]
+  const fixes = rows.filter((r) => r.action === 'setting')
+  const devices = new Set(rows.map((r) => r.device_name)).size
+  const open = fixes.filter((r) => !cleared(r)).length
+  const shown = fixes.find((x) => x.status === 'manual_required') ?? fixes.find((x) => x.status !== 'proposed') ?? fixes[0]
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2 text-[11px] font-medium">
+        <span className="truncate" style={{ color: lv.color }}>{lv.label} priority · <span className="font-normal text-ink-3">{s.category}</span></span>
+      </div>
+      <div className="line-clamp-2 font-semibold leading-snug">{s.app}</div>
+      <div className="grid grid-cols-3 gap-2">
+        <StatBox value={devices} label={devices === 1 ? 'Device' : 'Devices'} />
+        <StatBox value={open} label="Not yet fixed" color={open ? statusColor.critical : undefined} />
+        <StatBox value={`${s.impact}/10`} label="Impact" />
+      </div>
+      {shown && <div className="flex min-w-0 items-center gap-2"><StatusPill r={shown} /><PersonLine r={shown} short /></div>}
+    </>
+  )
+}
+
 function VmCard({ u, rank, today, engine, busy, highlight, anchor, onApprove, onWithdraw, onList, fresh, news, agent, otherVersions }: {
   u: Unit; rank: number; today: string; engine: boolean; busy: boolean; highlight: boolean; anchor: boolean
   onApprove: (ids: string[]) => void; onWithdraw: (ids: string[]) => void; onList: () => void; fresh: boolean
@@ -515,10 +581,12 @@ function VmCard({ u, rank, today, engine, busy, highlight, anchor, onApprove, on
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <div className="min-w-0 flex-1 text-xs">
             {r ? <><StatusPill r={r} /><RowFound r={r} fresh={fresh} /></> : <span className="text-ink-3">{a.fix.action}</span>}
-            {r?.message && ['failed', 'done', 'still_there'].includes(r.status) && <div className="mt-0.5 line-clamp-2 text-[11px] text-ink-3">{r.message}</div>}
+            {r?.message && ['failed', 'awaiting_vendor', 'done', 'still_there'].includes(r.status) && !r.manual && <div className="mt-0.5 line-clamp-2 text-[11px] text-ink-3">{r.message}</div>}
+            {r && <ManualAction r={r} compact />}
+            {r?.started_at && <RecordLink id={r.fix_id} className="mt-1" />}
           </div>
           {kindOf === 'none' || r?.action === 'none' ? (
-            <span className="max-w-[55%] text-right text-xs text-ink-3" title={r?.note || undefined}>{kindOf === 'none' ? 'No update available yet' : 'Manual remediation only'}</span>
+            <span className="max-w-[60%] text-right text-xs text-ink-3">{kindOf === 'none' ? 'No update available yet' : r?.note || 'Manual remediation only'}</span>
           ) : !r ? (
             <span className="text-xs text-ink-3">{engine ? 'Not yet in the automated remediation plan' : 'Automated remediation is disabled'}</span>
           ) : canApprove(r) ? (
@@ -596,7 +664,9 @@ function ComputerRow({ r, busy, onApprove, onWithdraw, fresh }: { r: FixRow; bus
         )}
         <div className="mt-0.5"><StatusPill r={r} /></div>
         <RowFound r={r} fresh={fresh} />
-        {r.message && ['failed', 'done', 'still_there'].includes(r.status) && <div className="mt-0.5 line-clamp-2 text-[11px] text-ink-3">{r.message}</div>}
+        {r.message && ['failed', 'awaiting_vendor', 'done', 'still_there'].includes(r.status) && !r.manual && <div className="mt-0.5 line-clamp-2 text-[11px] text-ink-3">{r.message}</div>}
+        <ManualAction r={r} compact />
+        {r.started_at && <RecordLink id={r.fix_id} className="mt-1" />}
       </div>
       {r.action === 'none' ? (
         <span className="max-w-[55%] text-right text-xs text-ink-3">{r.note || 'No action needed'}</span>
@@ -632,6 +702,7 @@ function SettingsCards() {
   const [params] = useSearchParams()
   const [filter, setFilter] = useState<SettingFilter>('all')
   const [q, setQ] = useState(params.get('q') ?? '')                  // ?q= from the Summary's "Fix" button
+  const [found, setFound] = useState<DateRange>({ preset: 'any' })
   const agentFilter = useAgentFilter()
   const v = fix.data
   const down = fix.error instanceof FixDown
@@ -647,19 +718,45 @@ function SettingsCards() {
   }, [v])
 
   if (isLoading || error || !data) return <VulnLoading error={error} />
-  if (!data.fixes?.settings?.length) return <Empty text="No security-setting checks yet. Run the vulnerability update to read them from Defender." />
+  // the Vulnerability Agent's published settings, plus any the fix engine already proposes that its last run did not
+  // publish (e.g. Defender's settings export was still empty then): a minimal card from the fix engine's own rows
+  const published = data.fixes?.settings ?? []
+  const known = new Set(published.map((s) => s.config_id))
+  const allSettings: VulnFixSetting[] = [...published, ...[...rowsByConfig.entries()].filter(([id]) => !known.has(id)).map(([id, rs]) => ({
+    key: `setting:${id}`, kind: 'setting' as const, config_id: id, app: rs[0].app, category: rs[0].category ?? 'Security setting',
+    subcategory: rs[0].subcategory ?? null, impact: rs[0].impact ?? 0, fix_type: 'setting', urgency: { level: 3 as const, label: LEVEL[3].label },
+    user_impact: false, devices: rs.map((r) => ({ name: r.device_name, opco: r.opco })), opcos: [...new Set(rs.map((r) => r.opco))],
+    microsoft: {}, fix: { action: 'setting', command: null, note: null, url: null, in_catalog: true }, ai: null, source: 'fix engine', model: null,
+  }))]
+  if (!allSettings.length) return <Empty text="No security-setting checks yet. Run the vulnerability update to read them from Defender." />
   const canAuto = (s: VulnFixSetting) => (rowsByConfig.get(s.config_id) ?? []).some((r) => r.action === 'setting')
   const settingRows = (s: VulnFixSetting) => rowsByConfig.get(s.config_id) ?? []
-  const inOpcoAll = data.fixes.settings.filter((s) => opco === 'all' || s.opcos.includes(opco))
+  const inOpcoAll = allSettings.filter((s) => opco === 'all' || s.opcos.includes(opco))
   const agentCounts = { vulnerability: inOpcoAll.filter((s) => settingRows(s).some((r) => belongs(r, 'vulnerability'))).length, threat_intel: 0 }
   const inOpco = agentFilter.agent ? inOpcoAll.filter((s) => settingRows(s).some(agentFilter.matches)) : inOpcoAll
   const autoCount = inOpco.filter(canAuto).length
+  const firstFound = (s: VulnFixSetting) => {
+    const t = settingRows(s).flatMap((r) => Object.values(r.found_by ?? {})).filter((x): x is string => !!x).sort()[0]
+    return t ? new Date(t.replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(t) ? '' : 'Z')) : null
+  }
   const shown = inOpco
-    .filter((s) => (filter === 'all' || (filter === 'auto') === canAuto(s)) && (!q || s.app.toLowerCase().includes(q.toLowerCase())))
+    .filter((s) => (filter === 'all' || (filter === 'auto') === canAuto(s)) && (!q || s.app.toLowerCase().includes(q.toLowerCase()))
+      && inDateRange(firstFound(s), found))
     .sort((a, b) => Number(canAuto(b)) - Number(canAuto(a)))             // the ones the portal can change first
   const approve = (ids: string[]) => v && act.mutate({ action: 'approve', ids, method: v.default_method })
   const withdraw = (ids: string[]) => act.mutate({ action: 'unapprove', ids })
   const ready = shown.flatMap((s) => rowsByConfig.get(s.config_id) ?? []).filter((r) => r.action === 'setting' && canApprove(r))
+  const agentOptions = [{ value: 'all', label: 'All agents', count: inOpcoAll.length },
+    { value: 'vulnerability', label: AGENT_NAME.vulnerability, count: agentCounts.vulnerability, dot: 'var(--sky)' }]
+  const modeOptions = [{ value: 'all', label: 'All settings', count: inOpco.length }, { value: 'auto', label: 'Automatable', count: autoCount },
+    { value: 'manual', label: 'Manual action required', count: inOpco.length - autoCount }]
+  const chips: ActiveFilter[] = [
+    ...(q ? [{ key: 'q', label: `“${q}”`, onRemove: () => setQ('') }] : []),
+    ...dateChip(found, () => setFound({ preset: 'any' })),
+    ...choiceChip('agent', agentOptions, agentFilter.agent ?? 'all', () => agentFilter.set(null)),
+    ...choiceChip('mode', modeOptions, filter, () => setFilter('all')),
+  ]
+  const clearAll = () => { setQ(''); setFound({ preset: 'any' }); setFilter('all'); agentFilter.set(null) }
 
   return (
     <div className="flex flex-col gap-5">
@@ -683,38 +780,38 @@ function SettingsCards() {
         </div>
       </Panel>
 
-      <AgentFilterBar filter={agentFilter} counts={agentCounts} total={inOpcoAll.length} what="security settings" />
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2 text-sm">
-          {([['all', 'All', inOpco.length], ['auto', 'Automatable', autoCount], ['manual', 'Manual action required', inOpco.length - autoCount]] as const).map(([f, label, n]) => (
-            <button key={f} onClick={() => setFilter(f)} aria-pressed={filter === f}
-              className={cn('flex items-center gap-2 rounded-full border px-3.5 py-1.5', filter === f ? 'pill-on' : 'border-hairline bg-panel hover:bg-well')}>
-              {f === 'auto' && <Zap className="size-3.5" />}{f === 'manual' && <UserRound className="size-3.5" />}
-              {label} <span className="tabular opacity-60">{n}</span>
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      <FilterBar chips={chips} onClear={clearAll} count={
+        <span className="inline-flex items-center gap-3">{num(shown.length)} of {num(inOpcoAll.length)} settings
           {ready.length > 0 && (
             <button onClick={() => approve(ready.map((r) => r.fix_id))} disabled={act.isPending}
               title="Adds every automatable setting shown here to the remediation queue. Nothing runs until you select Execute remediation."
-              className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50">
+              className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50">
               <Zap className="size-4" /> Remediate all ({ready.length})
             </button>
           )}
-          <label className="flex items-center gap-2 rounded-lg border border-hairline-strong bg-field px-3 py-1.5 text-sm transition-[border-color,box-shadow] focus-within:border-blue/60 focus-within:ring-3 focus-within:ring-blue/15">
-            <Search className="size-3.5 text-ink-3" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a setting" className="w-40 bg-transparent outline-none placeholder:text-ink-3" />
-          </label>
-        </div>
-      </div>
+        </span>}>
+        <FilterSearch value={q} onChange={setQ} placeholder="Find a setting" />
+        <DateFilter label="Found" value={found} onChange={setFound} />
+        <FilterChoice label="Found by" icon={Bot} value={agentFilter.agent ?? 'all'} onChange={(a) => agentFilter.set(a === 'all' ? null : a as 'vulnerability' | 'threat_intel')} options={agentOptions} />
+        <FilterChoice label="Remediation" icon={Zap} value={filter} onChange={(f) => setFilter(f as typeof filter)} options={modeOptions} />
+      </FilterBar>
+      <RunBanner filter={agentFilter} what="security settings" />
+      {filter === 'manual' && v && (() => {
+        const ids = shown.flatMap((s) => rowsByConfig.get(s.config_id) ?? []).filter((r) => r.status === 'info').map((r) => r.fix_id)
+        return ids.length ? <HandOverAll ids={ids} busy={act.isPending} onHandOver={(x) => act.mutate({ action: 'handover', ids: x })} /> : null
+      })()}
 
       {shown.length ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
           {shown.map((s) => (
-            <SettingCard key={s.key} s={s} rows={settingRows(s)} engine={!!v} busy={act.isPending} isNew={agentFilter.isNew}
-              onApprove={approve} onWithdraw={withdraw} />
+            <ExpandableCard key={s.key} id={`setting-${s.config_id}`} accent={LEVEL[s.urgency.level].color} title={s.app}
+              subtitle={[s.category, s.subcategory].filter(Boolean).join(' · ')}
+              eyebrow={<><span className="font-medium" style={{ color: LEVEL[s.urgency.level].color }}>{LEVEL[s.urgency.level].label} priority</span><span className="text-ink-3">Configuration change · impact {s.impact}/10</span></>}
+              summary={<SettingSummary s={s} rows={settingRows(s)} />}
+              actions={v ? <QuickActions rows={settingRows(s).filter((r) => r.action === 'setting' || r.action === 'none')} busy={act.isPending} onApprove={approve} onWithdraw={withdraw} onSave={(ids) => act.mutate({ action: 'save', ids })} onHandOver={(ids) => act.mutate({ action: 'handover', ids })} /> : null}>
+              <SettingCard s={s} rows={settingRows(s)} engine={!!v} busy={act.isPending} isNew={agentFilter.isNew}
+                onApprove={approve} onWithdraw={withdraw} />
+            </ExpandableCard>
           ))}
         </div>
       ) : <Empty text="No settings match this filter." />}
@@ -941,15 +1038,6 @@ function CommandLine({ command }: { command: string }) {
 }
 
 
-/** A filter with its label above it */
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <span className="text-xs font-medium text-ink-3">{label}</span>
-      {children}
-    </div>
-  )
-}
 
 function Details({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
@@ -969,5 +1057,21 @@ function AiBadge({ text = 'Agent' }: { text?: string }) {
     <span className="inline-flex items-center gap-1 rounded-md bg-violet/15 px-1.5 py-0.5 text-[11px] font-medium text-violet">
       <Sparkles className="size-3" /> {text}
     </span>
+  )
+}
+
+/** Remediations the agent cannot do (no automatic fix): hand them all to the people who must do them by hand. */
+function HandOverAll({ ids, busy, onHandOver }: { ids: string[]; busy: boolean; onHandOver: (ids: string[]) => void }) {
+  return (
+    <Panel className="flex flex-wrap items-center gap-3 px-5 py-3.5">
+      <UserCog className="size-5 shrink-0" style={{ color: statusColor.critical }} />
+      <p className="min-w-0 flex-1 text-sm text-ink-2">
+        <b className="text-ink">{num(ids.length)} remediation{ids.length === 1 ? '' : 's'} the agent cannot do.</b> Hand them over: each becomes
+        "Manual action required" with an owner and steps, and stays open until someone marks it fixed and Defender confirms it.
+      </p>
+      <button onClick={() => onHandOver(ids)} disabled={busy} className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-50">
+        <UserCog className="size-4" /> Hand all {num(ids.length)} over
+      </button>
+    </Panel>
   )
 }

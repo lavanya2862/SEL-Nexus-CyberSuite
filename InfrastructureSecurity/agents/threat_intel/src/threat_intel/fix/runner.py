@@ -7,7 +7,14 @@ Judging uses the installed versions the script reads from Windows before and aft
   setting  ok when the value the script reads back afterwards is the value the catalogue asks for
   respond  (a sign of attack) ok when the Defender scan ran and no active threat is left afterwards; until then the
            Remediation Agent (Azure AI Foundry) picks the next scan, up to 3 (without AI: quick, full, full)
+When an update, removal, replacement or setting fails, the Remediation Agent retries under the original approval: it
+picks the next move from APP_MOVES (without AI: APP_LADDER), never a command of its own, and writes the summary.
 "done" means fixed on the computer; it becomes "verified" when Defender's next inventory no longer lists it.
+"awaiting_vendor" means every update attempt ran cleanly but no source publishes a newer version yet; the plan
+re-queues it under the same approval a day later (plan.requeue_awaiting).
+"manual_required" means the computer reported but no allowed move remediated it: the fix carries a handover (cause,
+steps, owner, evidence) and a person marks it done manually (plan.mark_manual); Defender then verifies it as usual.
+"failed" is left for remediations that never ran (the computer did not report).
 """
 
 from __future__ import annotations
@@ -30,6 +37,13 @@ log = logging.getLogger("threat_intel.fix")
 OK_CODES = {0, 1641, 3010, -1978334967, -1978334966}
 # a scan-and-clean is repeated until Defender lists no active threat: the same fixed script each time, a stronger scan
 RESPONSE_LADDER = ("QuickScan", "FullScan", "FullScan")
+# The moves the Remediation Agent may choose after a failed attempt, per action: each runs the same fixed script with
+# only the spec's engine changed (MOVE_SPEC). The ladder is the order without AI, and its length caps the attempts.
+APP_MOVES = {"upgrade": ("winget", "choco"), "replace": ("winget", "choco"), "remove": ("uninstall",),
+             "setting": ("apply",)}
+APP_LADDER = {"upgrade": ("winget", "choco"), "replace": ("winget", "choco"), "remove": ("uninstall", "uninstall"),
+              "setting": ("apply", "apply")}
+MOVE_SPEC = {"winget": {"engine": "winget"}, "choco": {"engine": "choco"}, "uninstall": {}, "apply": {}}
 
 
 class FixBusy(RuntimeError):
@@ -77,16 +91,68 @@ def parse_result(output: str) -> dict | None:
     return None
 
 
+def _entries(value) -> list:
+    return [value] if isinstance(value, dict) else list(value or [])
+
+
 def _versions(entries) -> set[str]:
-    return {str(e.get("version", "")) for e in (entries or []) if isinstance(e, dict)}
+    return {str(e.get("version", "")) for e in _entries(entries) if isinstance(e, dict)}
 
 
 def _fmt(entries) -> str:
-    return ", ".join(f"{e.get('name')} {e.get('version')}".strip() for e in (entries or []) if isinstance(e, dict)) or "nothing"
+    return ", ".join(f"{e.get('name')} {e.get('version')}".strip() for e in _entries(entries) if isinstance(e, dict)) or "nothing"
+
+
+def awaiting_vendor(action: str, results: list[dict | None]) -> bool:
+    """Every update attempt ran cleanly and left the installed version as it was: no source publishes a newer one yet."""
+    if action != "upgrade" or not results:
+        return False
+    for r in results:
+        if not r or r.get("not_found"):
+            return False
+        before, after = _versions(r.get("before")), _versions(r.get("after"))
+        if not (r.get("no_newer") or r.get("exit") in OK_CODES) or not after or before != after:
+            return False
+    return True
+
+
+# A person's handover when no allowed move remediates it: the Remediation Agent's own cause, steps and owner when it
+# gave them, else these standard steps for the action
+MANUAL_STEPS = {
+    "upgrade": ["Sign in to {device} with an administrator account",
+                "Update {app} with the vendor's installer to the version Microsoft Defender Vulnerability Management recommends",
+                "Confirm the new version in Apps & features, then mark the remediation as done manually"],
+    "remove": ["Sign in to {device} with an administrator account",
+               "Uninstall {app} from Apps & features, or with the vendor's uninstaller",
+               "Remove leftover program folders and uninstall entries if the uninstaller is missing",
+               "Confirm it no longer appears in Apps & features, then mark the remediation as done manually"],
+    "setting": ["Check whether Group Policy, Intune or tamper protection enforces this setting on {device}",
+                "Change '{app}' at that source to the recommended value",
+                "Confirm the value on the computer, then mark the remediation as done manually"],
+    "respond": ["Open {device} in Microsoft Defender and review the remaining active threats",
+                "Isolate the device in Defender if a threat is still active",
+                "Run a full scan once the threat is removed, then mark the remediation as done manually"],
+}
+MANUAL_STEPS["replace"] = MANUAL_STEPS["upgrade"]
+MANUAL_OWNER = {"setting": "Endpoint security team", "respond": "SOC analyst"}
+
+
+def handover(item: dict, message: str, result: dict | None, moves: list[dict] | None) -> dict:
+    """What the person who takes over gets: cause, steps, owner and the evidence the computer reported."""
+    stop = next((m for m in reversed(moves or []) if m.get("action") == "stop"), {})
+    fill = {"device": item.get("device_name") or "the computer", "app": item.get("app") or "the application"}
+    steps = [str(s) for s in stop.get("steps") or [] if str(s).strip()][:5] or \
+        [s.format(**fill) for s in MANUAL_STEPS.get(item.get("action"), MANUAL_STEPS["upgrade"])]
+    log_lines = [str(x) for x in (result or {}).get("log") or []][-6:]
+    code = (result or {}).get("exit")
+    return {"cause": (stop.get("cause") or "").strip() or message, "steps": steps,
+            "owner": (stop.get("owner") or "").strip() or MANUAL_OWNER.get(item.get("action"), "IT operations"),
+            "summary": stop.get("result") or "", "by_ai": bool(stop.get("cause") or stop.get("steps")),
+            "evidence": ([f"exit code {code}"] if code is not None else []) + log_lines, "at": utcnow().isoformat()}
 
 
 def judge(action: str, result: dict | None) -> tuple[str, str]:
-    """(status, plain-English message)."""
+    """(status, message)."""
     if not result:
         return "failed", "The computer did not report a result (see the output)."
     if action == "setting":
@@ -110,6 +176,9 @@ def judge(action: str, result: dict | None) -> tuple[str, str]:
         old, new = _versions(before), _versions(after)
         if after and not (old & new):
             return "done", f"Updated: {_fmt(before)} -> {_fmt(after)}." + reboot
+        if result.get("no_newer"):
+            return "failed", (f"winget's newest published version ({result.get('available')}) is already installed: "
+                              f"{_fmt(after)}. Nothing was changed.")
         if not after:
             return "failed", f"The app disappeared during the update (exit {code}). Before: {_fmt(before)}."
         return "failed", f"Still the old version after the update (exit {code}): {_fmt(after)}."
@@ -225,8 +294,12 @@ class FixRunner:
         for t in threads:
             t.join()
         summary = {"ran": len(results), "done": sum(1 for s in results.values() if s == "done"),
-                   "failed": sum(1 for s in results.values() if s == "failed")}
-        self._say(f"Remediation run finished: {summary['done']} remediated, {summary['failed']} failed. "
+                   "failed": sum(1 for s in results.values() if s == "failed"),
+                   "awaiting_vendor": sum(1 for s in results.values() if s == "awaiting_vendor"),
+                   "manual_required": sum(1 for s in results.values() if s == "manual_required")}
+        waiting = (f", {summary['manual_required']} manual action required" if summary["manual_required"] else "") + \
+            (f", {summary['awaiting_vendor']} awaiting vendor package" if summary["awaiting_vendor"] else "")
+        self._say(f"Remediation run finished: {summary['done']} remediated, {summary['failed']} failed{waiting}. "
                   "Defender confirms within a few hours (next Threat Intel run).")
         started = sorted({vm for ex in self._executors.values() for vm in getattr(ex, "started", set())})
         if started:
@@ -245,15 +318,20 @@ class FixRunner:
                 f"scan and clean after '{item['app']}'" if item["action"] == "respond" else \
                 f"{item['action']} {item['app']} {item['version']}"
             self._say(f"{device}: {what} via {method}", fid)
-            moves = None
             if item["action"] == "respond":
                 status, message, result, output, moves = self._respond(device, fid, item, method, spec)
             else:
-                status, message, result, output = self._attempt(device, fid, item, method, spec)
+                status, message, result, output, moves = self._remediate(device, fid, item, method, spec)
+            # the computer reported, yet no allowed move remediated it: a person takes over (failed = it never ran)
+            note = None
+            if status == "failed" and result is not None:
+                status, note = "manual_required", handover(item, message, result, moves)
             with self.state.edit() as data:
                 data["fixes"][fid].update(status=status, message=message[:600], finished_at=utcnow().isoformat(),
-                                          result=result, output=(output or "")[-3000:],
-                                          **({"agent": moves} if moves is not None else {}))
+                                          result=result, output=(output or "")[-3000:], agent=moves, handover=note)
+                if note:
+                    event(data, f"Manual action required: {item['app']} on {device}. Owner: {note['owner']}. "
+                                f"Cause: {note['cause']}", fid)
             self._say(f"{device}: {' '.join(p for p in (item['app'], item.get('version')) if p)} -> {status}: {message}", fid)
             results[fid] = status
 
@@ -270,6 +348,73 @@ class FixRunner:
             log.exception("Remediation %s failed unexpectedly", fid)
             status, message = "failed", f"{exc.__class__.__name__}: {exc}"
         return status, message, result, output
+
+    def _remediate(self, device: str, fid: str, item: dict, method: str, spec: dict):
+        """An update, removal, replacement or setting, retried under the original approval. The first attempt is the
+        standard one; after a failure the Remediation Agent (Azure AI Foundry) picks the next move from APP_MOVES and
+        the results so far, and writes the summary when it stops. Without the AI (or when it fails) the moves follow
+        APP_LADDER. An update that finds no newer version in any source ends as awaiting_vendor, not failed."""
+        action = item["action"]
+        allowed = [m for m in APP_MOVES[action] if m != "choco" or (spec.get("allow_choco") and spec.get("choco"))]
+        ladder = [m for m in APP_LADDER[action] if m in allowed]
+        evidence = "\n".join(f"{k}: {v}" for k, v in (
+            ("Device", device), ("Remediation", action), ("Application or setting", item.get("app")),
+            ("Version reported by Defender", item.get("version")), ("Vulnerabilities it clears", item.get("findings")))
+            if v not in (None, ""))
+        moves: list[dict] = []
+        results: list[dict | None] = []
+        status, message, result, output, summary = "failed", "No attempt ran.", None, "", ""
+        while status != "done":
+            move = self._next_app_move(device, fid, evidence, allowed, ladder, moves) if moves else None
+            if (move and move.action.strip().lower() == "stop") or len(moves) >= len(ladder):
+                if move:
+                    summary = move.summary or move.reason
+                    moves.append({"action": "stop", "reason": move.reason, "result": summary, "cause": move.cause,
+                                  "steps": [str(s) for s in move.steps][:5], "owner": move.owner})
+                break
+            choice = move.action.strip().lower() if move else ""
+            if choice not in allowed:                      # anything else (or no AI): the standard move
+                choice = ladder[len(moves)]
+            reason = move.reason if move else ("Standard first attempt" if not moves else "Standard sequence (no AI)")
+            if moves:
+                self._say(f"{device}: Remediation Agent: retry with {choice} ({reason})", fid)
+            status, message, result, output = self._attempt(device, fid, item, method, {**spec, **MOVE_SPEC[choice]})
+            results.append(result)
+            moves.append({"action": choice, "reason": reason, "result": message, "status": status})
+            with self.state.edit() as data:          # the card shows each attempt as it happens
+                data["fixes"][fid]["agent"] = list(moves)
+            if result and result.get("not_found"):     # nothing to remediate on the computer: no move changes that
+                break
+        if status != "done" and awaiting_vendor(action, results):
+            status = "awaiting_vendor"
+            sources = " and ".join(("winget", "Chocolatey")[: 1 + ("choco" in allowed)])
+            message = (f"Awaiting vendor package: no newer version is published in {sources}. Installed: "
+                       f"{_fmt(results[-1].get('after'))}. Re-queued under the original approval within 24 hours.")
+        tries = len([m for m in moves if m["action"] != "stop"])
+        if tries > 1 or summary:
+            message = (f"{summary} " if summary else "") + f"After {tries} attempt{'s' * (tries != 1)}: {message}"
+        return status, message, result, output, moves
+
+    def _next_app_move(self, device: str, fid: str, evidence: str, allowed: list[str], ladder: list[str],
+                       moves: list[dict]):
+        """The Remediation Agent's next move after a failed attempt, or None without AI."""
+        if self.ai is None:
+            return None
+        from threat_intel.ai.gemini_client import AIUnavailable
+        from threat_intel.ai.prompts import REMEDIATE_APP_SYSTEM, remediate_app_prompt
+        from threat_intel.ai.schemas import AppRemediationMove
+        system = REMEDIATE_APP_SYSTEM.replace("{moves}", ", ".join(allowed)).replace("{max_moves}", str(len(ladder)))
+        history = "\n".join(f"{i}. {m['action']}: {m['result']}" for i, m in enumerate(moves, 1))
+        try:
+            return self.ai.json("remediate", system, remediate_app_prompt(evidence, history), AppRemediationMove,
+                                max_tokens=400)
+        except AIUnavailable as exc:
+            self._say(f"{device}: Remediation Agent unavailable ({exc}); using the standard sequence", fid)
+            self.ai = None
+            return None
+        except Exception:  # noqa: BLE001 - a bad answer costs this one choice, never the remediation
+            log.exception("Remediation Agent answer unusable; standard move instead")
+            return None
 
     def _respond(self, device: str, fid: str, item: dict, method: str, spec: dict):
         """Scan and clean until Defender lists no active threat. The Remediation Agent (Azure AI Foundry) picks each

@@ -1,0 +1,15 @@
+// name: Hidden-looking account names (ending in $, or copying system names)
+// kind: behaviour
+// technique: T1036
+// attack: 8
+let lookalike = dynamic(["admin", "administrator1", "adminstrator", "administator", "defaultaccount", "defaultuser",
+                         "guest1", "system", "localsystem", "networkservice", "localservice", "wdagutility",
+                         "support_388945a0", "krbtgt", "sqlsvc", "helpdesk", "homegroupuser$"]);
+DeviceEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "UserAccountCreated"
+| where AccountName endswith "$" or tolower(AccountName) in (lookalike)
+     or AccountName matches regex @"(?i)^(adm|sys|svc|ms|win)[_\-\.]?(update|service|defender|support|health)\$?$"
+| project Timestamp, DeviceId, DeviceName, ActionType, AccountName, AccountDomain,
+          InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

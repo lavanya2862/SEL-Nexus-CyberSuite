@@ -1,0 +1,15 @@
+// name: Program in an odd place (Temp, Downloads, Public) changing many files
+// kind: behaviour
+// technique: T1486
+// attack: 1
+DeviceFileEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType in ("FileModified", "FileRenamed", "FileDeleted")
+| where InitiatingProcessFolderPath matches regex @"(?i)(\\temp\\|\\downloads\\|\\users\\public\\|\\perflogs\\)"
+| summarize Changes = count(), Files = dcount(FileName), FirstSeen = min(Timestamp),
+            take_any(DeviceName, InitiatingProcessAccountName, InitiatingProcessCommandLine, InitiatingProcessSHA256)
+            by DeviceId, InitiatingProcessFolderPath, InitiatingProcessFileName, Window = bin(Timestamp, 10m)
+| where Files >= 50
+| project Timestamp = FirstSeen, DeviceId, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName,
+          InitiatingProcessFolderPath, InitiatingProcessCommandLine, SHA256 = InitiatingProcessSHA256, Changes, Files
+| take 500

@@ -85,7 +85,7 @@ export function RunBanner({ filter, what }: { filter: ReturnType<typeof useAgent
 function Chip({ on, onClick, label, n, dot, title }: { on: boolean; onClick: () => void; label: string; n: number; dot?: string; title?: string }) {
   return (
     <button onClick={onClick} aria-pressed={on} title={title}
-      className={cn('flex items-center gap-2 rounded-full border px-3.5 py-1.5', on ? 'pill-on' : 'border-hairline bg-panel hover:bg-well')}>
+      className={cn('flex items-center gap-2 rounded-lg border px-3.5 py-1.5', on ? 'pill-on' : 'border-hairline bg-panel hover:bg-well')}>
       {dot && <span className={cn('size-2 rounded-full', dot)} />}{label} <span className="tabular opacity-60">{n}</span>
     </button>
   )

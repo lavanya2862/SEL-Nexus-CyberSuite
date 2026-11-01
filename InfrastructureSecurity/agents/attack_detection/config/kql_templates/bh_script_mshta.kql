@@ -1,0 +1,11 @@
+// name: mshta running a web address or a script
+// kind: behaviour
+// technique: T1218.005
+// attack: 3
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName =~ "mshta.exe" or ProcessVersionInfoOriginalFileName =~ "MSHTA.EXE"
+| where ProcessCommandLine has_any ("http://", "https://", "javascript:", "vbscript:", "about:", ".hta")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

@@ -2,7 +2,7 @@ id: ti_indicator_match
 label: Threat-intelligence indicator match
 description: A file, IP or domain on the incident matched a known-bad indicator (or our lab test indicator).
 match:
-  any_title: ["threat intel", "indicator", "known-bad", "uc4 lab: threat-intel"]
+  any_title: ["threat intel", "indicator", "known-bad", "alert triage lab: threat-intel"]
   any_technique: ["T1204"]
 queries:
   - Q10_hash_prevalence

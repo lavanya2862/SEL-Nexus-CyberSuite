@@ -1,0 +1,12 @@
+// name: bitsadmin downloading a file
+// kind: behaviour
+// technique: T1197
+// attack: 3
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where (FileName =~ "bitsadmin.exe" and ProcessCommandLine has_any ("/transfer", "/addfile", "/download", "/SetNotifyCmdLine"))
+     or (FileName in~ ("powershell.exe", "pwsh.exe") and ProcessCommandLine has "Start-BitsTransfer"
+         and ProcessCommandLine has_any ("http://", "https://"))
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

@@ -1,0 +1,17 @@
+// name: Remote desktop sign-in between two internal machines that never connected before
+// kind: behaviour
+// technique: T1021.001
+// attack: 5
+let recent = DeviceLogonEvents
+    | where Timestamp > ago(1d)
+    | where ActionType == "LogonSuccess" and LogonType == "RemoteInteractive" and RemoteIPType == "Private";
+let before = DeviceLogonEvents
+    | where Timestamp between (ago(30d) .. ago(1d))
+    | where ActionType == "LogonSuccess" and LogonType == "RemoteInteractive"
+    | distinct DeviceId, RemoteIP;
+recent
+| join kind=leftanti before on DeviceId, RemoteIP
+| summarize Timestamp = min(Timestamp), Accounts = make_set(AccountName, 10), take_any(DeviceName, AccountName, RemoteDeviceName)
+            by DeviceId, RemoteIP
+| project Timestamp, DeviceId, DeviceName, AccountName, RemoteIP, RemoteDeviceName, Accounts
+| take 500

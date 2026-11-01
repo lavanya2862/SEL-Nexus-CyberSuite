@@ -1,84 +1,61 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
-  ArrowRight, BellRing, Bot, CheckCircle2, ChevronRight, CircleDot, Play, Radar, Scale, Search, Siren, UserCheck, Wrench,
+  ArrowRight, BellRing, Bot, CheckCircle2, ChevronRight, CircleDot, ExternalLink, Play, Radar, Scale, Search, Siren, SlidersHorizontal,
+  UserCheck, Wrench,
 } from 'lucide-react'
-import { Card, Empty, InfoTip, Panel, Tag } from '@/components/kit'
+import { Chart, axisStyle } from '@/components/Chart'
+import { DetailDialog } from '@/components/DetailDialog'
+import {
+  Card, DateFilter, Empty, FilterChips, FilterMenu, InfoTip, Panel, Tabs, Tag, dateBounds, dateLabel, type ActiveFilter, type DateRange,
+} from '@/components/kit'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ago, num } from '@/lib/format'
 import { useRuns } from '@/lib/runs'
 import { statusColor } from '@/lib/theme'
-import { NotFound, RULES, VERDICT, VERDICT_ORDER, isClosed, needsPerson, sourceNames, useTriageQuality, useTriageQueue, utc, verdictMeta, type QueueRow, type Verdict } from '@/agents/alert-triage/data'
+import {
+  NotFound, RULES, VERDICT, VERDICT_ORDER, isClosed, needsPerson, sourceNames, useTriageCase, useTriageQueue, utc,
+  verdictMeta, type QueueRow, type Verdict,
+} from '@/agents/alert-triage/data'
+import { Decide, Thinks, ToDo } from '@/agents/alert-triage/RespondCase'
 import { cn } from '@/lib/utils'
 
+type Tab = 'overview' | 'incidents'
+const TABS: [Tab, string][] = [['overview', 'Overview'], ['incidents', 'Incidents']]
 type Filter = 'all' | 'likely_true_positive' | 'likely_false_positive' | 'needs_investigation'
 type Who = 'agent' | 'person' | 'decided'
 const iso = (s: string | null) => utc(s)?.toISOString() ?? null
 // the analyst's or Defender's classification when one is made, else the agent's verdict (older verdicts may still
 // say benign positive: that is filed as a false positive)
 const outcome = (r: QueueRow): Verdict => r.outcome ?? (r.verdict === 'benign_positive' ? 'likely_false_positive' : r.verdict)
+const SEV_ORDER = ['high', 'medium', 'low', 'informational']
 
 /** Act › Triage (Alert Triage): the agent handles the clear calls; a person decides only the unclear ones. */
 export function Respond() {
   const { data, error, isLoading } = useTriageQueue()
+  const [params, setParams] = useSearchParams()
+  const tab = TABS.find(([t]) => t === params.get('tab'))?.[0] ?? 'overview'
   const [filter, setFilter] = useState<Filter>('all')
   const rows = useMemo(() => data?.queue ?? [], [data])
   const auto = !!data?.automation?.auto_resolve
   const who = (r: QueueRow): Who =>
     !needsPerson(r, auto, r.last_action?.action === 'reopen') ? 'agent' : r.decision ? 'decided' : 'person'
-  const shown = rows.filter((r) => filter === 'all' || outcome(r) === filter)
-  // a tile on top filters the queue below and brings it into view
-  const pick = (f: Filter) => {
-    setFilter(f)
-    document.getElementById('triage-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
+  const setTab = (t: Tab) => setParams((p) => { const n = new URLSearchParams(p); if (t === 'overview') n.delete('tab'); else n.set('tab', t); return n }, { replace: true })
+  // a tile on the overview opens the incidents tab with that verdict
+  const [picked, setPicked] = useState(0)      // an Overview tile opens Incidents afresh with its classification
+  const pick = (f: Filter) => { setFilter(f); setPicked((n) => n + 1); setTab('incidents') }
 
   return (
     <div className="flex flex-col gap-5">
       <Header lastRun={data?.last_run_detail?.finished_at ?? null} />
-
+      <Tabs<Tab> tabs={TABS} value={tab} onChange={setTab} />
       {isLoading ? <Skeleton className="h-40 rounded-2xl" /> : error ? (
         <Panel className="p-6">
           <Empty text={error instanceof NotFound ? 'No incidents triaged yet. Select “Check for new incidents” above.' : `Could not load the queue: ${(error as Error).message}`} />
         </Panel>
-      ) : data && (
-        <>
-          <Kpis rows={rows} filter={filter} onPick={pick} />
-          <HowItWorks />
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-            <Card
-              id="triage-queue"
-              className="xl:col-span-2 scroll-mt-4"
-              title="The queue"
-              description="Most recent first. Open an incident to view the evidence."
-              action={<span className="tabular whitespace-nowrap text-xs text-ink-3">{shown.length} of {rows.length}</span>}
-            >
-              <div className="mb-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Filter the queue">
-                {(['all', ...VERDICT_ORDER] as Filter[]).map((id) => (
-                  <button
-                    key={id}
-                    role="tab"
-                    aria-selected={filter === id}
-                    onClick={() => setFilter(id)}
-                    className={cn('tabular inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs', filter === id ? 'pill-on' : 'border-hairline text-ink-2 hover:bg-well')}
-                  >
-                    {id !== 'all' && <span className="size-1.5 rounded-full" style={{ background: VERDICT[id].color }} />}
-                    {id === 'all' ? 'All' : VERDICT[id].short} · {id === 'all' ? rows.length : rows.filter((r) => outcome(r) === id).length}
-                  </button>
-                ))}
-              </div>
-              {shown.length ? (
-                <ul className="flex flex-col divide-y divide-hairline rounded-xl border border-hairline">
-                  {shown.map((r) => <QueueItem key={r.incident_id} r={r} who={who(r)} />)}
-                </ul>
-              ) : <Empty text={rows.length ? 'No incidents in this view.' : 'No incidents to triage.'} />}
-            </Card>
-            <Accuracy byVerdict={data.by_verdict} />
-          </div>
-        </>
-      )}
-
-      <WhereItFits />
+      ) : data && (tab === 'overview'
+        ? <Overview rows={rows} who={who} filter={filter} onPick={pick} />
+        : <Incidents key={picked} rows={rows} who={who} filter={filter} />)}
     </div>
   )
 }
@@ -106,6 +83,72 @@ function Header({ lastRun }: { lastRun: string | null }) {
   )
 }
 
+/* ───────── overview ───────── */
+
+function Overview({ rows, who, filter, onPick }: { rows: QueueRow[]; who: (r: QueueRow) => Who; filter: Filter; onPick: (f: Filter) => void }) {
+  const waiting = rows.filter((r) => who(r) === 'person')
+  const worst = [...waiting].sort((a, b) => SEV_ORDER.indexOf(a.severity.toLowerCase()) - SEV_ORDER.indexOf(b.severity.toLowerCase()))[0]
+  const tone = waiting.length ? statusColor.warning : statusColor.good
+  const bySource = new Map<string, number>()
+  rows.forEach((r) => { const s = sourceNames(r.sources) || 'Unknown'; bySource.set(s, (bySource.get(s) ?? 0) + 1) })
+  return (
+    <div className="flex flex-col gap-5">
+      <Panel className="flex items-start gap-4 p-6">
+        <span className="grid size-12 shrink-0 place-items-center rounded-2xl" style={{ background: `color-mix(in oklab, ${tone} 16%, transparent)` }}>
+          {waiting.length ? <UserCheck className="size-6" style={{ color: tone }} /> : <CheckCircle2 className="size-6" style={{ color: tone }} />}
+        </span>
+        <div className="min-w-0">
+          <div className="text-sm text-ink-3">Triage queue</div>
+          <div className="mt-1 text-2xl font-semibold tracking-tight">
+            {waiting.length ? `${waiting.length} incident${waiting.length === 1 ? '' : 's'} need${waiting.length === 1 ? 's' : ''} an analyst decision` : 'Queue clear'}
+          </div>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-2">
+            {waiting.length
+              ? <>Highest severity awaiting a decision: <b>{worst?.severity}</b>, “{worst?.title}”. The agent handled the remaining {num(rows.length - waiting.length)} incidents.</>
+              : <>The agent classified all {num(rows.length)} incidents; none requires an analyst decision.</>}
+          </p>
+        </div>
+      </Panel>
+
+      <Kpis rows={rows} filter={filter} onPick={onPick} />
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <Card className="xl:col-span-5" title="Classification" description="Final classification per incident: the analyst's or Defender's when made, otherwise the agent's verdict">
+          <Chart height={240} build={(tk) => ({
+            grid: { left: 8, right: 32, top: 4, bottom: 4, containLabel: true },
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+            xAxis: { type: 'value', minInterval: 1, ...axisStyle(tk), axisLine: { show: false } },
+            yAxis: { type: 'category', data: [...VERDICT_ORDER].reverse().map((v) => VERDICT[v].short), ...axisStyle(tk), splitLine: { show: false }, axisLabel: { color: tk.ink2 } },
+            series: [{ type: 'bar', barMaxWidth: 16, name: 'Incidents', itemStyle: { borderRadius: [0, 4, 4, 0] },
+              label: { show: true, position: 'right', color: tk.ink, fontSize: 11 },
+              data: [...VERDICT_ORDER].reverse().map((v) => ({ value: rows.filter((r) => outcome(r) === v).length, itemStyle: { color: VERDICT[v].color } })) }],
+          })} />
+        </Card>
+        <Card className="xl:col-span-7" title="Incidents over time" description="Incidents triaged per day, last 14 days, by source">
+          <Chart height={240} build={(tk) => {
+            const days = Array.from({ length: 14 }, (_, i) => new Date(Date.now() - (13 - i) * 86400000).toISOString().slice(0, 10))
+            const sources = [...bySource.keys()]
+            return {
+              grid: { left: 8, right: 8, top: 28, bottom: 4, containLabel: true },
+              legend: { top: 0, textStyle: { color: tk.ink2 } },
+              tooltip: { trigger: 'axis' },
+              xAxis: { type: 'category', data: days.map((x) => x.slice(5)), ...axisStyle(tk) },
+              yAxis: { type: 'value', minInterval: 1, ...axisStyle(tk) },
+              series: sources.map((s, i) => ({
+                type: 'bar', stack: 'all', name: s, barMaxWidth: 18, itemStyle: { color: tk.series[i % tk.series.length] },
+                data: days.map((day) => rows.filter((r) => (sourceNames(r.sources) || 'Unknown') === s && (iso(r.triaged_at) ?? '').slice(0, 10) === day).length),
+              })),
+            }
+          }} />
+        </Card>
+      </div>
+
+      <HowItWorks />
+      <WhereItFits />
+    </div>
+  )
+}
+
 function Kpis({ rows, filter, onPick }: { rows: QueueRow[]; filter: Filter; onPick: (f: Filter) => void }) {
   const bySource = new Map<string, number>()
   rows.forEach((r) => { const s = sourceNames(r.sources) || 'Unknown'; bySource.set(s, (bySource.get(s) ?? 0) + 1) })
@@ -127,7 +170,7 @@ function Kpis({ rows, filter, onPick }: { rows: QueueRow[]; filter: Filter; onPi
               type="button"
               onClick={() => onPick(t.id)}
               aria-pressed={filter === t.id}
-              aria-label={`${t.label}: ${t.value}. Show these in the queue`}
+              aria-label={`${t.label}: ${t.value}. Show these incidents`}
               className="absolute inset-0 rounded-[20px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             />
             <div className="pointer-events-none relative p-5">
@@ -175,89 +218,141 @@ function HowItWorks() {
 export function VerdictPill({ verdict, large }: { verdict: string; large?: boolean }) {
   const m = verdictMeta(verdict)
   return (
-    <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-hairline bg-panel font-medium', large ? 'px-3 py-1.5 text-sm' : 'px-2 py-0.5 text-xs')}>
+    <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-hairline bg-panel font-medium', large ? 'px-3 py-1.5 text-sm' : 'px-2 py-0.5 text-xs')}>
       <span className={cn('rounded-full', large ? 'size-2.5' : 'size-2')} style={{ background: m.color }} />
       {large ? m.label : m.short}
     </span>
   )
 }
 
-function QueueItem({ r, who }: { r: QueueRow; who: Who }) {
+/* ───────── incidents: small cards, the case in a dialog ───────── */
+
+// Defender's incident severities, most severe first, each with its own colour (as in Defender's portal)
+const SEV_DOT: Record<string, string> = { high: statusColor.critical, medium: statusColor.warning, low: statusColor.good, informational: 'var(--sky)' }
+const WHO_LABEL: Record<Who, string> = { person: 'Awaiting analyst decision', decided: 'Decided by an analyst or Defender', agent: 'Handled by the agent' }
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
+
+function Incidents({ rows, who, filter }: { rows: QueueRow[]; who: (r: QueueRow) => Who; filter: Filter }) {
+  const [cls, setCls] = useState<string[]>(filter === 'all' ? [] : [filter])
+  const [sev, setSev] = useState<string[]>([])
+  const [source, setSource] = useState<string[]>([])
+  const [status, setStatus] = useState<string[]>([])
+  const [date, setDate] = useState<DateRange>({ preset: 'any' })
+  const [open, setOpen] = useState<QueueRow | null>(null)
+  const bounds = dateBounds(date)
+  // Defender's creation time of the incident (the triage time for incidents that have none)
+  const when = (r: QueueRow) => utc(r.created_at ?? r.triaged_at)
+  const shown = rows.filter((r) => (!cls.length || cls.includes(outcome(r))) && (!sev.length || sev.includes(r.severity.toLowerCase()))
+    && (!source.length || source.includes(sourceNames(r.sources) || 'Unknown')) && (!status.length || status.includes(who(r)))
+    && (!bounds || ((d) => !!d && d >= bounds[0] && d < bounds[1])(when(r))))
+  const count = (test: (r: QueueRow) => boolean) => rows.filter(test).length
+  const sevOptions = SEV_ORDER.filter((s) => rows.some((r) => r.severity.toLowerCase() === s))
+    .map((s) => ({ value: s, label: cap(s), dot: SEV_DOT[s], count: count((r) => r.severity.toLowerCase() === s) }))
+  const clsOptions = VERDICT_ORDER.map((v) => ({ value: v, label: VERDICT[v].short, dot: VERDICT[v].color, count: count((r) => outcome(r) === v) }))
+  const sourceOptions = [...new Set(rows.map((r) => sourceNames(r.sources) || 'Unknown'))]
+    .map((s) => ({ value: s, label: s, count: count((r) => (sourceNames(r.sources) || 'Unknown') === s) }))
+  const statusOptions = (Object.keys(WHO_LABEL) as Who[]).map((w) => ({ value: w, label: WHO_LABEL[w], count: count((r) => who(r) === w) }))
+  const drop = (list: string[], set: (v: string[]) => void, v: string) => () => set(list.filter((x) => x !== v))
+  const chips: ActiveFilter[] = [
+    ...cls.map((v) => ({ key: `c-${v}`, label: verdictMeta(v).short, dot: verdictMeta(v).color, onRemove: drop(cls, setCls, v) })),
+    ...sev.map((v) => ({ key: `s-${v}`, label: cap(v), dot: SEV_DOT[v], onRemove: drop(sev, setSev, v) })),
+    ...source.map((v) => ({ key: `o-${v}`, label: v, onRemove: drop(source, setSource, v) })),
+    ...status.map((v) => ({ key: `w-${v}`, label: WHO_LABEL[v as Who], onRemove: drop(status, setStatus, v) })),
+    ...(date.preset !== 'any' ? [{ key: 'date', label: dateLabel(date), onRemove: () => setDate({ preset: 'any' }) }] : []),
+  ]
+  const clearAll = () => { setCls([]); setSev([]); setSource([]); setStatus([]); setDate({ preset: 'any' }) }
   return (
-    <li>
-      <Link to={`/alert-triage/${encodeURIComponent(r.incident_id)}`} className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-4 py-3.5 hover:bg-well">
-        <span className="pt-0.5"><VerdictPill verdict={r.outcome ?? r.verdict} /></span>
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-medium group-hover:underline">{r.title}</span>
-          <span className="mt-0.5 block truncate text-xs text-ink-3">
-            #{r.incident_id} · {r.devices.join(', ') || 'no device'} · {sourceNames(r.sources)} · triaged {ago(iso(r.triaged_at))}
-          </span>
-          <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {who === 'agent' ? (r.verdict === 'likely_true_positive'
-              ? <Tag tone="bad">Escalated by the agent</Tag>
-              : <Tag>Closed by the agent</Tag>)
-              : who === 'person' ? <Tag tone="warn"><UserCheck className="size-3" /> Analyst decision needed</Tag>
-              : r.decision?.by === 'defender' ? <Tag><UserCheck className="size-3" /> Classified in Defender</Tag>
-              : <Tag><UserCheck className="size-3" /> Reviewed by {r.decision?.who || 'an analyst'}</Tag>}
-            {/* Defender's status, always: open = still being worked on, closed = resolved */}
-            {isClosed(r.status)
-              ? <Tag><CheckCircle2 className="size-3" /> Closed in Defender</Tag>
-              : <Tag tone={who === 'person' ? undefined : 'bad'}><CircleDot className="size-3" /> Open in Defender</Tag>}
-            {who === 'decided' && r.verdict !== outcome(r) && <Tag>Agent said: {verdictMeta(r.verdict).short.toLowerCase()}</Tag>}
-            {r.guardrails.filter((g) => RULES[g]).map((g) => <Tag key={g} tone="warn">{RULES[g].label}</Tag>)}
-            {r.ai_status !== 'ai' && <Tag tone="warn">rules only</Tag>}
-          </span>
-        </span>
-        <ChevronRight className="mt-1 size-4 text-ink-3 group-hover:text-ink" />
-      </Link>
-    </li>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3 rounded-xl border border-hairline bg-panel px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="mr-1 inline-flex items-center gap-1.5 text-sm font-medium text-ink-2"><SlidersHorizontal className="size-4" /> Filters</span>
+          <DateFilter label="Created" value={date} onChange={setDate} />
+          <FilterMenu label="Severity" icon={Siren} options={sevOptions} value={sev} onChange={setSev} />
+          <FilterMenu label="Classification" icon={Scale} options={clsOptions} value={cls} onChange={setCls} />
+          <FilterMenu label="Status" icon={UserCheck} options={statusOptions} value={status} onChange={setStatus} />
+          <FilterMenu label="Source" icon={Radar} options={sourceOptions} value={source} onChange={setSource} />
+          <span className="tabular ml-auto text-xs text-ink-3">{num(shown.length)} of {num(rows.length)} incidents</span>
+        </div>
+        {chips.length > 0 && <div className="border-t border-hairline pt-3"><FilterChips items={chips} onClear={clearAll} /></div>}
+      </div>
+      {shown.length ? (
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+          {shown.map((r) => <li key={r.incident_id}><IncidentCard r={r} who={who(r)} onOpen={() => setOpen(r)} /></li>)}
+        </ul>
+      ) : <Empty text={rows.length ? 'No incidents match these filters.' : 'No incidents to triage.'} />}
+      {open && <IncidentDialog r={open} who={who(open)} onClose={() => setOpen(null)} />}
+    </div>
   )
 }
 
-function Accuracy({ byVerdict }: { byVerdict: Record<string, number> }) {
-  const { data } = useTriageQuality()
-  const g = data?.backtest?.sets?.guide
-  const total = Object.values(byVerdict).reduce((a, b) => a + b, 0)
-  const bars = g ? [
-    ['Auto-classification rate', g.decided_pct],
-    ['Precision (auto-classified)', g.accuracy_when_decided_pct],
-    ['True positives retained for review', g.real_attacks_kept_for_humans_pct],
-    ['False positives auto-closed', g.false_alarms_closable_pct],
-  ] as const : []
+function StatusTags({ r, who }: { r: QueueRow; who: Who }) {
   return (
-    <Card title="Model accuracy (backtest on past incidents)" description={g ? `Tested on ${g.n} real incidents with expert-graded verdicts (Microsoft GUIDE)` : 'Run the backtest to populate this view'}>
-      {g ? (
-        <ul className="flex flex-col gap-3">
-          {bars.map(([label, pct]) => (
-            <li key={label}>
-              <div className="flex items-baseline justify-between gap-2 text-sm"><span className="text-ink-2">{label}</span><span className="tabular font-medium">{Math.round(pct)}%</span></div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-well"><div className="h-full rounded-full bg-blue" style={{ width: `${pct}%` }} /></div>
-            </li>
-          ))}
-          <li className="flex items-start gap-2 rounded-xl bg-well p-3 text-xs leading-relaxed text-ink-2">
-            <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" style={{ color: statusColor.good }} />
-            {(() => {
-              const attacks = Object.values(g.confusion?.TP ?? {}).reduce((a, b) => a + b, 0)
-              const m = g.missed_true_positives
-              return `Of ${attacks || 'the'} real attacks in the test, it called ${m} harmless${m ? ', so those would have been closed' : ''}. All others were escalated or routed for analyst review.`
-            })()}
-          </li>
-        </ul>
-      ) : <Empty text="No backtest yet" />}
-      <div className="mt-5 border-t border-hairline pt-4">
-        <div className="text-sm font-medium">Agent verdicts so far</div>
-        <p className="mt-0.5 text-xs text-ink-3">Before any analyst decision</p>
-        <ul className="mt-2 flex flex-col gap-1.5 text-sm">
-          {VERDICT_ORDER.map((v) => (
-            <li key={v} className="flex items-center gap-2">
-              <span className="size-2 rounded-full" style={{ background: VERDICT[v].color }} />
-              <span className="flex-1 text-ink-2">{VERDICT[v].short}</span>
-              <span className="tabular text-ink-3">{byVerdict[v] ?? 0}{total ? ` · ${Math.round(((byVerdict[v] ?? 0) / total) * 100)}%` : ''}</span>
-            </li>
-          ))}
-        </ul>
+    <>
+      {who === 'agent' ? (r.verdict === 'likely_true_positive'
+        ? <Tag tone="bad">Escalated by the agent</Tag>
+        : <Tag>Closed by the agent</Tag>)
+        : who === 'person' ? <Tag tone="warn"><UserCheck className="size-3" /> Analyst decision needed</Tag>
+        : r.decision?.by === 'defender' ? <Tag><UserCheck className="size-3" /> Classified in Defender</Tag>
+        : <Tag><UserCheck className="size-3" /> Reviewed by {r.decision?.who || 'an analyst'}</Tag>}
+      {/* Defender's status, always: open = still being worked on, closed = resolved */}
+      {isClosed(r.status)
+        ? <Tag><CheckCircle2 className="size-3" /> Closed in Defender</Tag>
+        : <Tag tone={who === 'person' ? undefined : 'bad'}><CircleDot className="size-3" /> Open in Defender</Tag>}
+    </>
+  )
+}
+
+function IncidentCard({ r, who, onOpen }: { r: QueueRow; who: Who; onOpen: () => void }) {
+  const accent = verdictMeta(outcome(r)).color
+  return (
+    <button onClick={onOpen} className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-hairline bg-panel text-left transition-colors hover:border-hairline-strong hover:bg-well/40 focus-visible:outline-2 focus-visible:outline-blue">
+      <span className="h-1 w-full" style={{ background: accent }} />
+      <div className="flex flex-1 flex-col gap-2 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span className="flex items-center gap-2"><VerdictPill verdict={outcome(r)} /><span className="text-ink-3">{r.severity} · {r.confidence} confidence</span></span>
+          <span className="text-ink-3">#{r.incident_id}</span>
+        </div>
+        <div className="line-clamp-2 font-semibold leading-snug">{r.title}</div>
+        <div className="line-clamp-1 text-xs text-ink-3">
+          {[r.devices.join(', '), r.accounts.join(', ')].filter(Boolean).join(' · ') || 'No device or account'} · {sourceNames(r.sources)}
+        </div>
+        {r.summary && <p className="line-clamp-2 text-xs leading-relaxed text-ink-2">{r.summary}</p>}
+        <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
+          <StatusTags r={r} who={who} />
+          {r.guardrails.filter((g) => RULES[g]).slice(0, 1).map((g) => <Tag key={g} tone="warn">{RULES[g].label}</Tag>)}
+        </div>
+        <div className="flex items-center justify-between text-[11px] text-ink-3">
+          <span>Triaged {ago(iso(r.triaged_at))}</span>
+          <span className="inline-flex items-center gap-0.5 font-medium text-blue">Details <ChevronRight className="size-3.5" /></span>
+        </div>
       </div>
-    </Card>
+    </button>
+  )
+}
+
+function IncidentDialog({ r, who, onClose }: { r: QueueRow; who: Who; onClose: () => void }) {
+  const { data: c, isLoading } = useTriageCase(r.incident_id)
+  return (
+    <DetailDialog onClose={onClose} title={r.title}
+      eyebrow={<><VerdictPill verdict={outcome(r)} /><span className="text-ink-3">{r.severity} · {r.confidence} confidence</span><StatusTags r={r} who={who} /></>}
+      subtitle={`Incident #${r.incident_id} · ${sourceNames(r.sources)} · triaged ${ago(iso(r.triaged_at))}`}
+      footer={<>
+        <span className="mr-auto text-xs text-ink-3">Nothing changes in Defender until you save a decision.</span>
+        {r.web_url && <a href={r.web_url} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1.5 rounded-lg border border-hairline-strong bg-panel px-3.5 py-2 text-sm font-medium hover:bg-well">Open in Defender <ExternalLink className="size-3.5" /></a>}
+        <Link to={`/alert-triage/${encodeURIComponent(r.incident_id)}`} className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-white">Open full case <ArrowRight className="size-4" /></Link>
+      </>}>
+      {isLoading || !c ? <Skeleton className="h-48 rounded-xl" /> : (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+          <div className="flex min-w-0 flex-col gap-5 lg:col-span-3">
+            <Thinks c={c} />
+            <ToDo c={c} />
+          </div>
+          <div className="flex min-w-0 flex-col gap-5 lg:col-span-2">
+            <Decide c={c} />
+          </div>
+        </div>
+      )}
+    </DetailDialog>
   )
 }
 

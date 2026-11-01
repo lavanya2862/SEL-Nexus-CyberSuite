@@ -1,0 +1,17 @@
+// name: Sign-ins with a stolen password fingerprint (pass-the-hash)
+// kind: behaviour
+// technique: T1550.002
+// attack: 5
+union
+    (DeviceLogonEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "LogonSuccess" and LogonType == "NewCredentials"
+     | where InitiatingProcessFileName !in~ ("runas.exe", "svchost.exe", "consent.exe", "lsass.exe")
+     | project Timestamp, DeviceId, DeviceName, AccountName, AccountDomain, LogonType, Protocol,
+               InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ProcessCommandLine has_any ("sekurlsa::pth", "Invoke-SMBExec", "Invoke-WMIExec", "Invoke-TheHash", "-hashes")
+     | project Timestamp, DeviceId, DeviceName, AccountName, AccountDomain, LogonType = "", Protocol = "",
+               InitiatingProcessFileName = FileName, InitiatingProcessCommandLine = ProcessCommandLine)
+| take 500

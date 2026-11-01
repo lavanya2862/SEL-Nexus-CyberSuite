@@ -3,9 +3,11 @@
 // plus one per computer + CVE that Defender reports fixed and no version on that computer still has.
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, Circle, Download, ExternalLink, Search, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Circle, Download, ExternalLink, Monitor, Siren, X } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
-import { Choice, SevTag } from '@/components/kit'
+import {
+  DateFilter, FilterBar, FilterChoice, FilterSearch, SevTag, choiceChip, dateChip, inDateRange, type ActiveFilter, type DateRange,
+} from '@/components/kit'
 import { useShownName } from '@/lib/deviceNames'
 import type { FixRow, FixStatus } from '@/agents/fixes/data'
 import { num } from '@/lib/format'
@@ -29,7 +31,7 @@ const STATUS: Record<Status, { label: string; color: string }> = {
 /** The fix engine's status of the computer's fix → what the row says (a fix covers every CVE of that app version) */
 const FROM_ENGINE: Partial<Record<FixStatus, Status>> = {
   proposed: 'waiting', saved: 'waiting', gone: 'waiting', approved: 'approved', queued: 'approved', running: 'running',
-  failed: 'failed', still_there: 'failed', done: 'checking', verified: 'checking', info: 'nofix',
+  failed: 'failed', manual_required: 'failed', awaiting_vendor: 'approved', still_there: 'failed', done: 'checking', verified: 'checking', info: 'nofix',
 }
 const STEPS = ['Found', 'Remediation proposed', 'Approved', 'Remediated', 'Verified by Defender']
 const REACHED: Record<Status, number> = { open: 0, nofix: 0, waiting: 1, approved: 2, running: 2, failed: 2, checking: 3, fixed: 4 }
@@ -129,8 +131,6 @@ const SORTERS: Record<SortKey, (a: VRow, b: VRow) => number> = {
 }
 
 const PAGE = 50
-const WHEN: [string, string][] = [['', 'Found: any time'], ['7', 'Found: last 7 days'], ['30', 'Found: last 30 days'], ['90', 'Found: last 90 days'], ['pick', 'Found: pick dates…']]
-const isoDaysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10)
 
 export function VulnList({ app, software, data, fixRows, engine, startAgent, startDevice, onClose, prev, next }: {
   app: VulnFixApp; software: string; data: VulnData; fixRows: FixRow[]; engine: boolean; startAgent?: 'vulnerability' | 'threat_intel' | null
@@ -146,35 +146,48 @@ export function VulnList({ app, software, data, fixRows, engine, startAgent, sta
   const [ag, setAg] = useState<'' | 'vulnerability' | 'threat_intel'>(startAgent ?? '')
   const [q, setQ] = useState('')
   const [sev, setSev] = useState('')
-  const [when, setWhen] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [found, setFound] = useState<DateRange>({ preset: 'any' })
   const [status, setStatus] = useState('')
   const [device, setDevice] = useState(startDevice ?? '')
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null)
   const [page, setPage] = useState(0)
   const [openKey, setOpenKey] = useState<string | null>(null)
-  useEffect(() => { setPage(0) }, [st, ag, q, sev, when, from, to, status, device, sort, software])
+  useEffect(() => { setPage(0) }, [st, ag, q, sev, found, status, device, sort, software])
   // another app: keep the four quick filters, drop what only fits the last app (its CVEs, computers, dates)
-  useEffect(() => { setOpenKey(null); setQ(''); setSev(''); setWhen(''); setFrom(''); setTo(''); setStatus(''); setDevice(startDevice ?? '') }, [software, startDevice])
+  useEffect(() => { setOpenKey(null); setQ(''); setSev(''); setFound({ preset: 'any' }); setStatus(''); setDevice(startDevice ?? '') }, [software, startDevice])
 
   const devices = useMemo(() => [...new Set(rows.map((r) => r.device))].sort(), [rows])
   const statuses = useMemo(() => ORDER.filter((s) => rows.some((r) => r.status === s)), [rows])
   const counts = { open: rows.filter((r) => r.open).length, fixed: rows.filter((r) => !r.open).length, threat_intel: rows.filter((r) => r.news.length).length }
 
-  const [since, until] = when === 'pick' ? [from || '0000', to || '9999'] : when ? [isoDaysAgo(Number(when)), '9999'] : ['', '']
-  const inRange = (d: string | null) => !!d && d >= since && d <= until
+  // a day (yyyy-mm-dd) counts as that local day
+  const inRange = (d: string | null) => !!d && inDateRange(new Date(`${d.slice(0, 10)}T12:00:00`), found)
   const term = q.trim().toUpperCase()
   const list = useMemo(() => {
     const keep = rows.filter((r) => (!st || (st === 'open') === r.open) && (ag !== 'threat_intel' || r.news.length > 0)
       && (!term || r.cve.includes(term)) && (!sev || r.sev === sev) && (!status || r.status === status) && (!device || r.device === device)
-      && (!since || inRange(r.vulnFound) || inRange(r.newsFound)))
+      && (found.preset === 'any' || inRange(r.vulnFound) || inRange(r.newsFound)))
     return keep.sort(sort ? (a, b) => sort.dir * SORTERS[sort.key](a, b) || byDefault(a, b) : byDefault)
-  }, [rows, st, ag, term, sev, status, device, since, until, sort]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rows, st, ag, term, sev, status, device, found, sort]) // eslint-disable-line react-hooks/exhaustive-deps
   const pages = Math.max(1, Math.ceil(list.length / PAGE))
   const shownRows = list.slice(page * PAGE, page * PAGE + PAGE)
-  const filtered = !!(st || ag || term || sev || when || status || device)
-  const clear = () => { setSt(''); setAg(''); setQ(''); setSev(''); setWhen(''); setFrom(''); setTo(''); setStatus(''); setDevice('') }
+  const clear = () => { setSt(''); setAg(''); setQ(''); setSev(''); setFound({ preset: 'any' }); setStatus(''); setDevice('') }
+  const stOptions = [{ value: '', label: 'Open and remediated' }, { value: 'open', label: 'Open', count: counts.open },
+    { value: 'fixed', label: 'Remediated', count: counts.fixed }]
+  const agOptions = [{ value: '', label: 'Every agent' },
+    { value: 'vulnerability', label: AGENT_NAME.vulnerability, count: rows.length, dot: 'var(--sky)' },
+    { value: 'threat_intel', label: AGENT_NAME.threat_intel, count: matches.isLoading ? undefined : counts.threat_intel, dot: 'var(--violet)' }]
+  const sevOptions = [{ value: '', label: 'All severities' }, ...SEVS.filter((s) => rows.some((r) => r.sev === s))
+    .map((s) => ({ value: s, label: s, count: rows.filter((r) => r.sev === s).length }))]
+  const statusOptions = [{ value: '', label: 'All statuses' }, ...statuses.map((s) => ({ value: s, label: STATUS[s].label, count: rows.filter((r) => r.status === s).length }))]
+  const deviceOptions = [{ value: '', label: 'All devices' }, ...devices.map((d) => ({ value: d, label: shown(d), count: rows.filter((r) => r.device === d).length }))]
+  const chips: ActiveFilter[] = [
+    ...(term ? [{ key: 'q', label: `“${q.trim()}”`, onRemove: () => setQ('') }] : []),
+    ...dateChip(found, () => setFound({ preset: 'any' })),
+    ...choiceChip('st', stOptions, st, () => setSt('')), ...choiceChip('ag', agOptions, ag, () => setAg('')),
+    ...choiceChip('sev', sevOptions, sev, () => setSev('')), ...choiceChip('status', statusOptions, status, () => setStatus('')),
+    ...choiceChip('device', deviceOptions, device, () => setDevice('')),
+  ]
   const sortBy = (key: SortKey) => setSort((s) => (s?.key !== key ? { key, dir: 1 } : s.dir === 1 ? { key, dir: -1 } : null))
 
   const fixedTotal = counts.fixed
@@ -198,39 +211,21 @@ export function VulnList({ app, software, data, fixRows, engine, startAgent, sta
           </div>
         </div>
 
-        {/* quick filters: status, then which agent reported it */}
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <Pill on={st === 'open'} onClick={() => setSt(st === 'open' ? '' : 'open')} label="Open" n={counts.open} />
-          <Pill on={st === 'fixed'} onClick={() => setSt(st === 'fixed' ? '' : 'fixed')} label="Remediated" n={counts.fixed} />
-          <span className="mx-1 h-5 w-px bg-hairline-strong" />
-          <Pill on={ag === 'vulnerability'} onClick={() => setAg(ag === 'vulnerability' ? '' : 'vulnerability')} label={AGENT_NAME.vulnerability} n={rows.length} dot={AGENT_DOT.vulnerability}
-            title="All vulnerabilities found by Defender's device scan" />
-          <Pill on={ag === 'threat_intel'} onClick={() => setAg(ag === 'threat_intel' ? '' : 'threat_intel')} label={AGENT_NAME.threat_intel} n={matches.isLoading ? null : counts.threat_intel} dot={AGENT_DOT.threat_intel}
-            title="Reported in threat intelligence before Defender's device scan found it: attackers are aware of it, so remediate these first" />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <label className="flex min-w-[200px] flex-1 items-center gap-2 rounded-lg border border-hairline-strong bg-field px-3 py-1.5 focus-within:border-blue/60">
-            <Search className="size-3.5 text-ink-3" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a CVE, e.g. CVE-2024-9680" className="w-full bg-transparent outline-none placeholder:text-ink-3" />
-          </label>
-          <Select value={sev} onChange={setSev} label="Severity" options={[['', 'All severities'], ...SEVS.filter((s) => rows.some((r) => r.sev === s)).map((s) => [s, s] as [string, string])]} />
-          <Select value={when} onChange={setWhen} label="Found" options={WHEN} />
-          {when === 'pick' && (
-            <span className="flex items-center gap-1.5">
-              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Found from" className="rounded-lg border border-hairline-strong bg-field px-2 py-1" />
-              <span className="text-ink-3">to</span>
-              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="Found until" className="rounded-lg border border-hairline-strong bg-field px-2 py-1" />
-            </span>
-          )}
-          <Select value={status} onChange={setStatus} label="Status" options={[['', 'All statuses'], ...statuses.map((s) => [s, STATUS[s].label] as [string, string])]} />
-          <Select value={device} onChange={setDevice} label="Device" options={[['', 'All devices'], ...devices.map((d) => [d, shown(d)] as [string, string])]} />
-          {filtered && <button onClick={clear} className="rounded-lg px-2.5 py-1.5 text-ink-2 hover:bg-well">Clear</button>}
-          <button onClick={() => downloadCsv(list, app.app, shown)} className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-hairline-strong px-3 py-1.5 hover:bg-well"
-            title="Download the rows that match the filters (opens in Excel)">
-            <Download className="size-3.5" /> Excel
-          </button>
-        </div>
+        <FilterBar chips={chips} onClear={clear} count={
+          <span className="inline-flex items-center gap-3">{num(list.length)} of {num(rows.length)} vulnerabilities
+            <button onClick={() => downloadCsv(list, app.app, shown)} className="inline-flex items-center gap-1.5 rounded-lg border border-hairline-strong px-3 py-1.5 text-sm text-ink hover:bg-well"
+              title="Download the rows that match the filters (opens in Excel)">
+              <Download className="size-3.5" /> Excel
+            </button>
+          </span>}>
+          <FilterSearch value={q} onChange={setQ} placeholder="Search a CVE" label="Search a CVE, e.g. CVE-2024-9680" />
+          <DateFilter label="Found" value={found} onChange={setFound} />
+          <FilterChoice label="State" icon={Circle} options={stOptions} value={st} onChange={(v) => setSt(v as '' | 'open' | 'fixed')} />
+          <FilterChoice label="Reported by" icon={Bot} options={agOptions} value={ag} onChange={(v) => setAg(v as '' | 'vulnerability' | 'threat_intel')} />
+          <FilterChoice label="Severity" icon={Siren} options={sevOptions} value={sev} onChange={setSev} />
+          <FilterChoice label="Status" icon={Check} options={statusOptions} value={status} onChange={setStatus} />
+          <FilterChoice label="Device" icon={Monitor} options={deviceOptions} value={device} onChange={setDevice} />
+        </FilterBar>
 
         {matches.isError && (
           <p className="text-xs text-ink-3">The {AGENT_NAME.threat_intel} has not yet reported which of these appear in threat intelligence; its next run adds them.</p>
@@ -275,7 +270,7 @@ export function VulnList({ app, software, data, fixRows, engine, startAgent, sta
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-3">
           <span>
             {list.length ? `Showing ${num(page * PAGE + 1)}–${num(Math.min(list.length, page * PAGE + PAGE))} of ${num(list.length)}` : 'No results'}
-            {filtered && ` (filtered from ${num(rows.length)})`}
+            {chips.length > 0 && ` (filtered from ${num(rows.length)})`}
             {!sort && ' · threat intel first, then open, then by severity'}
           </span>
           {pages > 1 && (
@@ -392,24 +387,6 @@ function Th({ k, sort, onSort, children, rowSpan }: { k: SortKey; sort: { key: S
         {on && (sort!.dir === 1 ? <ArrowUp className="mb-0.5 size-3 shrink-0" /> : <ArrowDown className="mb-0.5 size-3 shrink-0" />)}
       </button>
     </th>
-  )
-}
-
-function Pill({ on, onClick, label, n, dot, title }: { on: boolean; onClick: () => void; label: string; n: number | null; dot?: string; title?: string }) {
-  return (
-    <button onClick={onClick} aria-pressed={on} title={title}
-      className={cn('flex items-center gap-2 rounded-full border px-3.5 py-1.5', on ? 'pill-on' : 'border-hairline bg-panel hover:bg-well')}>
-      {dot && <span className={cn('size-2 rounded-full', dot)} />}{label} <span className="tabular opacity-60">{n == null ? '…' : num(n)}</span>
-    </button>
-  )
-}
-
-/** A filter dropdown in the portal's own style (the first option means "no filter") */
-function Select({ value, onChange, label, options }: { value: string; onChange: (v: string) => void; label: string; options: [string, string][] }) {
-  return (
-    <div className="w-40 sm:w-44">
-      <Choice label={label} value={value} onChange={onChange} options={options.map(([v, l]) => ({ value: v, label: l }))} className="py-1.5" />
-    </div>
   )
 }
 

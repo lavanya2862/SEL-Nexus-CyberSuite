@@ -1,0 +1,22 @@
+// name: Internet-reachable device with a Critical or High exploitable vulnerability
+// kind: behaviour
+// technique: T1190
+// attack: 12
+let exposed = DeviceTvmSoftwareVulnerabilities
+    | where CveId in ({{HOT_CVES}})
+    | summarize CVEs = make_set(CveId, 20) by DeviceId;
+let facing = union
+    (DeviceInfo
+     | where Timestamp > ago(7d)
+     | where IsInternetFacing == true
+     | summarize Timestamp = max(Timestamp), Why = "Defender marks it internet-facing" by DeviceId),
+    (DeviceNetworkEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "InboundConnectionAccepted" and RemoteIPType == "Public"
+     | summarize Timestamp = max(Timestamp), Why = strcat("accepted connections from ", dcount(RemoteIP), " outside addresses")
+                 by DeviceId);
+facing
+| join kind=inner exposed on DeviceId
+| join kind=leftouter (DeviceInfo | where Timestamp > ago(7d) | summarize arg_max(Timestamp, DeviceName, PublicIP) by DeviceId) on DeviceId
+| project Timestamp, DeviceId, DeviceName, PublicIP, Why, CVEs
+| take 500

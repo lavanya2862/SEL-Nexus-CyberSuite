@@ -1,0 +1,13 @@
+// name: Word, Excel or Outlook starting PowerShell or a command prompt
+// kind: behaviour
+// technique: T1204.002
+// attack: 3
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where InitiatingProcessFileName in~ ("winword.exe", "excel.exe", "powerpnt.exe", "outlook.exe", "onenote.exe",
+                                       "mspub.exe", "msaccess.exe", "visio.exe")
+| where FileName in~ ("powershell.exe", "pwsh.exe", "cmd.exe", "wscript.exe", "cscript.exe", "mshta.exe",
+                      "rundll32.exe", "regsvr32.exe", "certutil.exe", "bitsadmin.exe", "schtasks.exe")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

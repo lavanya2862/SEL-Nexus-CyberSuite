@@ -1,0 +1,13 @@
+// name: PowerShell downloading and running code in one line
+// kind: behaviour
+// technique: T1059.001
+// attack: 3
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName in~ ("powershell.exe", "pwsh.exe", "cmd.exe")
+| where ProcessCommandLine has_any ("IEX", "Invoke-Expression")
+| where ProcessCommandLine has_any ("DownloadString", "DownloadData", "Invoke-WebRequest", "iwr", "Invoke-RestMethod",
+                                    "irm", "WebClient", "Start-BitsTransfer")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

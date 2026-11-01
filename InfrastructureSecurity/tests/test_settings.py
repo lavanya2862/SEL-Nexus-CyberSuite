@@ -28,19 +28,19 @@ def test_agent_reads_the_suite_env_file(part):
 
 def test_new_name_wins(monkeypatch):
     monkeypatch.setenv("TRIAGE_CLOSE", "1")
-    monkeypatch.setenv("UC4_CLOSE", "0")
-    assert env("TRIAGE_CLOSE", "UC4_CLOSE") == "1"
+    monkeypatch.setenv("OLD_TRIAGE_CLOSE", "0")
+    assert env("TRIAGE_CLOSE", "OLD_TRIAGE_CLOSE") == "1"
 
 
 def test_old_name_still_works_and_says_so(monkeypatch, caplog):
     monkeypatch.delenv("TRIAGE_LOOKBACK_DAYS", raising=False)
-    monkeypatch.setenv("UC4_LOOKBACK_DAYS", " 14 ")
+    monkeypatch.setenv("OLD_TRIAGE_LOOKBACK_DAYS", " 14 ")
     with caplog.at_level("WARNING", logger="infra_core.settings"):
-        assert env("TRIAGE_LOOKBACK_DAYS", "UC4_LOOKBACK_DAYS") == "14"
+        assert env("TRIAGE_LOOKBACK_DAYS", "OLD_TRIAGE_LOOKBACK_DAYS") == "14"
     assert "rename it to TRIAGE_LOOKBACK_DAYS" in caplog.text
 
 
 def test_empty_is_not_set(monkeypatch):
     monkeypatch.setenv("VULN_FIX_STAGE", "  ")
-    monkeypatch.delenv("UC3_FIX_STAGE", raising=False)
-    assert env("VULN_FIX_STAGE", "UC3_FIX_STAGE") is None
+    monkeypatch.delenv("OLD_VULN_FIX_STAGE", raising=False)
+    assert env("VULN_FIX_STAGE", "OLD_VULN_FIX_STAGE") is None

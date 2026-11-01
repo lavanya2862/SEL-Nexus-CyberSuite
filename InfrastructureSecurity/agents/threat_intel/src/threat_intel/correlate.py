@@ -1,8 +1,7 @@
 """Exposure findings: one finding per threat and device it affects, connected to the device's OpCo, the users who
 logged on and related Defender alerts.
 
-Signs of attack (hunt hits) are the Attack Detection Agent's findings; they arrive through `attack_import` and this
-step leaves them alone.
+IOC hits come from `ioc_hunt`. Behaviour hits are the Attack Detection Agent's alone and never reach this agent.
 """
 
 from __future__ import annotations
@@ -98,7 +97,7 @@ def run(store: Store, client: DefenderClient | None, run_id: str) -> dict:
                          "first_hit": None, "created_at": now})
     store.upsert("findings", findings)
     stats = {"exposure_findings": len(findings),
-             "hit_findings": store.scalar("SELECT COUNT(*) FROM findings WHERE kind <> 'exposure'") or 0,  # from Attack Detection
+             "hit_findings": store.scalar("SELECT COUNT(*) FROM findings WHERE kind <> 'exposure'") or 0,  # IOC and behaviour hits
              "alerts_note": alert_note}
     log.info("Correlation: %s", stats)
     return stats

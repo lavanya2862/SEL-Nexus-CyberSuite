@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "UC4 alert-triage verdict (feasibility guide Appendix C.7)",
+  "title": "Alert Triage alert-triage verdict (feasibility guide Appendix C.7)",
   "type": "object",
   "additionalProperties": false,
   "required": ["summary", "verdict", "confidence", "recommended_severity", "evidence", "escalate"],

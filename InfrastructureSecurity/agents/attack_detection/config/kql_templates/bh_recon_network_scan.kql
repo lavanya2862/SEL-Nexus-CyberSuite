@@ -1,0 +1,17 @@
+// name: One machine knocking on many machines or ports in a short time
+// kind: behaviour
+// technique: T1046
+// attack: 9
+DeviceNetworkEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType in ("ConnectionSuccess", "ConnectionFailed", "ConnectionAttempt")
+| where RemoteIPType == "Private"
+| where InitiatingProcessFileName !in~ ("MsSense.exe", "SenseNdr.exe", "MsMpEng.exe", "svchost.exe", "System",
+                                        "lsass.exe", "dfsrs.exe", "Microsoft.Tri.Sensor.exe")
+| summarize Targets = dcount(RemoteIP), Ports = dcount(RemotePort), Examples = make_set(strcat(RemoteIP, ":", RemotePort), 20),
+            Timestamp = min(Timestamp), take_any(DeviceName, InitiatingProcessAccountName, InitiatingProcessCommandLine)
+            by DeviceId, InitiatingProcessFileName, Window = bin(Timestamp, 10m)
+| where Targets >= 15 or Ports >= 25
+| project Timestamp, DeviceId, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName,
+          InitiatingProcessCommandLine, Targets, Ports, Examples
+| take 500

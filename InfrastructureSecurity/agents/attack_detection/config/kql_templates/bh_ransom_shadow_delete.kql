@@ -1,0 +1,14 @@
+// name: Backup copies being deleted (shadow copies)
+// kind: behaviour
+// technique: T1490
+// attack: 1
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where (FileName =~ "vssadmin.exe" and ProcessCommandLine has "delete" and ProcessCommandLine has "shadows")
+     or (FileName =~ "vssadmin.exe" and ProcessCommandLine has "resize" and ProcessCommandLine has "shadowstorage")
+     or (FileName =~ "wmic.exe" and ProcessCommandLine has "shadowcopy" and ProcessCommandLine has "delete")
+     or (FileName in~ ("powershell.exe", "pwsh.exe") and ProcessCommandLine has "Win32_ShadowCopy"
+         and ProcessCommandLine has_any ("Delete", "Remove-CimInstance", "Remove-WmiObject"))
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

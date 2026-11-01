@@ -1,0 +1,16 @@
+// name: Large archive files appearing in odd folders (Temp, Public, PerfLogs)
+// kind: behaviour
+// technique: T1074.001
+// attack: 10
+DeviceFileEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType in ("FileCreated", "FileModified", "FileRenamed")
+| where FileName matches regex @"(?i)\.(7z|zip|rar|tar|gz|tgz|cab|001)$"
+| where FolderPath matches regex @"(?i)(\\temp\\|\\users\\public\\|\\perflogs\\|\\programdata\\|\\recycler|\\\$recycle\.bin\\|\\windows\\tasks\\)"
+| where FileSize >= 50000000
+| where InitiatingProcessFileName !in~ ("MsSense.exe", "MsMpEng.exe", "TiWorker.exe", "msiexec.exe", "svchost.exe",
+                                        "WindowsAzureGuestAgent.exe", "CollectGuestLogs.exe")
+| summarize arg_max(Timestamp, *) by DeviceId, FolderPath
+| project Timestamp, DeviceId, DeviceName, FileName, FolderPath, FileSize, SHA256,
+          InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

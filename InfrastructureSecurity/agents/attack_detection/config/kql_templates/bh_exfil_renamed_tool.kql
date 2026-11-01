@@ -1,0 +1,13 @@
+// name: Upload tools renamed to look harmless
+// kind: behaviour
+// technique: T1036.003
+// attack: 10
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName !in~ ("rclone.exe", "megacmd.exe", "winscp.exe", "pscp.exe")
+| where (ProcessVersionInfoOriginalFileName in~ ("rclone.exe", "WinSCP.exe", "pscp", "MEGAcmd.exe"))
+     or (ProcessCommandLine matches regex @"(?i)\s(copy|sync|move|copyto)\s+\S+\s+\S+:" and ProcessCommandLine has_any ("--config", "--transfers", "--bwlimit", "--multi-thread-streams", "--no-check-certificate", "--ignore-existing"))
+     or ProcessCommandLine has_any ("--s3-provider", "--mega-user", "--sftp-host", "--ftp-host")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, FolderPath, ProcessCommandLine, SHA256,
+          ProcessVersionInfoOriginalFileName, InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

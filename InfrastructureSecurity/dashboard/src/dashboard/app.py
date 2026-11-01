@@ -33,7 +33,7 @@ from dashboard import activity, audit, devicenames, fixproxy, helpbot, helpready
 from dashboard.auth import COOKIE, Auth, AuthError
 from dashboard.config import SUITE_ENV, Settings, _load_env_file, load_settings
 from dashboard.runs import AGENT_NAMES, RunManager
-from dashboard.agents.attack_detection import AttackDetectionSource
+from dashboard.agents.attack_detection import AttackDetectionSource, remediation_status
 from dashboard.agents.alert_triage import AlertTriageSource
 from dashboard.agents.threat_intel import ThreatIntelSource
 from dashboard.agents.vulnerability import VulnerabilitySource
@@ -159,6 +159,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return JSONResponse({"error": "Threat data is not built yet: run the threat check"}, status_code=404)
         return data
 
+    @app.get("/api/attack-detection/data")
+    def attack_detection_data():
+        data = AttackDetectionSource(settings.attack_detection_dir).page()
+        if data is None:
+            return JSONResponse({"error": "Attack detection data is not built yet: run the attack check"}, status_code=404)
+        status = remediation_status(settings.threat_intel_dir / "data" / "fix", {h["finding_id"] for h in data["hits"]})
+        for h in data["hits"]:
+            h["remediation"] = status.get(h["finding_id"])
+        return data
+
     @app.get("/api/threat-intel/clues")
     def threat_intel_clues():
         data = ThreatIntelSource(settings.threat_intel_dir).clues()
@@ -198,6 +208,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except fixproxy.FixUnavailable as exc:
             return JSONResponse({"error": str(exc), "threat_intel_down": True}, status_code=503)
 
+    @app.get("/api/fix/detail")
+    def fix_detail(id: str = ""):
+        """One remediation's full record for the record drawer (approvers shown as people, as in /api/fix)."""
+        try:
+            status, body = fixproxy.get_detail(settings.fix_site, id)
+        except fixproxy.FixUnavailable as exc:
+            return JSONResponse({"error": str(exc), "threat_intel_down": True}, status_code=503)
+        if status == 200 and isinstance(body.get("row"), dict):
+            named = fixproxy.named({"rows": [body["row"]], "events": []}, audit_log.entries)
+            body = {**body, "row": (named.get("rows") or [body["row"]])[0]}
+        return JSONResponse(body, status_code=status)
+
     @app.post("/api/fix/start-service")
     def fix_start_threat_intel(x_portal: str | None = Header(default=None)):
         if x_portal != "fix":
@@ -221,6 +243,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         logged = action in fixproxy.ACTIONS
         target = _fix_target(body["ids"] if isinstance(body.get("ids"), list) else []) if logged else ""
         method = f"Method: {body['method']}. " if body.get("method") in fixproxy.METHODS else ""
+        if action == "manual" and str(body.get("note") or "").strip():      # the person's note goes into the audit log too
+            method += f"Note: {' '.join(str(body['note']).split())[:300]}. "
         user = getattr(request.state, "user", None)
         try:
             status, out = fixproxy.post_fix(settings.fix_site, action, body, audit.who(user)["name"] if user else None)
@@ -379,12 +403,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/runs/history")
     def run_history() -> list[dict]:
         return runs.history()
-
-    @app.get("/api/runs/{uc}/log")
-    def run_log(uc: str, after: int = 0, run: str | None = None):
-        if uc not in AGENT_KEYS or (run and not re.fullmatch(r"\d{8}_\d{6}_[a-z0-9_]+", run)):
-            return JSONResponse({"error": "not found"}, status_code=404)
-        return runs.log(uc, max(0, after), run)
 
     @app.post("/api/runs/{uc}")
     def start_run(uc: str, request: Request, x_portal: str | None = Header(default=None)):

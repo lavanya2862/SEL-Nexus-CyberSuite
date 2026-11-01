@@ -1,0 +1,21 @@
+// name: One account copying many files from shared folders in a short time
+// kind: behaviour
+// technique: T1039
+// attack: 10
+// Defender does not record file reads; this counts files a share copy writes locally in 10 minutes.
+let copiers = DeviceProcessEvents
+    | where Timestamp > ago({{LOOKBACK}}d)
+    | where FileName in~ ("robocopy.exe", "xcopy.exe", "cmd.exe", "powershell.exe", "pwsh.exe", "7z.exe", "7za.exe",
+                          "rar.exe", "winrar.exe", "rclone.exe")
+    | where ProcessCommandLine matches regex @"\\\\[A-Za-z0-9\.\-_]+\\[^\s]+"
+    | project DeviceId, ProcessId, AccountName, ProcessCommandLine, Started = Timestamp;
+DeviceFileEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "FileCreated"
+| join kind=inner copiers on DeviceId, $left.InitiatingProcessId == $right.ProcessId
+| where Timestamp between (Started .. (Started + 1d))
+| summarize Files = count(), Bytes = sum(FileSize), Timestamp = min(Timestamp), Folders = make_set(FolderPath, 5),
+            take_any(DeviceName, ProcessCommandLine)
+            by DeviceId, AccountName, InitiatingProcessFileName, Window = bin(Timestamp, 10m)
+| where Files >= 100
+| take 500

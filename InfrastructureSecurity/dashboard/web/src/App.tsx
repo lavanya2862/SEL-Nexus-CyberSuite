@@ -10,7 +10,6 @@ import { Hunting } from '@/agents/attack-detection/Hunting'
 import { ThreatDetail } from '@/agents/threat-intel/ThreatDetail'
 import { ThreatNews } from '@/agents/threat-intel/ThreatNews'
 import { FixCentre } from '@/agents/fixes/FixCentre'
-import { FixProgress } from '@/agents/fixes/FixProgress'
 import { Vulnerabilities } from '@/agents/vulnerability/Vulnerabilities'
 import { VulnDetail } from '@/agents/vulnerability/VulnDetail'
 import { GlassHome, GlassSoon } from '@/glass/GlassHome'
@@ -41,7 +40,6 @@ export default function App() {
           <Route path="threat-intel/:tab?" element={<ThreatNews />} />
           <Route path="vulnerabilities/vuln/:key" element={<VulnDetail />} />
           <Route path="vulnerabilities/:tab?" element={<Vulnerabilities />} />
-          <Route path="fixes/progress" element={<FixProgress />} />
           <Route path="fixes/:tab?" element={<FixCentre />} />
           <Route path="reports" element={<Reports />} />
           <Route path="activity" element={<ActivityLog />} />

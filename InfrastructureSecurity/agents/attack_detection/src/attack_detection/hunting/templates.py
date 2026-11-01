@@ -1,9 +1,10 @@
 """KQL template library (config/kql_templates/*.kql). Header comments carry metadata:
 
 // name: ...        // kind: ioc | behaviour | manual        // ioc_type: ip | domain | url | sha256,sha1,md5
-// technique: T....
+// technique: T....  // attack: 1-12 (the attack in the plain-language guide)   // needs: domain
 
-Placeholders: {{LOOKBACK}} (days) and {{VALUES}} (a comma-separated list of KQL string literals).
+Placeholders: {{LOOKBACK}} (days), {{VALUES}} (a comma-separated list of KQL string literals) and {{HOT_CVES}} (the
+Critical/High CVEs with a public exploit that Defender lists on our devices).
 """
 
 from __future__ import annotations
@@ -24,11 +25,15 @@ class Template:
     ioc_types: tuple[str, ...]
     technique: str
     body: str
+    attack: int = 0
+    needs: str = ""
 
-    def render(self, lookback_days: int, values: list[str] | None = None) -> str:
+    def render(self, lookback_days: int, values: list[str] | None = None, hot_cves: list[str] | None = None) -> str:
         query = self.body.replace("{{LOOKBACK}}", str(int(lookback_days)))
         if "{{VALUES}}" in query:
             query = query.replace("{{VALUES}}", kql_list(values or []))
+        if "{{HOT_CVES}}" in query:
+            query = query.replace("{{HOT_CVES}}", kql_list(hot_cves or []))
         return query
 
 
@@ -52,7 +57,8 @@ def parse(path: Path) -> Template:
             body.append(line)
     return Template(key=path.stem, name=meta.get("name", path.stem), kind=meta.get("kind", "behaviour"),
                     ioc_types=tuple(t.strip() for t in meta.get("ioc_type", "").split(",") if t.strip()),
-                    technique=meta.get("technique", ""), body="\n".join(body).strip())
+                    technique=meta.get("technique", ""), body="\n".join(body).strip(),
+                    attack=int(meta.get("attack") or 0), needs=meta.get("needs", ""))
 
 
 def load(directory: Path = TEMPLATE_DIR) -> dict[str, Template]:

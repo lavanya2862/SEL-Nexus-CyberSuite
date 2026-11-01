@@ -1,0 +1,14 @@
+// name: LSASS copied with a dump tool (procdump and similar)
+// kind: behaviour
+// technique: T1003.001
+// attack: 2
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ProcessCommandLine has "lsass"
+| where FileName in~ ("procdump.exe", "procdump64.exe", "procdump64a.exe", "sqldumper.exe", "createdump.exe",
+                      "dumpert.exe", "nanodump.exe", "rdrleakdiag.exe", "tttracer.exe")
+     or ProcessVersionInfoOriginalFileName in~ ("procdump", "procdump.exe", "sqldumper.exe")
+     or ProcessCommandLine matches regex @"(?i)\s[-/]m[ap]\s"
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

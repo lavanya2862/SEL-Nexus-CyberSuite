@@ -26,7 +26,7 @@ function describe(name: string) {
   if (name.startsWith('Threat_Intel_Report')) return 'New threats from this run, applicable threats and agent remediation steps'
   if (name.startsWith('Attack_Detection_Report')) return 'Detections, evidence and agent resolution steps'
   if (name.startsWith('Alert_Triage_Report')) return 'Incidents triaged in this run, verdicts, evidence and actions'
-  if (name.startsWith('Threat_Intel_AI_Spotcheck') || name.startsWith('UC1_AI_Spotcheck')) return 'Worksheet for manual review of agent output'
+  if (name.startsWith('Threat_Intel_AI_Spotcheck')) return 'Worksheet for manual review of agent output'
   return 'Report file'
 }
 

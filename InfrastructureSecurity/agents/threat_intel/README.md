@@ -75,8 +75,8 @@ The agent has no web pages of its own: the Unified Cyber Portal is the only user
 - Read-only Defender access for analysis and hunting; every hunt query passes a validator (allowed tables, time filter, row limit).
 - The AI never decides alone: its answers are checked against the source data, and risk ratings come from fixed rules.
 - Fixes only run on approved items, on the lab VMs (optionally limited with `FIX_DEVICES`), using the allow-list in `config/fix_catalog.csv`. The response to a sign of attack is one fixed action (Defender scan-and-clean), never a command from the AI or from the evidence.
-- Lab tests: `scripts\lab\Invoke-UC1LabTest.ps1` (in a lab VM, as administrator) creates 6 harmless signs of attack named UC1LabTest: Run key, Startup-folder file, local user, Windows service, a burst of discovery commands and Microsoft's AMSI test sample. Each has its own hunt in `config\kql_templates`, is reported as a TEST, and the auto-fix's scan-and-clean also removes the leftovers. `-Cleanup` removes them by hand.
-- Auto-fix (on by default): at the end of each attack-check run the agent approves and runs every scan-and-clean response nobody has decided on (new and from earlier runs) and the ones not clean yet (they show as approved by "Attack Detection Agent (auto-fix)"). Each one is repeated until Defender lists no active threat: quick scan, then a full scan, then a full scan once more; what is still not clean is tried again on the next run. A person can Defer one to keep it out of auto-fix, or select Auto-fix on any card to run it now. `ATTACK_AUTO_FIX=0` goes back to waiting for a person's approval. Vulnerability and setting fixes run only from a person's Approve or Auto-fix click.
+- Lab tests: `scripts\lab\Invoke-AttackLabTest.ps1` (in a lab VM, as administrator) creates 6 harmless signs of attack named AttackLabTest: Run key, Startup-folder file, local user, Windows service, a burst of discovery commands and Microsoft's AMSI test sample. Each has its own hunt in `config\kql_templates`, is reported as a TEST, and the auto-fix's scan-and-clean also removes the leftovers. `-Cleanup` removes them by hand.
+- No auto-fix: every scan-and-clean response waits for a person. **Approve** then Execute remediation, or **Auto-fix** on a card (approve and run at once). Each approved one is repeated until Defender lists no active threat: quick scan, then a full scan, then a full scan once more. When a VM is busy with another Run Command, the fix waits up to 20 minutes for it. Responses to indicators seen are under Remediation › Indicator responses; the Attack Detection Agent's are under Attack responses.
 - Secrets live only in `.env`, which is never committed or printed.
 
 ## Spec
@@ -209,8 +209,8 @@ All environment variables read by the agent, loaded in `config.py:load_settings`
 - `OTX_API_KEY`: API key for AlienVault OTX pulses (default: `None`)
 - `TEAMS_WEBHOOK_URL`: incoming webhook URL for Microsoft Teams alert notifications (default: `None`)
 - `CVE_WINDOW_DAYS`: lookback window in days for considering recently published NVD CVEs (default: `30`)
-- `NVD_BACKFILL_DAYS`: lookback window in days for initial NVD download backfill (default: `3`)
-- `FEED_BACKFILL_DAYS`: lookback window in days for initial feed backfills (default: `7`)
+- `FIRST_RUN_HOURS`: every feed's first run collects this many hours; each later run collects only what is new since that feed's last good run (default: `24`)
+- `FEED_BACKFILL_DAYS`: how many days of collected indicators the IOC sweep searches for (default: `7`)
 - `HUNT_LOOKBACK_DAYS`: lookback window in days for hunting queries, max 30 (default: `30`)
 - `AZURE_SUBSCRIPTION_ID`: Azure subscription ID for VM Run Command execution (default: `None`)
 - `FIX_RESOURCE_GROUP`: Azure resource group containing lab VMs eligible for Run Command fixes (default: `"rg-uc3-lab"`)
@@ -218,7 +218,6 @@ All environment variables read by the agent, loaded in `config.py:load_settings`
 - `FIX_ALLOW_CHOCO`: whether to allow Chocolatey package manager fallback on target machines (default: `False`)
 - `FIX_START_VMS`: whether to automatically start deallocated lab VMs before running fixes (default: `True`)
 - `FIX_DEVICES`: comma-separated filter of specific device names eligible for fix execution (default: `()`)
-- `ATTACK_AUTO_FIX`: whether attack check runs auto-approve scan-and-clean actions (default: `True`)
 - `THREAT_INTEL_VULN_AGENT_DIR`: filesystem path to the Vulnerability Agent directory (default: `"../vulnerability"`, with backward-compatibility alias)
 
 ### Reads from other agents

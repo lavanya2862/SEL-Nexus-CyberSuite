@@ -1,0 +1,18 @@
+// name: Disabled account switched back on (for example Guest)
+// kind: behaviour
+// technique: T1078.001
+// attack: 8
+union
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where (FileName in~ ("net.exe", "net1.exe") and ProcessCommandLine has "user" and ProcessCommandLine has "/active:yes")
+          or ProcessCommandLine has "Enable-LocalUser"
+          or (ProcessCommandLine has "useraccount" and ProcessCommandLine matches regex @"(?i)disabled\s*=\s*(false|0)")
+     | project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+               InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "UserAccountModified" and AdditionalFields has_any ("Account Enabled", "AccountEnabled")
+     | project Timestamp, DeviceId, DeviceName, AccountName, FileName = ActionType,
+               ProcessCommandLine = tostring(AdditionalFields), InitiatingProcessFileName, InitiatingProcessCommandLine)
+| take 500

@@ -1,0 +1,21 @@
+// name: "Sticky keys" backdoor on the sign-in screen
+// kind: behaviour
+// technique: T1546.008
+// attack: 7
+let tools = dynamic(["sethc.exe", "utilman.exe", "osk.exe", "magnify.exe", "narrator.exe", "displayswitch.exe",
+                     "atbroker.exe"]);
+union
+    (DeviceRegistryEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "RegistryValueSet" and RegistryKey has "Image File Execution Options"
+     | where RegistryValueName =~ "Debugger" and tolower(tostring(split(RegistryKey, @"\")[-1])) in (tools)
+     | project Timestamp, DeviceId, DeviceName, ActionType, RegistryKey, RegistryValueName, RegistryValueData,
+               FileName = "", InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceFileEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType in ("FileCreated", "FileModified", "FileRenamed") and tolower(FileName) in (tools)
+     | where FolderPath has @"\Windows\System32" and InitiatingProcessFileName !in~ ("TiWorker.exe", "TrustedInstaller.exe", "svchost.exe")
+     | project Timestamp, DeviceId, DeviceName, ActionType, RegistryKey = FolderPath, RegistryValueName = "",
+               RegistryValueData = SHA256, FileName, InitiatingProcessAccountName, InitiatingProcessFileName,
+               InitiatingProcessCommandLine)
+| take 500

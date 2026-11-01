@@ -1,0 +1,12 @@
+// name: Mimikatz command words in a command line
+// kind: behaviour
+// technique: T1003.001
+// attack: 2
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ProcessCommandLine has_any ("sekurlsa", "lsadump", "kerberos::", "privilege::debug", "token::elevate",
+                                    "crypto::", "dpapi::", "Invoke-Mimikatz", "logonpasswords")
+     or ProcessVersionInfoOriginalFileName =~ "mimikatz.exe"
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine, SHA256,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

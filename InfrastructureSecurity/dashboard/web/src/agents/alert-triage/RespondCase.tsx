@@ -4,7 +4,7 @@ import {
   AlertTriangle, ArrowLeft, Bot, Undo2, Zap, CheckCircle2, CircleDot, ExternalLink, Hand, Loader2, ScanSearch,
 } from 'lucide-react'
 import { GettingReady, useAutoStart } from '@/lib/services'
-import { Card, Empty, Panel, Tabs, Tag } from '@/components/kit'
+import { Card, Choice, Empty, Panel, Tabs, Tag } from '@/components/kit'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ago, dateTime } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
@@ -85,7 +85,7 @@ function BackLink() {
   return <Link to="/alert-triage" className="inline-flex w-fit items-center gap-1.5 text-sm text-ink-3 hover:text-ink"><ArrowLeft className="size-4" /> Alert triage</Link>
 }
 
-function Thinks({ c }: { c: TriageCase }) {
+export function Thinks({ c }: { c: TriageCase }) {
   const v = c.verdict
   return (
     <Card title={<span className="flex items-center gap-2"><Bot className="size-4" /> Agent assessment</span>} description={verdictMeta(v.verdict).help}>
@@ -116,7 +116,7 @@ function Thinks({ c }: { c: TriageCase }) {
   )
 }
 
-function ToDo({ c }: { c: TriageCase }) {
+export function ToDo({ c }: { c: TriageCase }) {
   const v = c.verdict
   if (!v.recommended_actions.length && !v.containment_options.length) return null
   return (
@@ -293,7 +293,7 @@ function BasisHeading({ n, title, note }: { n: number; title: string; note: stri
 
 type Final = keyof typeof DECISION_EFFECT
 
-function Decide({ c }: { c: TriageCase }) {
+export function Decide({ c }: { c: TriageCase }) {
   const decide = useDecide()
   const auto = useAutoStart(!c.site_up, 'triage')
   const [right, setRight] = useState<Final | null>(null)
@@ -346,12 +346,11 @@ function Decide({ c }: { c: TriageCase }) {
             </div>
           </fieldset>
           {right && (
-            <label className="text-sm">
+            <div className="text-sm">
               <span className="font-medium">Determination <span className="font-normal text-ink-3">(recorded in Defender)</span></span>
-              <select value={why} onChange={(e) => setWhy(e.target.value)} className="mt-1 w-full rounded-lg border border-hairline bg-field px-3 py-2 text-sm outline-none focus:border-blue/60 focus:ring-3 focus:ring-blue/15">
-                {DECISION_EFFECT[right].reasons.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-              </select>
-            </label>
+              <Choice label="Determination" value={why} onChange={setWhy} className="mt-1 flex w-full py-2"
+                options={DECISION_EFFECT[right].reasons.map(([id, label]) => ({ value: id, label }))} />
+            </div>
           )}
           <label className="text-sm">
             <span className="font-medium">Reason <span className="font-normal text-ink-3">(optional, added as a comment in Defender)</span></span>

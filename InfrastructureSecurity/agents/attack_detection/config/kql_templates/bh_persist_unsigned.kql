@@ -1,0 +1,26 @@
+// name: Auto-start entries pointing at programs with no publisher signature
+// kind: behaviour
+// technique: T1547.001
+// attack: 7
+let autostart = DeviceRegistryEvents
+    | where Timestamp > ago({{LOOKBACK}}d)
+    | where ActionType == "RegistryValueSet" and RegistryKey has_any (@"\CurrentVersion\Run", @"\CurrentVersion\RunOnce")
+    | extend Program = tolower(extract(@"(?i)([a-z]:\\[^""]+?\.(exe|dll|scr|com))", 1, RegistryValueData))
+    | where isnotempty(Program)
+    | project DeviceId, DeviceName, Timestamp, RegistryKey, RegistryValueName, RegistryValueData, Program,
+              InitiatingProcessAccountName, InitiatingProcessFileName;
+let files = DeviceProcessEvents
+    | where Timestamp > ago({{LOOKBACK}}d)
+    | extend Program = tolower(FolderPath)
+    | where Program in ((autostart | project Program))
+    | summarize take_any(SHA1, SHA256) by DeviceId, Program;
+let signed = DeviceFileCertificateInfo
+    | where Timestamp > ago({{LOOKBACK}}d)
+    | where IsSigned == true
+    | distinct SHA1;
+autostart
+| join kind=inner files on DeviceId, Program
+| join kind=leftanti signed on SHA1
+| project Timestamp, DeviceId, DeviceName, RegistryKey, RegistryValueName, RegistryValueData, SHA256,
+          InitiatingProcessAccountName, InitiatingProcessFileName
+| take 500

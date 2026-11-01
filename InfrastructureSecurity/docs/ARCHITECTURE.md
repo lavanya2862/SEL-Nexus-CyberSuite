@@ -4,8 +4,10 @@ This is the agreed target structure for the Infrastructure Security module and t
 Every chat or person working on an agent reads this first. Keep it up to date: when a phase or an agent is done,
 update the status tables below in the same change.
 
-We never say UC1, UC3 or UC4. We say **Threat Intel Agent**, **Vulnerability Agent**, **Attack Detection Agent** and
-**Alert Triage Agent**. The old folder names only appear in the "comes from" notes below until the move is done.
+We never use the old use-case numbers. We say **Threat Intel Agent**, **Vulnerability Agent**, **Attack Detection Agent** and
+**Alert Triage Agent**. The old folder names only appear in the "comes from" notes below, to show where code came from.
+Phases 0 to 3 are done (merged 31 Oct 2026); the layout below is the target, and the phase table says what is still
+left of it.
 
 ## The four agents
 
@@ -65,31 +67,30 @@ agents/<agent>/
 ```
 config/      feeds.csv, risk_policy.csv, tech_watchlist.example.csv, metrics_assumptions.csv, kql/cve_exposure.kql
 src/threat_intel/
-  feeds/                 ← uc1/feeds/
-  analyse.py             ← uc1/analyse.py
-  prompts.py, schemas.py ← uc1/ai/ (the AI clients go to infra_core)
-  guard.py               ← uc1/ai/guard.py
+  feeds/
+  analyse.py
+  prompts.py, schemas.py
+  guard.py
   derive.py, inventory.py, exposure.py, scoring.py, fix_advice.py, alerts.py, report.py,
-  spotcheck.py, metrics.py, demo.py, store.py   ← uc1/ same names
-  publish.py             ← uc1/dashboard.py
+  spotcheck.py, metrics.py, demo.py, store.py
+  publish.py
 scripts/check_not_in_defender.py
-data/out/    threats.json, iocs.json, status.json
+data/out/    threats.json, iocs.json, status.json (nothing for the Attack Detection Agent)
 ```
 
 ### agents/attack_detection
 
 ```
-config/      kql/bh_*.kql, kql/ioc_{hash,ip,domain,url}.kql, ioc_allowlist.csv, lab_test_iocs.csv
+config/      kql/bh_*.kql (behaviour hunts only; the IOC sweeps are the Threat Intel Agent's)
 src/attack_detection/
-  pipeline.py            ← attack_check() in uc1/pipeline.py
-  hunting/               ← uc1/hunting/ (runner, templates; validator goes to infra_core)
-  correlate.py           ← uc1/correlate.py
-  resolve.py             ← uc1/resolve.py
-  report.py              ← uc1/attack_report.py
+  pipeline.py
+  hunting/
+  correlate.py
+  resolve.py
+  report.py
   store.py, publish.py
-scripts/lab/Invoke-AttackLabTest.ps1   ← scripts/lab/Invoke-UC1LabTest.ps1
 data/out/    findings.json, status.json
-reads        threat_intel/data/out/iocs.json
+reads        nothing from Threat Intel: devices and the attack 12 CVE list come from Defender
 ```
 
 ### agents/vulnerability
@@ -98,11 +99,11 @@ reads        threat_intel/data/out/iocs.json
 config/      sla_policy.csv, assumptions.csv, fix_catalog.csv, setting_fix_catalog.csv (one merged copy)
 src/vulnerability/
   extract.py, posture.py, load.py, transform.py, quality.py, report.py, excel.py,
-  metrics.py, proof.py, status.py, retention.py   ← uc3/ same names
-  pipeline.py            ← uc3/pipeline.py
-  fix_guide.py           ← uc3/ai/fixes.py
-  publish.py             ← uc3/publish.py + uc3/dashboard/build.py
-lab/                     ← uc3/lab/
+  metrics.py, proof.py, status.py, retention.py
+  pipeline.py
+  fix_guide.py
+  publish.py
+lab/
 data/lake/, data/raw/    private
 data/out/    vulnerabilities.parquet, exposure.json, fix_proposals.json, status.json
 ```
@@ -118,30 +119,31 @@ src/alert_triage/
   act/       respond.py, contain.py, close.py, autoresolve.py, writeback.py        "Take action"
   queue/     export.py, feedback.py, ledger.py, labels.py              "Update queue"
   ask.py, backtest.py, guide.py, metrics.py, report.py, store.py
-  service.py             ← uc4/site.py (button clicks from the website)
+  service.py
 data/out/    queue.json, verdicts/, status.json
-reads        vulnerability/data/out/fix_proposals.json via the Fix Centre (replaces uc4/uc1link.py)
+reads        vulnerability/data/out/fix_proposals.json via the Fix Centre
 ```
 
 ### shared/infra_core
 
 ```
-defender_auth.py     ← uc1/auth.py, uc3/auth.py, uc4/auth.py
-defender_client.py   ← uc1/api_client.py, uc3/api_client.py, uc4/api.py
-ai/azure.py, ai/gemini.py   ← uc1/ai/*_client.py, uc3/ai/azure.py, uc3/ai/gemini.py, uc4/llm.py
-kql_guard.py         ← uc1/hunting/validator.py, uc4/validator.py
+defender_auth.py
+defender_client.py
+ai/azure.py, ai/gemini.py
+kql_guard.py
 settings.py          reads the one suite .env
 run_lock.py          one run at a time per agent
 progress.py          standard step events the dashboard follows
 docstyle.py          ← the three identical docstyle.py copies
+style.py             the one writing voice (security architect, Defender terms) every agent's AI prompts add
 ```
 
 ### shared/remediation (Fix Centre)
 
 ```
-plan.py, state.py, runner.py, executors.py   ← uc1/fix/
-assets/fix_app.ps1                           ← uc1/fix_assets/uc1_fix_app.ps1
-service.py                                   ← the fix part of uc1/site.py
+plan.py, state.py, runner.py, executors.py
+assets/fix_app.ps1
+service.py
 ```
 
 ### dashboard
@@ -150,18 +152,18 @@ service.py                                   ← the fix part of uc1/site.py
 config/device_names.csv
 src/dashboard/                 ← Unified_Cyber_Portal/src/portal/
   agents/threat_intel.py, vulnerability.py, attack_detection.py, alert_triage.py
-                               the ONLY code that reads an agent's data/out/ (alert_triage.py ← uc4proxy.py)
+                               the ONLY code that reads an agent's data/out/ (alert_triage.py
   remediation.py               ← fixproxy.py
   runs.py, runner.py, summary.py, notifications.py, activity.py, audit.py, helpbot.py, helpready.py,
   services.py, app.py, auth.py, config.py
 web/src/
   app/                         App.tsx, shells, Home, Login
   shared/                      ui components, kit, Chart, lib/
-  agents/threat-intel/         ← pages/uc1/ThreatNews, ThreatDetail, timeline
-  agents/attack-detection/     ← pages/uc1/Hunting
-  agents/vulnerability/        ← pages/uc3/Vulnerabilities, VulnDetail, DataQuality
+  agents/threat-intel/
+  agents/attack-detection/
+  agents/vulnerability/
   agents/alert-triage/         ← pages/Respond, RespondCase
-  agents/fixes/                ← pages/uc3/FixCentre, FixProgress, FixHistory, AttackResponses
+  agents/fixes/
 ```
 
 ## Rules
@@ -181,19 +183,32 @@ web/src/
    dashboard adapter. A needed change to infra_core, contracts, the Fix Centre or the dashboard shell is its own
    small change, described in the agent's notes below, and agreed before it lands.
 
+## Sharing data in the team
+
+`data/` and `logs/` are never in git (tenant data). To give teammates the same data, one person exports a snapshot and
+the others import it, with Infrastructure Security stopped:
+
+```
+python tools\snapshot.py export [--logs] [--with-guide]   -> snapshots\infra_<time>_<user>.zip
+python tools\snapshot.py show <file.zip>
+python tools\snapshot.py import <file.zip>                 old data kept as data.before-import-<time>
+```
+
+A snapshot holds every agent's `data/` and the dashboard's run history; never `.env`, sign-in accounts or session
+keys, feed caches or lock files, and the 400 MB GUIDE database only with `--with-guide`. Share it through private team
+storage, not git. After an import, nobody else should run the agents until the next snapshot, or the copies drift.
+Step-by-step guide for the team: `docs/SHARING_DATA.md`.
+
 ## Naming
 
-| Old | New |
-|---|---|
-| Routes `/uc1`, `/uc1/hunts`, `/uc3`, `/respond` | `/threat-intel`, `/attack-detection`, `/vulnerabilities`, `/alert-triage`, `/fixes` |
-| Env `UC1_*`, `UC3_*`, `UC4_*`, `PORTAL_UC*` | `THREAT_INTEL_*`, `ATTACK_*`, `VULN_*`, `TRIAGE_*`, `REMEDIATION_*`, `DASHBOARD_*` (old names accepted with a warning for one release). The sign-in settings `PORTAL_LOGIN_URL`, `PORTAL_AUTH_DIR` etc. stay: the sign-in page shares them |
-| Report files `UC1_*`, `UC3_*` | named after the agent |
-| Run keys `uc1`, `uc3`, `uc4`, `attack` | `threat_intel`, `vulnerability`, `alert_triage`, `attack_detection`. Runs saved under the old keys are still read (`OLD_KEYS` in `dashboard/src/dashboard/runs.py`) |
-| Databases `data/uc1.duckdb` etc. | `data/<agent>.duckdb`; the Start script renames an old file once |
+The agents are named Threat Intel, Vulnerability, Attack Detection and Alert Triage everywhere: folders, routes,
+settings (`THREAT_INTEL_*`, `DEFENDER_*`, `VULN_*`, `TRIAGE_*`, `DASHBOARD_*`), run keys, databases and report files.
+The old use-case names and their setting-name fallbacks were removed on 31 Oct 2026; nothing reads them any more.
 
-**Names that stay on purpose**, because they are names of real things outside the code: the lab objects Defender has
-already seen (`UC1LabTest`, the `UC4LAB` ledger lines), the Azure app registrations (`UC1-Hunting-Agent-Lab`,
-`UC1-ThreatIntel-PoC`, `UC4-Triage-Agent-Lab`) and the resource group `rg-uc3-lab`. Rename them in Azure first, then here.
+**One name stays on purpose** because it is a real Azure object: the lab resource group `rg-uc3-lab` (the
+`FIX_RESOURCE_GROUP` default). Azure can't rename a resource group; move the VMs to a new group, then change it here.
+The lab markers are `AttackLabTest` (attack test), `TRIAGELAB` (alert-triage ledger lines) and the Sentinel rule
+titles `Alert Triage Lab - ...`.
 
 ## Phases
 
@@ -206,40 +221,152 @@ four agents are worked on in parallel, each in its own chat and branch.
 | 1. Rename and move | `agents/threat_intel`, `agents/vulnerability`, `agents/alert_triage` and `dashboard` with their packages; website pages in `web/src/agents/<agent>/`; routes and API paths by agent name; service headers `X-Threat-Intel`, `X-Alert-Triage`; databases and logs named after the agent; the Start script moves data out of the old folders once. Phase 0 tests pass with only the run, report and summary keys renamed | done |
 | 2. infra_core | `shared/infra_core` on every part's path (`infra_core.pth`, written by the Start script); `docstyle.py` lives there once; `infra_core.settings.env()` reads settings by agent name (`THREAT_INTEL_*`, `VULN_*`, `TRIAGE_*`, `DASHBOARD_*`) and still accepts the old ones (each config's `OLD_NAMES`); the dashboard reads each agent through `dashboard/src/dashboard/agents/<agent>.py`. Also fixed: agents read the repository-root `.env` again (broken by the phase 1 move). Left for later: Defender sign-in and API clients and the AI clients still have one copy per agent (they differ; merge them in the agent chats), the two fix catalogues (phase 3, after `docs/fix_catalog_diff.md`) | done |
 | 3. Split | `agents/attack_detection` is its own agent with its own database and `.venv`: each run loads Threat Intel's `data/out/hunt_inputs.json`, hunts, connects evidence, writes resolution steps and its report, publishes `data/out/findings.json`, then runs `python -m threat_intel attack-import` (re-score, alerts, dashboard data, fix proposals and auto-fix stay in Threat Intel). Threat Intel no longer hunts; its correlate step makes exposure findings only. History from before the split was copied once (`python -m attack_detection import-history`). Test: `tests/test_attack_round_trip.py`. **Left for later** (not needed for the agents to be independent): the fix engine still lives in `agents/threat_intel/fix/` (move to `shared/remediation`), the two fix catalogues stay separate (execution list vs advice cards, see `docs/fix_catalog_diff.md`), a contract test against `contracts/`, standard run-progress events | done (structure) |
-| 4. Make each agent work | One chat per agent, in parallel (see below) | not started |
+| 4. Make each agent work | One chat per agent, driven by hand by a person who learns the agent and decides every change (see below) | not started |
 
 ## Working on one agent (phase 4)
 
-1. **Spec.** Write the agent's README: inputs (which Defender, Sentinel or feed APIs), the four steps, outputs
-   (`data/out/` and its contract), actions that need approval.
-2. **Baseline.** Run `check` and `live-test` against the lab tenant. Record each step as works, partly works or
-   broken in the agent's notes below. That list is the backlog.
-3. **Fix step by step,** in pipeline order, with a test per step (recorded API responses, no live tenant needed).
-4. **Prove the contract.** Contract test: `data/out/` matches its schema; the dashboard adapter test passes.
-5. **End to end** in the dashboard: run, see results, approve an action, see it verified in Defender.
+Phase 4 is done by hand, not automated: in each agent's chat a person first understands how the agent works today,
+then decides what to change. Claude explains, runs and edits when asked; the person decides. The same seven steps
+for every agent:
 
-An agent is **done** when all four steps pass on the lab tenant, its tests pass on their own, its output matches its
-contract, and the other agents' tests did not have to change.
+1. **Understand.** Ask for a walkthrough before touching anything: the command that starts it, the four steps in
+   order, which file does each step, which Defender, Graph or feed APIs it calls, what it keeps privately and what it
+   publishes in `data/out/`, and which dashboard page shows what. Write a one-page "how it works today" in the agent's
+   README.
+2. **Watch it run.** `check`, then a real `run` against the lab. Follow it on the dashboard's run page, then open its
+   `data/out/` files and its pages. Record each of the four steps in the agent's notes below: works, partly works,
+   broken or not sure, with what you saw.
+3. **Make it happen on purpose.** An agent with nothing to find proves nothing. Use the lab to create something it
+   must catch, then check that it does:
+
+   | Agent | Lab trigger |
+   |---|---|
+   | Vulnerability | old apps and weak settings on the lab VMs (`agents/vulnerability/lab/`) |
+   | Threat Intel | a threat that names software installed on the lab VMs; the TEST indicators of `lab_test_iocs.csv` |
+   | Attack Detection | `agents/attack_detection/scripts/lab/Test-01-…` to `Test-12-….ps1`, run from Azure Cloud Shell |
+   | Alert Triage | lab incidents from the ledger tests (`TRIAGELAB` lines), whose right answers are known |
+
+4. **Compare to the promise.** Hold what you saw against what the agent should do (the four steps above and the
+   overview deck). The gaps are the backlog: write them in the agent's notes, in the order you choose.
+5. **Change one thing at a time.** Small change, ask for the diff to be explained, rerun just that step, check its
+   dashboard page, run the tests, commit. One change per commit, so a bad one can be undone alone.
+6. **Stop at the boundary.** A change that needs something outside the agent's folder, its pages or its adapter
+   (infra_core, a contract, the fix engine, the dashboard shell) is not made in that chat: write it in the agent's
+   notes and decide which chat makes it, so two chats never edit shared code at once.
+7. **Close out.** One full run end to end: lab trigger, the agent finds it, the dashboard shows it, approve the
+   action, Defender confirms it. Then update the README, the agent's notes and its status here.
+
+**What to look at first, per agent:**
+
+- **Vulnerability:** does extraction really get 100% (`demo-limit` proves it)? Which quality checks WARN or FAIL? Are
+  the AI fix cards right? Does a fix go proposal → approve → run → verified by Defender?
+- **Threat Intel:** which feeds fail (`failed_feeds` in its last-run file)? Does the AI pull the right CVEs and
+  software from the news (the spot-check gives an accuracy figure)? Does "Affects us?" match by exact CVE or only by
+  product name? Do the risk scores make sense against `risk_policy.csv`?
+- **Attack Detection:** do the searches for the 12 attacks run and hit on the lab? How many false positives? Does "connect evidence" link the right device, user and alerts? Are the resolution steps usable?
+- **Alert Triage:** is each incident routed to the right playbook? How accurate are the verdicts (backtest and lab
+  ledger)? Do the guardrails and prompt-injection checks hold? Each action (close, contain, respond, auto-resolve) is
+  off by default: turn them on one at a time and test each.
+
+**Order, when the agents are not done at the same time:** Vulnerability → Threat Intel → Attack Detection → Alert
+Triage. Each one uses the previous ones' output (device and software data, then IOCs, then fixes and threat intel),
+so when the earlier ones work, problems in the later ones are their own.
+
+An agent is **done** when all four steps work on the lab, the full run in step 7 passes, the tests pass, and the
+other agents' tests did not have to change.
 
 ## Agent notes
 
-Each chat keeps its agent's section current: baseline results, what is fixed, open questions, and any change it needs
-outside its own folder.
+Each chat keeps its agent's section current, under the same four headings: **Today** (how it works, step 1),
+**Baseline** (each step: works / partly / broken / not sure, steps 2 and 3), **Backlog** (step 4, in order), and
+**Needs from outside** (step 6).
 
 ### Threat Intel Agent
-- Open decision: `correlate.py` runs in both the Threat Intel run and the attack check today. Plan: it moves to Attack
-  Detection, and Threat Intel answers "Affects us?" with `exposure.py` alone. Confirm during phase 3.
+- It checks both kinds of news against our devices: vulnerabilities (exposure: CVEs and products against the
+  installed software) and clues (IOC sweeps: `ioc_hunt.py` with `config/kql_templates/ioc_*.kql`, then AI resolution
+  steps for each hit in `resolve.py`). `python -m threat_intel hunt` runs the sweeps on their own.
+- No link with the Attack Detection Agent (31 Oct 2026): it sends nothing to it (`hunt_inputs.json` and
+  `hunt_inputs.py` are gone) and takes nothing back (`attack-import` and `attack_import.py` are gone). The
+  behaviour hits copied in earlier still sit in its database until someone deletes them (see the Attack Detection notes).
+- Its pages show news-based threats only (31 Oct 2026): Applicable threats = vulnerabilities in installed software plus
+  collected indicators seen on a device. The Attack Detection Agent's behaviour hits stay in the data for its own pages.
+  Remediation has its own Indicator responses tab. Auto-fix (`ATTACK_AUTO_FIX`) is removed: a person approves every fix.
+- Needs from outside: the "Indicators searched" card is still on the Attack Detection hunting page; it belongs on a
+  Threat Intel page.
+- The fix engine still lives here (`fix/`, served by `site.py`). Moving it to `shared/remediation` is a shared change,
+  not part of this agent's phase 4 work.
+- Baseline: not started.
 
 ### Vulnerability Agent
-- `fix_catalog.csv` and `setting_fix_catalog.csv` differ between the Threat Intel and Vulnerability folders today;
-  merge them in phase 2.
+- Its fix stage starts the fix engine in the Threat Intel folder (`pipeline.py`, via `fix_engine_dir`).
+- The two fix catalogues stay separate on purpose (execution list vs advice cards, see `docs/fix_catalog_diff.md`).
+- Baseline: not started.
+- Open gaps (1 Nov 2026): no clear message when Defender has not made its first export yet (the run stops with
+  "date value out of range"); "0 new" on a first run reads like a fault; the security-settings and end-of-support
+  downloads come back empty; the fix flow is not yet proven end to end.
+- Fix Centre change (made 1 Nov 2026, approved by the user): an app update that found nothing newer was reported as
+  "failed". Seen on opcc-wks-01: Defender wanted Firefox from MFSA 2026-118, but winget's newest was the installed
+  157.0.1, so `winget upgrade` said "no applicable upgrade" and the forced reinstall put 157.0.1 back. Now every
+  remediation has the Remediation Agent fallback (`fix/runner.py:_remediate`, the pattern of `_respond`):
+  1. The first attempt is the standard one. After a failure the AI picks the next move from `APP_MOVES` only
+     (update/replace: winget, choco; remove: uninstall; setting: apply), or stop; without AI the moves follow
+     `APP_LADDER`, whose length caps the attempts. It never writes or runs a command.
+  2. Retries run under the original approval (the user's choice): no new approval per attempt.
+  3. `fix_app.ps1` reads winget's newest published version first; when it is already installed it changes nothing
+     (`no_newer`) instead of reinstalling.
+  4. Outcomes: done; `awaiting_vendor` (every attempt clean, version unchanged: no source publishes a newer one;
+     `plan.requeue_awaiting` sets it back to approved 24 h later); failed, with the AI's professional summary.
+  5. Dashboard: status "Awaiting vendor package"; the run page lists the retries. Tests: `tests/test_remediation_agent.py`.
+  Proven on VM 2 (1 Nov 2026): winget reported its newest Firefox (157.0.1) already installed and changed nothing;
+  with `FIX_ALLOW_CHOCO=1` the agent retried with Chocolatey and Firefox went to 159.0.
+  6. Manual handover: when the computer reported but no allowed move remediated it, the status is `manual_required`
+     (`failed` is kept for remediations that never ran). The fix carries `handover` (cause, steps, owner, evidence;
+     the AI's when it gave them, else `MANUAL_STEPS`), the event log records it, and the bell raises it. A person
+     uses "Mark as fixed manually" (`/api/fix/manual`, with a note; `plan.mark_manual`), which is logged in the
+     event log and the portal's audit log, and Defender then verifies it as usual. One panel
+     (`components/ManualAction.tsx`) shows it on Fix Centre cards, the progress page, attack responses and the run pages.
+     A fix waiting for a person never offers Approve, Remediate or Auto-fix (`canApprove` leaves it out).
+  7. Traceability (1 Nov 2026): every fix keeps its own `trail` (the shared event list keeps only the last 400 for all
+     fixes) and its earlier `attempts` (a new approval no longer overwrites the last result). `/api/fix/detail?id=`
+     returns the row, full device output, the allowed package ids, attempts and trail for the record drawer
+     (`components/FixRecord.tsx`, opened anywhere with `?record=<fix id>`). Remediation history starts with
+     "All remediations" (`FixRegister.tsx`): quick views (waiting for a person, in progress, awaiting vendor,
+     pending verification, verified, problems, deferred, proposed) and the shared filter bar. Waiting fixes stay
+     pinned on the progress page and at the top of the Updates grid.
 
 ### Attack Detection Agent
-- Today it lives inside the Threat Intel folder (`hunting/`, `correlate.py`, `attack_report.py`, `resolve.py`).
+- Page (31 Oct 2026): tabs Overview, Attacks detected (cards, detail dialog, Remediate opens its response in
+  Remediation › Attack responses), Attack coverage (the 12 attacks from `config/attacks.csv`), Search health.
+  `findings.json` carries `attacks` and, per finding, `attack`, `attack_name`, `severity`, `search`, `technique`.
+- Stands alone since 31 Oct 2026: `inputs.py` pulls the devices from Defender's Machines API (`config/opco_mapping.csv`),
+  `hot_cves` asks Defender for the Critical/High CVEs with an exploit, `publish.py` adds `devices` to `findings.json`, and
+  the Attack detection page reads that file through `dashboard/src/dashboard/agents/attack_detection.py`
+  (`/api/attack-detection/data`). The last step is `fix`: `python -m threat_intel fix-responses` (`ATTACK_FIX_ENGINE_DIR`)
+  makes the fix engine (the Fix Centre, still in the Threat Intel folder) propose a scan-and-clean per behaviour hit, read
+  from `findings.json`. `history.py` / `import-history` are gone. Left over: its database still holds the news threats
+  loaded before, and the page still borrows UI helpers (`attackType`, `Resolve`, the header) from `web/src/agents/threat-intel/`.
+- Its own agent since phase 3, with its own database and `.venv`. It searches for attacker behaviour only
+  (`bh_*.kql`, the searches for the 12 attacks only); the IOC sweeps moved back to the Threat Intel Agent. It has no README yet: write it in step 1.
+- The searches for the 12 attacks in the plain-language guide are written (31 Oct 2026): 106 `bh_*.kql` hunts, each
+  tagged `// attack: N`. The five `// needs: domain` hunts are recorded as skipped when no device is domain-joined.
+  The attack 12 hunts use `{{HOT_CVES}}` (CVEs of the Threat Intel Agent's High/Critical threats); its "any clue from
+  attacks 1 to 11 in 14 days" search is `_open_doors` in `correlate.py`. Not KQL hunts: Defender's own alerts (already
+  attached to every finding) and addresses on the Threat Intel bad list (the Threat Intel Agent's IOC sweep). Only
+  partly tested live: Defender stopped answering partway through the check run.
+- Only the 12 attacks' searches are kept: the AI-drafted hunts, `cve_exposure.kql` and the old lab script
+  (`Invoke-AttackLabTest.ps1`) are gone, and its data was emptied on 31 Oct 2026.
+- The 12 lab tests are `scripts/lab/Test-01-…` to `Test-12-….ps1`, one per attack, run from Azure Cloud Shell: each sends
+  its steps into `opca-wks-01` (and `opcc-wks-01` for tests 5, 6, 8) through Azure Run Command, so nobody signs in.
+  Slow tests schedule their later days in the VM; `-Cleanup` undoes each. Written but not yet run on the VMs.
+- It can use its own Entra app registration: `ATTACK_DEFENDER_TENANT_ID`, `_CLIENT_ID`, `_CLIENT_SECRET` in the suite
+  `.env` (else the shared `DEFENDER_*` one). Needs from outside: add those three lines to `.env.example`.
+- The fix engine's lab clean-up (`fix_app.ps1`) removes the same `AttackLabTest` leftovers (renamed 31 Oct 2026).
+- Baseline: not started.
 
 ### Alert Triage Agent
-- `fixlink.py` (was `uc1link.py`) reads the Threat Intel folder's private fix plan; replace it with the Fix Centre in
-  phase 3. Its key in the triage context is now `fixes` (was `uc1`); verdicts saved before phase 1 still say `uc1`.
+- `fixlink.py` still reads the fix engine's private plan in the Threat Intel folder; it moves to
+  the Fix Centre when the fix engine does. Its key in the triage context is `fixes`.
+- Baseline: not started.
 
 ### Cross-folder reads (found 31 Oct 2026)
 

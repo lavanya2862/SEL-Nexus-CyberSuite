@@ -1,11 +1,11 @@
 """The lab ledger: the answer key for incidents we caused on purpose in the lab.
 
 Each lab test script prints one line per test:
-    UC4LAB {"run_id": "w1-eicar-a", "wave": "1", "name": "EICAR test file", "technique": "T1204",
+    TRIAGELAB {"run_id": "w1-eicar-a", "wave": "1", "name": "EICAR test file", "technique": "T1204",
             "device": "opca-wks-01", "account": "labadmin", "start": "2026-10-08T09:00:00Z",
             "end": "2026-10-08T09:01:00Z", "expected": "benign_positive", "must_escalate": "no",
             "match": "eicar|malware"}
-You save the Run command output into data/inbox/ledger/*.txt; `alert_triage ledger` loads every UC4LAB line and links each lab
+You save the Run command output into data/inbox/ledger/*.txt; `alert_triage ledger` loads every TRIAGELAB line and links each lab
 incident to the test that caused it (same device, alert inside the test's time window, a match word in the alert).
 
 `expected` may list several acceptable verdicts separated by "|". The agent NEVER sees the ledger: it is only used to
@@ -24,7 +24,7 @@ from alert_triage.config import Settings
 from alert_triage.store import Store, to_utc
 
 log = logging.getLogger("alert_triage.ledger")
-LINE = re.compile(r"UC4LAB\s+(\{.*\})")
+LINE = re.compile(r"TRIAGELAB\s+(\{.*\})")
 BEFORE = timedelta(minutes=10)
 AFTER = timedelta(hours=3)            # Defender can take a while to raise an alert, custom rules run hourly
 
@@ -35,7 +35,7 @@ def parse_text(text: str, source_file: str = "") -> list[dict]:
         try:
             d = json.loads(m.group(1))
         except ValueError:
-            log.warning("Skipping unreadable UC4LAB line in %s", source_file)
+            log.warning("Skipping unreadable TRIAGELAB line in %s", source_file)
             continue
         if not d.get("run_id") or not d.get("device"):
             continue
@@ -60,7 +60,7 @@ def parse_csv(path: Path) -> list[dict]:
     import csv
     with path.open(encoding="utf-8-sig", newline="") as fh:
         rows = [r for r in csv.DictReader(fh) if (r.get("run_id") or "").strip() and not r["run_id"].startswith("#")]
-    text = "\n".join("UC4LAB " + json.dumps({k: (r.get(k) or "").strip() for k in CSV_COLUMNS}) for r in rows)
+    text = "\n".join("TRIAGELAB " + json.dumps({k: (r.get(k) or "").strip() for k in CSV_COLUMNS}) for r in rows)
     return parse_text(text, path.name)
 
 

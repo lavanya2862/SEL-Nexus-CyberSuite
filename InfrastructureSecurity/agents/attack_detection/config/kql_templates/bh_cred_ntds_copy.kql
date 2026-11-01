@@ -1,0 +1,18 @@
+// name: Domain password database copied (ntdsutil or ntds.dit)
+// kind: behaviour
+// technique: T1003.003
+// attack: 2
+// needs: domain
+union
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where (FileName =~ "ntdsutil.exe" and ProcessCommandLine has_any ("ifm", "ac i ntds", "activate instance"))
+          or (ProcessCommandLine has "ntds.dit" and ProcessCommandLine has_any ("copy", "esentutl", "Copy-Item", "vssadmin", "robocopy"))
+     | project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+               InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceFileEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "FileCreated" and FileName =~ "ntds.dit" and FolderPath !startswith @"C:\Windows\NTDS"
+     | project Timestamp, DeviceId, DeviceName, AccountName = InitiatingProcessAccountName, FileName,
+               ProcessCommandLine = FolderPath, InitiatingProcessFileName, InitiatingProcessCommandLine)
+| take 500

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Search } from 'lucide-react'
-import { Choice, DTable, Empty, Panel } from '@/components/kit'
+import { ListChecks } from 'lucide-react'
+import {
+  DTable, DateFilter, Empty, FilterBar, FilterChoice, FilterSearch, Panel, choiceChip, dateChip, inDateRange, type ActiveFilter, type DateRange,
+} from '@/components/kit'
 import { ago, num } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -71,7 +73,13 @@ export function ActivityLog() {
     return () => clearTimeout(t)
   }, [text])
   const log = useQuery({ queryKey: ['activity', action, q], queryFn: () => fetchActivity(action, q), refetchInterval: 15_000 })
-  const items = log.data?.items ?? []
+  const [when, setWhen] = useState<DateRange>({ preset: 'any' })
+  const items = (log.data?.items ?? []).filter((e) => inDateRange(e.ts, when))
+  const chips: ActiveFilter[] = [
+    ...(text ? [{ key: 'q', label: `“${text}”`, onRemove: () => setText('') }] : []),
+    ...dateChip(when, () => setWhen({ preset: 'any' })),
+    ...choiceChip('action', GROUPS, action, () => setAction('')),
+  ]
 
   return (
     <div className="flex flex-col gap-5">
@@ -83,18 +91,15 @@ export function ActivityLog() {
         </p>
       </div>
       <Panel className="flex flex-col gap-3 p-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <Choice label="Action" value={action} onChange={setAction} options={GROUPS} className="w-auto" />
-          <label className="flex min-w-56 flex-1 items-center gap-2 rounded-lg border border-hairline-strong bg-field px-3 focus-within:border-blue/60 focus-within:ring-3 focus-within:ring-blue/15">
-            <Search className="size-4 shrink-0 text-ink-3" />
-            <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Filter by person, email, agent or device…"
-              className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink-3" aria-label="Filter the activity log" />
-          </label>
-          {log.data && <span className="text-xs text-ink-3">{log.data.total > items.length ? `latest ${num(items.length)} of ${num(log.data.total)}` : `${num(log.data.total)} entries`}</span>}
-        </div>
+        <FilterBar className="border-0 bg-transparent p-0" chips={chips} onClear={() => { setText(''); setAction(''); setWhen({ preset: 'any' }) }}
+          count={log.data && (log.data.total > items.length ? `${num(items.length)} of ${num(log.data.total)}` : `${num(items.length)} entries`)}>
+          <FilterSearch value={text} onChange={setText} placeholder="Person, email, agent or device…" label="Filter the activity log" />
+          <DateFilter label="When" value={when} onChange={setWhen} />
+          <FilterChoice label="Action" icon={ListChecks} options={GROUPS} value={action} onChange={setAction} />
+        </FilterBar>
         {log.isLoading ? <div className="py-10 text-sm text-ink-3">Loading…</div>
           : log.error ? <Empty text={String((log.error as Error).message)} />
-          : !items.length ? <Empty text={action || q ? 'No activity matches these filters.' : 'No activity recorded yet. Agent runs, remediation and triage actions appear here as soon as someone performs them.'} />
+          : !items.length ? <Empty text={action || q || when.preset !== 'any' ? 'No activity matches these filters.' : 'No activity recorded yet. Agent runs, remediation and triage actions appear here as soon as someone performs them.'} />
           : (
             <DTable head={[['When'], ['Who'], ['Action'], ['Agent'], ['Target'], ['Details']]} minWidth={1040}>
               {items.map((e) => {
@@ -112,7 +117,7 @@ export function ActivityLog() {
                       {e.email && e.name !== e.email && <div className="truncate text-xs text-ink-3">{e.email}</div>}
                     </td>
                     <td className="whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-well/60 py-0.5 pl-1.5 pr-2.5 text-xs font-medium text-ink-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-hairline bg-well/60 py-0.5 pl-1.5 pr-2.5 text-xs font-medium text-ink-2">
                         <span className={cn('size-2 rounded-full', TONE[tone])} />{a.label}
                       </span>
                     </td>

@@ -1,0 +1,12 @@
+// name: Script files (.js, .vbs) run from Temp, Downloads or Public folders
+// kind: behaviour
+// technique: T1059.007
+// attack: 3
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName in~ ("wscript.exe", "cscript.exe")
+| where ProcessCommandLine matches regex @"(?i)\.(js|jse|vbs|vbe|wsf|wsh)\b"
+| where ProcessCommandLine matches regex @"(?i)(\\temp\\|\\tmp\\|\\downloads\\|\\users\\public\\|%temp%|\\appdata\\local\\temp)"
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

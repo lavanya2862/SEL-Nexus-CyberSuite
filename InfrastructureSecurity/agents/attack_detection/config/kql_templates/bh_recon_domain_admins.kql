@@ -1,0 +1,19 @@
+// name: Lookups of who the domain admins are
+// kind: behaviour
+// technique: T1069.002
+// attack: 9
+// needs: domain
+union
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ProcessCommandLine has_any ("Domain Admins", "Enterprise Admins", "Schema Admins")
+     | where not(ProcessCommandLine has_any ("/add", "/delete", "Add-ADGroupMember"))
+     | project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+               InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "LdapSearch" and AdditionalFields has_any ("Domain Admins", "admincount=1", "Enterprise Admins")
+     | project Timestamp, DeviceId, DeviceName, AccountName = InitiatingProcessAccountName, FileName = ActionType,
+               ProcessCommandLine = tostring(parse_json(AdditionalFields).SearchFilter), InitiatingProcessFileName,
+               InitiatingProcessCommandLine)
+| take 500

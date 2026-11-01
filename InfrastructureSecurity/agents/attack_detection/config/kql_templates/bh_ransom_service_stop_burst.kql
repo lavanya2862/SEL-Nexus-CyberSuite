@@ -1,0 +1,17 @@
+// name: Burst of business services stopped (5 or more in 10 minutes)
+// kind: behaviour
+// technique: T1489
+// attack: 1
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where (FileName in~ ("net.exe", "net1.exe", "sc.exe") and ProcessCommandLine has "stop")
+     or (FileName in~ ("powershell.exe", "pwsh.exe") and ProcessCommandLine has_any ("Stop-Service", "Set-Service"))
+| where InitiatingProcessFileName !in~ ("MsSense.exe", "SenseIR.exe", "TrustedInstaller.exe", "msiexec.exe",
+                                        "WindowsAzureGuestAgent.exe", "MpCmdRun.exe")
+| summarize Stops = count(), Commands = make_set(ProcessCommandLine, 25), FirstSeen = min(Timestamp),
+            take_any(DeviceName, AccountName, InitiatingProcessFileName, InitiatingProcessCommandLine)
+            by DeviceId, Window = bin(Timestamp, 10m)
+| where Stops >= 5
+| project Timestamp = FirstSeen, DeviceId, DeviceName, AccountName, Stops, Commands,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

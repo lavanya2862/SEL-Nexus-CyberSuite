@@ -1,0 +1,17 @@
+// name: One program renaming 100 or more files within 5 minutes
+// kind: behaviour
+// technique: T1486
+// attack: 1
+DeviceFileEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "FileRenamed"
+| where InitiatingProcessFileName !in~ ("MsSense.exe", "MsMpEng.exe", "OneDrive.exe", "msiexec.exe", "TiWorker.exe",
+                                        "TrustedInstaller.exe", "svchost.exe", "SearchIndexer.exe")
+| summarize Renamed = count(), Endings = make_set(tostring(split(FileName, ".")[-1]), 10),
+            Folders = make_set(FolderPath, 5), FirstSeen = min(Timestamp),
+            take_any(DeviceName, InitiatingProcessAccountName, InitiatingProcessCommandLine)
+            by DeviceId, InitiatingProcessId, InitiatingProcessFileName, Window = bin(Timestamp, 5m)
+| where Renamed >= 100
+| project Timestamp = FirstSeen, DeviceId, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName,
+          InitiatingProcessCommandLine, Renamed, Endings, Folders
+| take 500

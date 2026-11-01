@@ -1,9 +1,10 @@
 """Connect evidence: turn hunt hits into findings and connect the dots:
 finding -> device -> OpCo -> users who logged on -> related Defender alerts -> timeline.
 
-Lab tests are recognised automatically (EICAR hash, the lab-test marker in a decoded PowerShell command, TEST
-indicators) and marked is_test so reports never present them as real attacks. Which devices a threat affects
-(exposure) is the Threat Intel Agent's job, not this one.
+In the PoC, lab tests count as real findings (MARK_LAB_TESTS is off): the 12 lab tests use realistic names, so the
+demo looks like a real attack. With MARK_LAB_TESTS on, the EICAR test file and the AMSI test sample are marked
+is_test so reports never present them as real attacks. Which devices a threat affects (exposure) is the Threat
+Intel Agent's job, not this one.
 """
 
 from __future__ import annotations
@@ -23,14 +24,12 @@ from attack_detection.store import NEW_IDS_SHOWN, Store, to_utc, utcnow
 
 log = logging.getLogger("attack_detection.correlate")
 
-EICAR_SHA256 = "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f"
-# The marker scripts/lab/Invoke-AttackLabTest.ps1 writes; Defender keeps 30 days of events, so the markers the
-# script wrote before the agents got their names are still recognised.
-LAB_MARKERS = ("attack detection lab test", "threat_intel lab test", "uc1 lab test")
-LAB_NAME = "uc1labtest"          # scripts/lab/Invoke-AttackLabTest.ps1 and everything it creates carry this name
+MARK_LAB_TESTS = False            # PoC: lab test results are counted and reported as real findings
+EICAR_SHA256 ="275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f"
 AMSI_TEST = "7e72c3ce-861b-4339-8740-0ac1484f1386"        # Microsoft's harmless AMSI test sample
 ENC_ARG = re.compile(r"(?i)\s[-/]e[a-z]*\s+([A-Za-z0-9+/=]{16,})")
 SYSTEM_ACCOUNTS = {"system", "local service", "network service", "anonymous logon"}
+OPEN_DOOR_DAYS = 14               # attack 12: a sign of attacks 1-11 this recent on a machine with a high-rated weakness
 
 USERS_QUERY = """DeviceLogonEvents
 | where Timestamp > ago(7d)
@@ -52,10 +51,10 @@ def decode_powershell(command: str | None) -> str | None:
 
 
 def is_lab_test(row: dict) -> bool:
+    if not MARK_LAB_TESTS:
+        return False
     text = json.dumps(row, default=str).lower()
-    decoded = (decode_powershell(row.get("ProcessCommandLine")) or "").lower()
-    return (EICAR_SHA256 in text or "eicar" in text or any(m in decoded for m in LAB_MARKERS) or LAB_NAME in text
-            or AMSI_TEST in text or "amsi_test" in text)
+    return EICAR_SHA256 in text or "eicar" in text or AMSI_TEST in text or "amsi_test" in text
 
 
 def _fid(*parts) -> str:
@@ -106,7 +105,7 @@ def _alerts(client: DefenderClient | None, days: int = 30) -> tuple[dict[str, li
 
 def _hunt_threat(store: Store, hunt: dict, is_test: bool) -> str:
     """Behaviour hits become their own threat item ('Proactive hunt: ...') so they flow into scoring and reports."""
-    tid = f"hunt:{hunt['template'] if hunt['origin'] != 'ai' else 'ai-' + (hunt['technique'] or '')}" + (":test" if is_test else "")
+    tid = f"hunt:{hunt['template']}" + (":test" if is_test else "")
     name = hunt["name"].split(" (")[0]
     text = (f"Proactive behaviour hunt '{name}' (ATT&CK {hunt['technique'] or 'n/a'}) found matching activity on our "
             f"devices in Microsoft Defender." + (" LAB TEST: this activity was created on purpose with a harmless "
@@ -119,35 +118,51 @@ def _hunt_threat(store: Store, hunt: dict, is_test: bool) -> str:
     return tid
 
 
+def _open_doors(store: Store, known: dict, now) -> list[dict]:
+    """Attack 12, search 4: a machine with a Critical or High exploitable vulnerability (an attack 12 hit) that also
+    shows a sign of attacks 1 to 11 within OPEN_DOOR_DAYS becomes one 'open door in use now' finding."""
+    attack_of = {key: t.attack for key, t in tpl.load().items()}
+    rows = store.query("""SELECT f.*, h.template FROM findings f JOIN hunts h ON h.hunt_id = f.hunt_id
+                          WHERE f.kind = 'behaviour_hit' AND NOT f.is_test""")
+    doors = []
+    for door in (r for r in rows if r["template"] == "bh_exposure_hot_cve"):
+        since = now - timedelta(days=OPEN_DOOR_DAYS)
+        clues = [r for r in rows if r["device_id"] == door["device_id"] and 1 <= attack_of.get(r["template"], 0) <= 11
+                 and r["first_hit"] and to_utc(r["first_hit"]) >= since]
+        if not clues:
+            continue
+        hunt = {"template": "open_door", "origin": "template", "technique": "T1190",
+                "name": "Open door in use now (a high-rated weakness and a sign of attack on the same machine)"}
+        tid = _hunt_threat(store, hunt, False)
+        detail = hunt["name"].split(" (")[0]
+        fid = _fid("behaviour_hit", tid, door["device_id"], detail)
+        timeline = [{"time": str(c["first_hit"]), "what": f"Sign of attack {attack_of[c['template']]}: {c['detail']}",
+                     "account": None} for c in sorted(clues, key=lambda c: str(c["first_hit"]))]
+        timeline.insert(0, {"time": str(door["first_hit"]), "what": f"Weakness: {door['detail']}", "account": None})
+        doors.append({"finding_id": fid, "threat_id": tid, "hunt_id": door["hunt_id"], "kind": "behaviour_hit",
+                      "device_id": door["device_id"], "device_name": door["device_name"], "opco": door["opco"],
+                      "detail": detail, "users": door["users"], "alerts": door["alerts"], "timeline": timeline,
+                      "is_test": False, "first_hit": min(to_utc(c["first_hit"]) for c in clues),
+                      "created_at": (known.get(fid) or {}).get("created_at") or now})
+    return doors
+
+
 def run(store: Store, client: DefenderClient | None, run_id: str) -> dict:
     now = utcnow()
     devices = {d["device_id"]: d for d in store.query("SELECT * FROM devices")}
     hunts = {h["hunt_id"]: h for h in store.query("SELECT * FROM hunts WHERE run_id = ? AND status = 'ok'", [run_id])}
     results = store.query("""SELECT r.* FROM hunt_results r JOIN hunts h ON h.hunt_id = r.hunt_id
                              WHERE h.run_id = ? AND h.status = 'ok'""", [run_id])
-    ioc_threats: dict[str, set[str]] = {}
-    for l in store.query("SELECT threat_id, value FROM threat_links WHERE link_type = 'ioc'"):
-        ioc_threats.setdefault(l["value"], set()).add(l["threat_id"])
-    test_threats = {r["threat_id"] for r in store.query("SELECT threat_id FROM threats WHERE is_test")}
 
     # ---- group hits
     groups: dict[tuple, dict] = {}
     for r in results:
         row = json.loads(r["row_json"]) if isinstance(r["row_json"], str) else r["row_json"]
         hunt = hunts[r["hunt_id"]]
-        if "_matched" in row:                                   # IOC sweep
-            for value in row["_matched"]:
-                for tid in ioc_threats.get(f"{row['_ioc_type']}|{value}", ()):
-                    key = ("ioc_hit", tid, r["device_id"], value)
-                    g = groups.setdefault(key, {"threat_id": tid, "hunt": hunt, "rows": [], "detail": f"matched {row['_ioc_type']} {value}",
-                                                "is_test": tid in test_threats})
-                    g["rows"].append((r, row))
-        else:                                                   # behaviour / AI hunt
-            test = is_lab_test(row)
-            key = ("behaviour_hit", hunt["template"] + (hunt["technique"] or ""), r["device_id"], test)
-            g = groups.setdefault(key, {"threat_id": None, "hunt": hunt, "rows": [], "detail": hunt["name"].split(" (")[0],
-                                        "is_test": test})
-            g["rows"].append((r, row))
+        test = is_lab_test(row)
+        key = ("behaviour_hit", hunt["template"] + (hunt["technique"] or ""), r["device_id"], test)
+        g = groups.setdefault(key, {"hunt": hunt, "rows": [], "detail": hunt["name"].split(" (")[0], "is_test": test})
+        g["rows"].append((r, row))
 
     involved = sorted({k[2] for k in groups if k[2]})
     users = _users(client, involved)
@@ -159,7 +174,7 @@ def run(store: Store, client: DefenderClient | None, run_id: str) -> dict:
     for key, g in groups.items():
         kind, _, dev, _ = key
         hunt = g["hunt"]
-        tid = g["threat_id"] or _hunt_threat(store, hunt, g["is_test"])
+        tid = _hunt_threat(store, hunt, g["is_test"])
         times = sorted(r["event_time"] for r, _ in g["rows"] if r["event_time"])
         first = times[0] if times else None
         timeline = []
@@ -181,6 +196,9 @@ def run(store: Store, client: DefenderClient | None, run_id: str) -> dict:
                          "first_hit": min(x for x in (prev, first) if x) if (prev or first) else None,
                          "created_at": (known.get(fid) or {}).get("created_at") or now})   # when this run first found it
     store.upsert("findings", findings)
+    doors = _open_doors(store, known, now)
+    store.upsert("findings", doors)
+    findings += doors
     new = [f for f in findings if f["finding_id"] not in known]
     stats = {"new_hits": len(new),                                  # found for the first time in this run
              "new_hit_ids": [f["finding_id"] for f in new][:NEW_IDS_SHOWN],   # the dashboard's run page names them

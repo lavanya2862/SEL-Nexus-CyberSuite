@@ -1,0 +1,25 @@
+// name: The weak program crashing, or starting odd programs
+// kind: behaviour
+// technique: T1203
+// attack: 12
+let weak = DeviceTvmSoftwareVulnerabilities
+    | where CveId in ({{HOT_CVES}})
+    | extend Product = replace_regex(tolower(SoftwareName), @"[^a-z0-9]", "")
+    | distinct DeviceId, Product, CveId;
+union
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where FileName in~ ("cmd.exe", "powershell.exe", "pwsh.exe", "wscript.exe", "cscript.exe", "mshta.exe",
+                           "rundll32.exe", "regsvr32.exe", "certutil.exe", "bitsadmin.exe", "whoami.exe", "net.exe")
+     | extend Product = replace_regex(tolower(InitiatingProcessVersionInfoProductName), @"[^a-z0-9]", ""),
+              What = strcat("started ", FileName)),
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where FileName =~ "WerFault.exe"
+     | extend Product = replace_regex(tolower(InitiatingProcessVersionInfoProductName), @"[^a-z0-9]", ""),
+              What = "crashed")
+| where isnotempty(Product)
+| join kind=inner weak on DeviceId, Product
+| project Timestamp, DeviceId, DeviceName, AccountName, What, CveId, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

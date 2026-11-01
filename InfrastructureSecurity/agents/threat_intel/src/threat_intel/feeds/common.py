@@ -14,13 +14,14 @@ import logging
 import random
 import re
 import time
+from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import requests
 
 from threat_intel.config import Settings
-from threat_intel.store import Store
+from threat_intel.store import Store, to_utc, utcnow
 
 log = logging.getLogger("threat_intel.feeds")
 
@@ -97,3 +98,16 @@ def find_cves(text: str | None) -> list[str]:
 def norm_name(value: str | None) -> str:
     """'Adobe Acrobat Reader DC' -> 'adobe_acrobat_reader_dc' (Defender/CPE naming style)."""
     return re.sub(r"[^a-z0-9]+", "_", (value or "").lower()).strip("_")
+
+
+def window_start(ctx: "FeedContext", feed: str) -> datetime:
+    """Collect only what is new: since this feed's last good run (5 minutes overlap; the store drops repeats), or the
+    last FIRST_RUN_HOURS (24) on its first run."""
+    last = to_utc(ctx.store.feed_state(feed).get("last_success_at"))
+    return last - timedelta(minutes=5) if last else utcnow() - timedelta(hours=ctx.settings.first_run_hours)
+
+
+def is_new(when, since: datetime) -> bool:
+    """An item without a date counts as new (the store still drops one it has already)."""
+    when = to_utc(when)
+    return when is None or when >= since

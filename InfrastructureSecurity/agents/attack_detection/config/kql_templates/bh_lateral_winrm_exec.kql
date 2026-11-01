@@ -1,0 +1,13 @@
+// name: Programs started through PowerShell remoting (WinRM)
+// kind: behaviour
+// technique: T1021.006
+// attack: 5
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where InitiatingProcessFileName =~ "wsmprovhost.exe"
+     or (FileName in~ ("winrs.exe"))
+     or (ProcessCommandLine has_any ("Invoke-Command", "Enter-PSSession", "New-PSSession") and ProcessCommandLine has "-ComputerName")
+| where InitiatingProcessFileName !in~ ("MsSense.exe", "SenseIR.exe")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

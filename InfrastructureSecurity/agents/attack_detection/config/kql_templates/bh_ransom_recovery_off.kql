@@ -1,0 +1,12 @@
+// name: Windows startup repair switched off (bcdedit)
+// kind: behaviour
+// technique: T1490
+// attack: 1
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName =~ "bcdedit.exe"
+| where (ProcessCommandLine has "recoveryenabled" and ProcessCommandLine has "no")
+     or (ProcessCommandLine has "bootstatuspolicy" and ProcessCommandLine has "ignoreallfailures")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

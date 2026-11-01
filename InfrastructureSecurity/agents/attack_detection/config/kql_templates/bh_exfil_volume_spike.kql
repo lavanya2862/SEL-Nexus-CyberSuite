@@ -1,0 +1,15 @@
+// name: Machine making far more outside connections than it usually does (Defender has no byte counts)
+// kind: behaviour
+// technique: T1048
+// attack: 10
+let daily = DeviceNetworkEvents
+    | where Timestamp > ago({{LOOKBACK}}d)
+    | where ActionType == "ConnectionSuccess" and RemoteIPType == "Public"
+    | where InitiatingProcessFileName !in~ ("MsSense.exe", "SenseNdr.exe", "MsMpEng.exe")
+    | summarize Connections = count(), Destinations = dcount(RemoteIP), Processes = make_set(InitiatingProcessFileName, 10)
+                by DeviceId, DeviceName, Day = startofday(Timestamp);
+daily
+| join kind=inner (daily | summarize Usual = avg(Connections), DaysSeen = count() by DeviceId) on DeviceId
+| where DaysSeen >= 5 and Day >= ago(2d) and Connections > 5 * Usual and Connections >= 500
+| project Timestamp = Day, DeviceId, DeviceName, Connections, Usual = round(Usual, 0), Destinations, Processes
+| take 500

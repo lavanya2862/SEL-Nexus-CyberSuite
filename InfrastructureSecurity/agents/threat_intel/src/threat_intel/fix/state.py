@@ -85,6 +85,14 @@ class FixState:
                 self.lock_path.unlink(missing_ok=True)
 
 
+MAX_TRAIL = 200          # per fix: its own record outlives the shared event list (MAX_EVENTS for every fix together)
+
+
 def event(data: dict, text: str, fix_id: str | None = None) -> None:
-    data.setdefault("events", []).append({"at": utcnow().isoformat(), "fix_id": fix_id, "text": text[:300]})
+    entry = {"at": utcnow().isoformat(), "fix_id": fix_id, "text": text[:300]}
+    data.setdefault("events", []).append(entry)
     del data["events"][:-MAX_EVENTS]
+    f = data.get("fixes", {}).get(fix_id) if fix_id else None
+    if f is not None:
+        f.setdefault("trail", []).append({k: entry[k] for k in ("at", "text")})
+        del f["trail"][:-MAX_TRAIL]

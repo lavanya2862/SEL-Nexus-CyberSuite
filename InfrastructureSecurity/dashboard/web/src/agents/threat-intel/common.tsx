@@ -5,9 +5,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ago } from '@/lib/format'
 import { useRuns } from '@/lib/runs'
 import { statusColor } from '@/lib/theme'
-import type { Resolution, ThreatIntelData } from '@/agents/threat-intel/data'
+import type { Resolution } from '@/agents/threat-intel/data'
 
-export function ThreatIntelHeader({ title, description, data, actions }: { title: string; description: string; data: ThreatIntelData; actions?: ReactNode }) {
+export function ThreatIntelHeader({ title, description, data, actions }: { title: string; description: string; data: { generated: string }; actions?: ReactNode }) {
   const { openDrawer } = useRuns()
   const hours = (Date.now() - new Date(data.generated.replace(' ', 'T') + (data.generated.endsWith('Z') || data.generated.includes('+') ? '' : 'Z')).getTime()) / 3600000
   return (

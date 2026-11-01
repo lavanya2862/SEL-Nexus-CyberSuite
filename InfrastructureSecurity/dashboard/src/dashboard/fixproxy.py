@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-ACTIONS = {"approve", "unapprove", "save", "unsave", "run", "probe"}
+ACTIONS = {"approve", "unapprove", "save", "unsave", "handover", "manual", "run", "probe"}
 METHODS = {"runcommand", "liveresponse"}
 MATCH_S = 120     # an audit line this close to Threat Intel's own timestamp is the same click
 
@@ -58,6 +58,13 @@ def get_fix(base: str) -> dict:
     return body
 
 
+def get_detail(base: str, fid: str) -> tuple[int, dict]:
+    """One remediation's full record (row, device output, allowed package ids, earlier attempts, its own trail)."""
+    if not re.fullmatch(r"fx_[0-9a-f]{12}", fid or ""):
+        return 404, {"error": "no such remediation"}
+    return _call(base, f"/api/fix/detail?id={fid}")
+
+
 def post_fix(base: str, action: str, body: dict, by: str | None = None) -> tuple[int, dict]:
     if action not in ACTIONS:
         return 404, {"error": "unknown action"}
@@ -66,6 +73,8 @@ def post_fix(base: str, action: str, body: dict, by: str | None = None) -> tuple
         clean["method"] = body["method"]
     if by:
         clean["by"] = by[:80]
+    if action == "manual":
+        clean["note"] = " ".join(str(body.get("note") or "").split())[:500]
     return _call(base, f"/api/fix/{action}", clean, timeout=30)
 
 
@@ -79,9 +88,10 @@ def _machine_accounts() -> set[str]:
 
 _ACCOUNTS = _machine_accounts()
 # Threat Intel's event texts that carry a person: "Approved by X (Azure Run Command): …", "Saved for later by X: …"
-_BY = re.compile(r"^(Approved|Saved for later|Approval withdrawn|No longer saved for later) by (.+?)(?= \(|: )")
+_BY = re.compile(r"^(Approved|Saved for later|Approval withdrawn|No longer saved for later|Remediated manually|Handed to a person) by (.+?)(?= \(|: )")
 _EVENT_ACTION = {"Approved": "fix.approve", "Saved for later": "fix.save",
-                 "Approval withdrawn": "fix.unapprove", "No longer saved for later": "fix.unsave"}
+                 "Approval withdrawn": "fix.unapprove", "No longer saved for later": "fix.unsave",
+                 "Remediated manually": "fix.manual", "Handed to a person": "fix.handover"}
 
 
 def is_account(who) -> bool:

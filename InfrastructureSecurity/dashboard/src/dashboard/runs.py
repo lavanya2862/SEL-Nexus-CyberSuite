@@ -83,21 +83,19 @@ def threat_intel_steps() -> list[Step]:
 
 
 def attack_steps() -> list[Step]:
-    """The Attack Detection Agent's run; its last step has the Threat Intel Agent import the results (re-score, alerts,
-    dashboard data, fix proposals), and those steps' lines are part of this run's output."""
+    """The Attack Detection Agent's run: its own devices and hunts, findings.json, then the fix engine's proposals."""
     return [
-        Step("search", "Hunt across managed devices", "Search Microsoft Defender (last 30 days) for indicators from threat intelligence and known attacker techniques",
+        Step("search", "Hunt across managed devices", "Search Microsoft Defender (last 30 days) for the 12 attacks' techniques",
              ("inputs", "hunt")),
         Step("evidence", "Correlate the evidence", "Signed-in users and Defender context; earlier detections are kept, new ones added",
              ("correlate", "exposure", "rescore")),
         Step("resolve", "Write resolution steps", "The agent writes resolution steps for each new detection, validated against the evidence",
              ("resolve",)),
         Step("publish", "Publish", "Update the Attack detection page, raise alerts and write the report",
-             # today: report, publish, then the Threat Intel import's own lines; runs from before the split logged
-             # alerts before report, hence the second "report"
+             # import ... dashboard: runs from before 31 Oct 2026, when the Threat Intel Agent imported the results
              ("report", "publish", "import", "rescore", "alerts", "report", "dashboard")),
-        Step("fix", "Remediation", "Propose a Defender scan-and-clean for every detection; with auto-fix on, the agent runs "
-             "each one and repeats it with a full scan until clean", ("fix_plan", "auto_fix", "threat_intel")),
+        Step("fix", "Remediation", "Propose a Defender scan-and-clean for every detection; a person approves each one",
+             ("fix", "fix_plan", "auto_fix", "threat_intel")),   # all but "fix": runs from before 31 Oct 2026
     ]
 
 
@@ -117,8 +115,8 @@ STEPS = {"threat_intel": threat_intel_steps, "vulnerability": vulnerability_step
 AGENT_NAMES = {"threat_intel": "Threat Intel Agent", "vulnerability": "Vulnerability Agent", "alert_triage": "Alert Triage Agent", "attack_detection": "Attack Detection Agent"}
 # Runs started before the agents got their names are stored under their old keys, and their logs use the old package
 # names; both are read as today's.
-OLD_KEYS = {"uc1": "threat_intel", "uc3": "vulnerability", "uc4": "alert_triage", "attack": "attack_detection"}
-_OLD_LOGGERS = re.compile(r"\b(uc1|uc3|uc4)\.")
+OLD_KEYS = {"attack": "attack_detection"}
+_OLD_LOGGERS = re.compile(r"\b(attack)\.")
 
 
 def agent_key(key: str) -> str:
@@ -221,7 +219,7 @@ def fix_words(info: dict) -> str:
 
 
 def auto_fix_words(info: dict) -> str:
-    """The Attack Detection Agent's auto-fix: "Auto-fix ran 2 scan-and-cleans (1 from earlier runs) · 2 clean"."""
+    """Runs from before 31 Oct 2026, when auto-fix existed: "Auto-fix ran 2 scan-and-cleans (1 from earlier runs) · 2 clean"."""
     n, earlier = int(info.get("approved") or 0), int(info.get("earlier") or 0)
     if not n:
         return "Auto-fix on · nothing left to remediate"
@@ -230,6 +228,27 @@ def auto_fix_words(info: dict) -> str:
         return f"Auto-fix approved {what} · another remediation run is going, so they run on the next Execute"
     done, failed = int(info.get("done") or 0), int(info.get("failed") or 0)
     return f"Auto-fix ran {what} · {done} clean" + (f" · {failed} not clean yet, retried next run" if failed else "")
+
+
+# Why a run stopped, in plain words (no numbers): the first pattern found in the end of the log wins.
+STOP_REASONS = [
+    (r"quality FAIL", "a data quality check failed, so the new results were not published"),
+    (r"AADSTS7000215|invalid_client|\b401\b|unauthori[sz]ed", "Microsoft refused the sign-in; check the app's keys in .env"),
+    (r"\b403\b|forbidden|insufficient privileges", "the app registration is missing a permission"),
+    (r"(Foundry|Gemini).*\b404\b|\b404\b.*(Foundry|Gemini)", "the AI model address or deployment name in .env is wrong"),
+    (r"\b429\b|rate limit|quota", "Microsoft or the AI service asked us to slow down; try again later"),
+    (r"timed? ?out|ConnectionError|Failed to establish|getaddrinfo|Name or service not known", "Microsoft could not be reached; check the internet connection"),
+    (r"ConfigError|is missing|not set", "a setting in .env is missing or wrong"),
+    (r"database is locked|being used by another process|PermissionError", "a file was in use by another program; close it and run again"),
+]
+
+
+def stop_reason(lines) -> str:
+    text = "\n".join(lines)
+    for pattern, words in STOP_REASONS:
+        if re.search(pattern, text, re.I):
+            return words
+    return "an unexpected error; the full log is saved with this run"
 
 
 def _short(text: str, limit: int = 110) -> str:
@@ -329,7 +348,7 @@ def friendly(name: str, value) -> str | None:
             return "Dashboard rebuilt"
         if name == "metrics":
             return "Benefit metrics updated"
-        if name == "fix_plan":
+        if name in ("fix_plan", "fix"):
             return fix_words(d)
         if name == "auto_fix":
             return auto_fix_words(d)
@@ -371,7 +390,7 @@ def group_summary(key: str, r: dict) -> str | None:
             new = _new_steps(get("fix_advice"))
             return f"Remediation steps written for {_plural(new, 'applicable threat')}" if new else "No new remediation steps needed"
         if key == "fix":
-            return auto_fix_words(get("auto_fix")) if get("auto_fix") else fix_words(get("fix_plan"))
+            return auto_fix_words(get("auto_fix")) if get("auto_fix") else fix_words(get("fix") or get("fix_plan"))
         if key == "search":
             return _searched(get("hunt"))
         if key == "resolve":
@@ -656,10 +675,12 @@ class RunState:
             self.message = self.message or ("Finished with problems in: " + ", ".join(s.label for s in errors) if errors else "Finished")
         else:
             self.status = "failed"
+            reason = stop_reason([self.message, *self.log_tail])
             for i, s in enumerate(self.steps):
                 if s.status == "running":
-                    self._finish(i, "error", self.message or "Stopped here")
-            self.message = self.message or f"The pipeline stopped (exit code {exit_code}). See the log below for details."
+                    self._finish(i, "error", "Stopped here")
+            stopped = next((s.label for s in self.steps if s.status == "error"), "")
+            self.message = (f"Stopped at {stopped} because {reason}." if stopped else f"The run stopped because {reason}.")
 
     # ---------- the plain-English summary shown when a run ends ----------
     def facts(self) -> list[dict]:
@@ -1025,14 +1046,6 @@ class RunManager:
                 if st:
                     rows.append({k: v for k, v in st.to_dict().items() if k not in ("log_tail", "facts")})
             return rows
-
-    def log(self, uc: str, after: int = 0, run_id: str | None = None) -> dict:
-        dirs = [self.runs_dir / run_id] if run_id else self._run_dirs(uc)
-        if not dirs or not (dirs[0] / "output.log").is_file():
-            return {"run_id": None, "lines": [], "next": 0}
-        with (dirs[0] / "output.log").open(encoding="utf-8", errors="replace") as fh:
-            lines = [ln.rstrip("\n") for ln in fh]
-        return {"run_id": dirs[0].name, "lines": lines[after:after + 2000], "next": min(len(lines), after + 2000)}
 
     # ---------- starting ----------
     def start(self, uc: str, by: dict | None = None) -> tuple[bool, RunState | None, str]:

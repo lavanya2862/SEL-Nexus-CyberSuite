@@ -1,0 +1,19 @@
+// name: Attempts to switch off Windows' script scanner (AMSI bypass)
+// kind: behaviour
+// technique: T1562.001
+// attack: 3
+let words = dynamic(["AmsiUtils", "amsiInitFailed", "AmsiScanBuffer", "amsiContext", "amsi.dll", "AmsiOpenSession",
+                     "System.Management.Automation.AmsiUtils"]);
+union
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ProcessCommandLine has_any (words)
+     | project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+               InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType in ("PowerShellCommand", "AmsiScriptDetection", "AmsiScriptContent")
+     | where AdditionalFields has_any (words)
+     | project Timestamp, DeviceId, DeviceName, AccountName = InitiatingProcessAccountName, FileName = ActionType,
+               ProcessCommandLine = tostring(AdditionalFields), InitiatingProcessFileName, InitiatingProcessCommandLine)
+| take 500

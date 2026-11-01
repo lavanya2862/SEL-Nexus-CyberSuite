@@ -52,8 +52,10 @@ def affected(store: Store) -> list[dict]:
         cves.setdefault(c["threat_id"], []).append(c)
     for t in threats:
         t["exposure"] = exposure.get(t["threat_id"], [])
-        t["cves"] = cves.get(t["threat_id"], [])[:20]
-        t["basis"] = hashlib.sha256(dumps([t["content_hash"], [(e["device_name"], e["detail"], e["recommended_update"])
+        ours = {e["detail"].split(" ")[0] for e in t["exposure"]}      # detail: "CVE-... via app version"
+        t["all_cves"] = len(cves.get(t["threat_id"], []))
+        t["cves"] = [c for c in cves.get(t["threat_id"], []) if c["cve_id"] in ours][:20]
+        t["basis"] = hashlib.sha256(dumps(["ours-only", t["content_hash"], [(e["device_name"], e["detail"], e["recommended_update"])
                                                                for e in t["exposure"]]]).encode()).hexdigest()[:20]
     return threats
 
@@ -68,10 +70,14 @@ def evidence(t: dict) -> str:
     lines.append("Where Microsoft Defender found it on our computers:")
     lines += [f"- {e['device_name']}: {e['detail']}" + (f" -> Defender recommends: {e['recommended_update']}"
                                                          if e["recommended_update"] else "") for e in t["exposure"][:30]]
-    actions = _j(t["actions"])
-    if actions:
-        lines.append("What the source advises: " + "; ".join(actions[:5]))
-    lines.append("Source text (untrusted):\n" + (t["text"] or "")[:2500])
+    if t["all_cves"] > len(t["cves"]) + 3:
+        # a bulletin about many products (e.g. Microsoft's monthly release): its text and advice are about other software
+        lines.append(f"The source covers {t['all_cves']} vulnerabilities in many products; only the ones above are on our computers.")
+    else:
+        actions = _j(t["actions"])
+        if actions:
+            lines.append("What the source advises: " + "; ".join(actions[:5]))
+        lines.append("Source text (untrusted):\n" + (t["text"] or "")[:2500])
     return "\n".join(lines)
 
 

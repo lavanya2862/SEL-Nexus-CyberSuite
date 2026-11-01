@@ -25,33 +25,7 @@ class ConfigError(ValueError):
     """Raised when settings are missing or invalid."""
 
 
-# Setting names from before the agents got their names; they still work (infra_core.settings logs a hint once).
-OLD_NAMES = {
-    "TRIAGE_AI_ROWS": ("UC4_AI_ROWS",),
-    "TRIAGE_ASK_DAILY_CAP": ("UC4_ASK_DAILY_CAP",),
-    "TRIAGE_AUTO_ISOLATE": ("UC4_AUTO_ISOLATE",),
-    "TRIAGE_AUTO_RESOLVE": ("UC4_AUTO_RESOLVE",),
-    "TRIAGE_CLIENT_ID": ("UC4_CLIENT_ID",),
-    "TRIAGE_CLIENT_SECRET": ("UC4_CLIENT_SECRET",),
-    "TRIAGE_CLOSE": ("UC4_CLOSE",),
-    "TRIAGE_CONTAIN": ("UC4_CONTAIN",),
-    "TRIAGE_DATA_DIR": ("UC4_DATA_DIR",),
-    "TRIAGE_GEMINI_DAILY_CAP": ("UC4_GEMINI_DAILY_CAP",),
-    "TRIAGE_LAB_ALERT_TITLES": ("UC4_LAB_ALERT_TITLES",),
-    "TRIAGE_LAB_DEVICES": ("UC4_LAB_DEVICES",),
-    "TRIAGE_LOG_DIR": ("UC4_LOG_DIR",),
-    "TRIAGE_LOOKBACK_DAYS": ("UC4_LOOKBACK_DAYS",),
-    "TRIAGE_MAX_QUERIES": ("UC4_MAX_QUERIES",),
-    "TRIAGE_MAX_ROWS": ("UC4_MAX_ROWS",),
-    "TRIAGE_MAX_TI_LOOKUPS": ("UC4_MAX_TI_LOOKUPS",),
-    "TRIAGE_RESPOND": ("UC4_RESPOND",),
-    "TRIAGE_SCAN_TYPE": ("UC4_SCAN_TYPE",),
-    "TRIAGE_SENTINEL_WORKSPACE_ID": ("UC4_SENTINEL_WORKSPACE_ID",),
-    "TRIAGE_TENANT_ID": ("UC4_TENANT_ID",),
-    "TRIAGE_THREAT_INTEL_DIR": ("UC4_UC1_DIR",),
-    "TRIAGE_WINDOW_HOURS": ("UC4_WINDOW_HOURS",),
-    "TRIAGE_WRITEBACK": ("UC4_WRITEBACK",),
-}
+OLD_NAMES: dict[str, tuple[str, ...]] = {}   # no older setting names
 
 
 def _env(name: str) -> str | None:

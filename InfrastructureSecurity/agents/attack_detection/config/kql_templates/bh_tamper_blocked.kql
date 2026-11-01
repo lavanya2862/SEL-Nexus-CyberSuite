@@ -1,0 +1,12 @@
+// name: Attempts to stop or change Defender that tamper protection blocked
+// kind: behaviour
+// technique: T1562.001
+// attack: 4
+DeviceEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "TamperingAttempt"
+| extend Fields = parse_json(AdditionalFields)
+| project Timestamp, DeviceId, DeviceName, ActionType, InitiatingProcessAccountName, InitiatingProcessFileName,
+          InitiatingProcessCommandLine, TamperingAction = tostring(Fields.TamperingAction),
+          Target = tostring(Fields.Target), Status = tostring(Fields.Status)
+| take 500

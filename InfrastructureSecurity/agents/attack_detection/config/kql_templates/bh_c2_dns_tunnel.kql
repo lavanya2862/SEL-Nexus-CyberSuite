@@ -1,0 +1,21 @@
+// name: Very long or very many name lookups (data hidden inside DNS)
+// kind: behaviour
+// technique: T1071.004
+// attack: 11
+DeviceEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "DnsQueryResponse"
+| extend Query = tolower(tostring(parse_json(AdditionalFields).DnsQueryString))
+| where isnotempty(Query) and Query !endswith ".arpa" and Query !endswith ".local"
+| extend Parts = split(Query, ".")
+| extend Parent = strcat(tostring(Parts[-2]), ".", tostring(Parts[-1])), FirstLabel = tostring(Parts[0])
+| summarize Lookups = count(), Unique = dcount(Query), LongestLabel = max(strlen(FirstLabel)), Examples = make_set(Query, 5),
+            Timestamp = min(Timestamp), take_any(DeviceName, InitiatingProcessFileName, InitiatingProcessAccountName)
+            by DeviceId, Parent, Window = bin(Timestamp, 1h)
+| where LongestLabel >= 50 or Unique >= 200
+| where Parent !in ("microsoft.com", "windows.com", "windowsupdate.com", "office.com", "azure.com", "msftncsi.com",
+                    "akamaiedge.net", "cloudapp.net", "trafficmanager.net", "office365.com", "live.com", "msn.com",
+                    "azureedge.net", "googleapis.com", "amazonaws.com")
+| project Timestamp, DeviceId, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName, Parent, Lookups,
+          Unique, LongestLabel, Examples
+| take 500

@@ -1,0 +1,16 @@
+// name: Programs that normally never go online doing so
+// kind: behaviour
+// technique: T1218
+// attack: 11
+DeviceNetworkEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType in ("ConnectionSuccess", "ConnectionAttempt") and RemoteIPType == "Public"
+| where InitiatingProcessFileName in~ ("rundll32.exe", "regsvr32.exe", "notepad.exe", "calc.exe", "mshta.exe",
+                                       "dllhost.exe", "werfault.exe", "searchprotocolhost.exe", "msbuild.exe",
+                                       "installutil.exe", "regasm.exe", "regsvcs.exe", "cmstp.exe", "wmic.exe",
+                                       "spoolsv.exe", "explorer.exe")
+| where not(InitiatingProcessFileName =~ "explorer.exe" and RemotePort in (80, 443))
+| summarize Connections = count(), Timestamp = min(Timestamp), Destinations = make_set(coalesce(RemoteUrl, RemoteIP), 10),
+            take_any(DeviceName, InitiatingProcessAccountName, InitiatingProcessCommandLine, RemoteIP, RemotePort)
+            by DeviceId, InitiatingProcessFileName
+| take 500

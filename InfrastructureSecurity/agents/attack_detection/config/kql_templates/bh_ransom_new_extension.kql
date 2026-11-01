@@ -1,0 +1,19 @@
+// name: New, unknown file ending appearing on many files at once
+// kind: behaviour
+// technique: T1486
+// attack: 1
+let common = dynamic(["tmp", "log", "txt", "dat", "etl", "json", "xml", "db", "bak", "old", "partial", "crdownload",
+                      "part", "lnk", "ini", "cab", "pf", "jfm", "edb", "chk", "docx", "xlsx", "pdf", "jpg", "png"]);
+DeviceFileEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "FileRenamed" and isnotempty(PreviousFileName)
+| extend Ending = tolower(tostring(split(FileName, ".")[-1]))
+| where FileName contains "." and strlen(Ending) between (2 .. 12) and Ending !in (common)
+| where not(PreviousFileName endswith strcat(".", Ending))
+| summarize Files = count(), Folders = dcount(FolderPath), Examples = make_set(FileName, 10), FirstSeen = min(Timestamp),
+            take_any(DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine)
+            by DeviceId, Ending, Window = bin(Timestamp, 10m)
+| where Files >= 50
+| project Timestamp = FirstSeen, DeviceId, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName,
+          InitiatingProcessCommandLine, Ending, Files, Folders, Examples
+| take 500

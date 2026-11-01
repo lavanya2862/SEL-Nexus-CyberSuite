@@ -1,0 +1,14 @@
+// name: Auto-start entries pointing at programs in Temp, AppData or Public folders
+// kind: behaviour
+// technique: T1547.001
+// attack: 7
+DeviceRegistryEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "RegistryValueSet"
+| where RegistryKey has_any (@"\CurrentVersion\Run", @"\CurrentVersion\RunOnce", @"\CurrentVersion\Policies\Explorer\Run")
+     or (RegistryKey has @"\CurrentControlSet\Services\" and RegistryValueName =~ "ImagePath")
+| where RegistryValueData matches regex @"(?i)(\\temp\\|\\appdata\\|\\users\\public\\|\\programdata\\[^\\]+\.(exe|dll|bat|ps1|vbs|js)|\\perflogs\\|\\downloads\\)"
+| where InitiatingProcessFileName !in~ ("msiexec.exe", "TrustedInstaller.exe", "OneDriveSetup.exe", "Teams.exe", "Update.exe")
+| project Timestamp, DeviceId, DeviceName, ActionType, RegistryKey, RegistryValueName, RegistryValueData,
+          InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

@@ -1,0 +1,11 @@
+// name: LSASS memory copied with a built-in Windows file (comsvcs.dll MiniDump)
+// kind: behaviour
+// technique: T1003.001
+// attack: 2
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName =~ "rundll32.exe" or ProcessVersionInfoOriginalFileName =~ "RUNDLL32.EXE"
+| where ProcessCommandLine has "comsvcs" and ProcessCommandLine has_any ("MiniDump", "#24", "full")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

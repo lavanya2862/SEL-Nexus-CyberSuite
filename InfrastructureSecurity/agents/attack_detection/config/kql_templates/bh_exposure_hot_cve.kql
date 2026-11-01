@@ -1,0 +1,11 @@
+// name: Critical or High vulnerability with a public exploit present on this device
+// kind: behaviour
+// technique: T1190
+// attack: 12
+// cves: Critical or High CVEs with a public exploit that Defender lists on our devices
+DeviceTvmSoftwareVulnerabilities
+| where CveId in ({{HOT_CVES}})
+| summarize CVEs = make_set(CveId, 20), Software = make_set(strcat(SoftwareVendor, " ", SoftwareName, " ", SoftwareVersion), 10),
+            Updates = make_set(RecommendedSecurityUpdate, 10), take_any(DeviceName) by DeviceId
+| extend Timestamp = now()
+| take 500

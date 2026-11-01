@@ -1,0 +1,16 @@
+// name: Same ransom note written into 10 or more folders
+// kind: behaviour
+// technique: T1486
+// attack: 1
+DeviceFileEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "FileCreated"
+| where FileName matches regex @"(?i)(readme|how.?to.?(decrypt|restore|recover)|restore.?files|decrypt|ransom|recover.?files)"
+| where FileName matches regex @"(?i)\.(txt|html?|hta|rtf|url)$"
+| summarize Folders = dcount(FolderPath), Examples = make_set(FolderPath, 10), FirstSeen = min(Timestamp),
+            take_any(DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine)
+            by DeviceId, FileName, Window = bin(Timestamp, 1h)
+| where Folders >= 10
+| project Timestamp = FirstSeen, DeviceId, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName,
+          InitiatingProcessCommandLine, FileName, Folders, Examples
+| take 500

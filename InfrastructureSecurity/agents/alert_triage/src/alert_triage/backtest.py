@@ -9,6 +9,7 @@ Outputs: rows in the `backtest` table, data/export/backtest.json (website), data
 
 from __future__ import annotations
 
+from infra_core.style import STYLE
 import json
 import logging
 import time
@@ -31,7 +32,7 @@ GUIDE_SYSTEM = """You are a SOC alert-triage assistant preparing a recommendatio
 The incident below comes from an anonymised dataset: names are replaced by numbers and there are no raw logs.
 Judge it from its structure: alert categories, MITRE techniques, evidence types and roles, Defender's own
 suspicion levels and verdicts on the evidence, and how incidents from the same detectors were graded before in the
-same organisation ("history_by_detector"). Use only the facts given. Output ONLY JSON."""
+same organisation ("history_by_detector"). Use only the facts given. Output ONLY JSON.""" + "\n" + STYLE
 
 GUIDE_SCHEMA_HINT = """Return JSON: {"summary": str (max 3 sentences), "verdict":
 "likely_true_positive|likely_false_positive|benign_positive|needs_investigation", "confidence": "low|medium|high",

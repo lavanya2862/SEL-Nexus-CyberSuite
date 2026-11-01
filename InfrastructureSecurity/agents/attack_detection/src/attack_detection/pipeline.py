@@ -1,10 +1,11 @@
-"""The Attack Detection run (`python -m attack_detection run`):
+﻿"""The Attack Detection run (`python -m attack_detection run`):
 
-  Search devices    inputs (the Threat Intel Agent's published threats, indicators and devices) -> hunt in Defender
+  Search devices    inputs (devices from Defender) -> the 12 attacks' hunts in Defender (nothing from the Threat Intel
+                    Agent)
   Connect evidence  correlate: hits -> findings with device, users, Defender alerts and timeline (kept from run to run)
   How to resolve    resolve: AI resolution steps per new sign of attack, checked against the evidence
-  Publish           report (Word/PDF) -> publish data/out/findings.json -> threat_intel: the Threat Intel Agent imports
-                    it (re-score, alerts, dashboard, scan-and-clean proposals and auto-fix)
+  Publish           report (Word/PDF) -> publish data/out/findings.json (the Attack detection page reads it) -> fix: the
+                    fix engine proposes a scan-and-clean per new finding (a person approves)
 
 Each step's failure is logged and the next steps continue. A lock file stops two runs from overlapping.
 """
@@ -63,23 +64,22 @@ def make_ai(settings: Settings, store: Store) -> GeminiClient | AzureFoundryClie
         return None
 
 
-def notify_threat_intel(settings: Settings) -> dict:
-    """Let the Threat Intel Agent import findings.json now (it waits if its own run is busy). Its step lines are
-    copied to this run's output, so the dashboard's run page shows its re-score, alerts and fix steps too."""
-    root = settings.threat_intel_dir
+def propose_fixes(settings: Settings) -> dict:
+    """Ask the fix engine (the Fix Centre) to propose a scan-and-clean for every new finding in our findings.json.
+    It proposes only: nothing runs on a device until a person approves it."""
+    root = settings.fix_engine_dir
     python = root / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python") if root else None
     if not python or not python.is_file():
-        return {"imported": False, "note": f"no Threat Intel Agent at {root}"}
+        return {"proposed": False, "note": f"no fix engine at {root}"}
     ours = set(dotenv_values(SUITE_ENV))      # it reads the suite .env itself; ours would only override it
     env = {k: v for k, v in os.environ.items() if k not in ours} | {"PYTHONIOENCODING": "utf-8"}
-    proc = subprocess.run([str(python), "-m", "threat_intel", "attack-import"], cwd=root, env=env, capture_output=True,
-                          text=True, encoding="utf-8", errors="replace", timeout=45 * 60,
+    proc = subprocess.run([str(python), "-m", "threat_intel", "fix-responses", "-q"], cwd=root, env=env, capture_output=True,
+                          text=True, encoding="utf-8", errors="replace", timeout=20 * 60,
                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    for line in proc.stdout.splitlines():
-        print(line, flush=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"threat_intel attack-import failed ({proc.returncode}): {proc.stderr.strip()[-300:]}")
-    return {"imported": True}
+    line = next((ln for ln in reversed(proc.stdout.splitlines()) if ln.startswith("Fix plan:")), None)
+    if proc.returncode != 0 or not line:
+        raise RuntimeError(f"fix engine failed ({proc.returncode}): {(proc.stderr or proc.stdout).strip()[-300:]}")
+    return json.loads(line.split(":", 1)[1])
 
 
 class Pipeline:
@@ -111,17 +111,17 @@ class Pipeline:
         started = utcnow()
         self.store.upsert("runs", [{"run_id": self.run_id, "command": "run", "started_at": started, "status": "running",
                                     "steps": {}}])
-        self.step("inputs", inputs.load, self.store, self.settings)
+        self.step("inputs", inputs.load, self.store, self.settings, self.defender)
         if self.defender:
-            runner = HuntRunner(self.store, self.defender, self.run_id, self.settings.hunt_lookback_days, self.ai)
-            self.step("hunt", runner.run_all, self.settings.feed_backfill_days)
+            runner = HuntRunner(self.store, self.defender, self.run_id, self.settings.hunt_lookback_days)
+            self.step("hunt", runner.run_all)
         else:
             self.skip("hunt", "Defender not configured")
         self.step("correlate", correlate.run, self.store, self.defender, self.run_id)
         self.step("resolve", resolve.run, self.store, self.settings, self.ai)
         self.step("report", attack_report.build, self.store, self.settings, self.run_id, self.steps)
         self.step("publish", publish.write, self.store, self.settings, self.run_id)
-        self.step("threat_intel", notify_threat_intel, self.settings)
+        self.step("fix", propose_fixes, self.settings)
         failed = [k for k, v in self.steps.items() if v["status"] == "error"]
         status = "ok" if not failed else "partial"
         finished = utcnow()

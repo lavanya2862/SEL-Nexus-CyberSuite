@@ -1,0 +1,17 @@
+// name: Account set so its password never expires
+// kind: behaviour
+// technique: T1098
+// attack: 8
+union
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ProcessCommandLine matches regex @"(?i)(PasswordNeverExpires\s*(:|\s)\s*\$?true|PasswordExpires\s*=\s*(false|0)|/expires:never)"
+     | project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+               InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "UserAccountModified"
+     | where AdditionalFields has_any ("Don't Expire Password", "DontExpirePassword", "DONT_EXPIRE_PASSWORD")
+     | project Timestamp, DeviceId, DeviceName, AccountName, FileName = ActionType,
+               ProcessCommandLine = tostring(AdditionalFields), InitiatingProcessFileName, InitiatingProcessCommandLine)
+| take 500

@@ -1,0 +1,17 @@
+// name: Hidden WMI triggers that start a program on an event
+// kind: behaviour
+// technique: T1546.003
+// attack: 7
+union
+    (DeviceEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "WmiBindEventFilterToConsumer"
+     | project Timestamp, DeviceId, DeviceName, ActionType, ProcessCommandLine = tostring(AdditionalFields),
+               InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ProcessCommandLine has_any ("__EventFilter", "CommandLineEventConsumer", "ActiveScriptEventConsumer",
+                                         "__FilterToConsumerBinding")
+     | project Timestamp, DeviceId, DeviceName, ActionType = "ProcessCreated", ProcessCommandLine,
+               InitiatingProcessAccountName = AccountName, InitiatingProcessFileName, InitiatingProcessCommandLine)
+| take 500

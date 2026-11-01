@@ -1,0 +1,20 @@
+// name: Uploads at night or at weekends
+// kind: behaviour
+// technique: T1029
+// attack: 10
+// Working hours are 07:00 to 19:00 UTC, Monday to Friday; change them here for another time zone.
+let workStart = 7;
+let workEnd = 19;
+let tools = dynamic(["rclone.exe", "megasync.exe", "megacmd.exe", "winscp.exe", "filezilla.exe", "pscp.exe",
+                     "psftp.exe", "curl.exe", "restic.exe"]);
+DeviceNetworkEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "ConnectionSuccess" and RemoteIPType == "Public"
+| where tolower(InitiatingProcessFileName) in (tools) or tolower(InitiatingProcessVersionInfoOriginalFileName) in (tools)
+     or InitiatingProcessCommandLine matches regex @"(?i)\s(copy|sync|move|copyto)\s+\S+\s+\S+:"
+| extend Hour = hourofday(Timestamp), Day = dayofweek(Timestamp) / 1d
+| where Hour < workStart or Hour >= workEnd or Day in (0, 6)
+| summarize Connections = count(), Timestamp = min(Timestamp), Destinations = make_set(coalesce(RemoteUrl, RemoteIP), 10),
+            take_any(DeviceName, InitiatingProcessAccountName, InitiatingProcessCommandLine)
+            by DeviceId, InitiatingProcessFileName, Day = startofday(Timestamp)
+| take 500

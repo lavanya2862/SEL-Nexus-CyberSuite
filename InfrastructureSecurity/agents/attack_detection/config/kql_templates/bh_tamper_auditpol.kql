@@ -1,0 +1,12 @@
+// name: Windows audit settings wiped (auditpol)
+// kind: behaviour
+// technique: T1562.002
+// attack: 4
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName =~ "auditpol.exe"
+| where ProcessCommandLine has_any ("/clear", "/remove", "-clear", "-remove")
+     or (ProcessCommandLine has "/set" and ProcessCommandLine has_any ("/success:disable", "/failure:disable"))
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

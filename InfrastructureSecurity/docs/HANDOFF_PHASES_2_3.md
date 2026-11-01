@@ -44,7 +44,7 @@ Rules:
   InfrastructureSecurity/contracts/.
 - Do only the one task I give you. Do not "improve" anything else.
 - Never open, print or change .env, any data/ folder, any .venv folder or node_modules.
-- Never write UC1, UC3 or UC4 in new text, except the real external names listed under "Names that stay on purpose"
+- Never write Threat Intel, Vulnerability or Alert Triage in new text, except the real external names listed under "Names that stay on purpose"
   in ARCHITECTURE.md.
 - Another assistant is changing code in a different copy at the same time; describe the code as you find it here.
 - When you finish, list every file you created or changed, and stop. Do not commit.
@@ -205,7 +205,7 @@ Table (old -> new):
   UC1_DATA_DIR->THREAT_INTEL_DATA_DIR  UC1_LOG_DIR->THREAT_INTEL_LOG_DIR  UC1_VULN_AGENT_DIR->THREAT_INTEL_VULN_AGENT_DIR
   UC3_<X>->VULN_<X> for X in API_BASE, CERT_PATH, CERT_THUMBPRINT, CLIENT_ID, CLIENT_SECRET, DATA_DIR, FIX_ENGINE_DIR,
     FIX_STAGE, LOG_DIR, TENANT_ID, MODE
-  UC4_UC1_DIR->TRIAGE_THREAT_INTEL_DIR, and UC4_<X>->TRIAGE_<X> for every other UC4_ name
+  TRIAGE_THREAT_INTEL_DIR->TRIAGE_THREAT_INTEL_DIR, and UC4_<X>->TRIAGE_<X> for every other UC4_ name
   PORTAL_UC1_DIR->DASHBOARD_THREAT_INTEL_DIR  PORTAL_UC3_DIR->DASHBOARD_VULNERABILITY_DIR
   PORTAL_UC4_DIR->DASHBOARD_ALERT_TRIAGE_DIR  PORTAL_UC1_SITE->DASHBOARD_FIX_SITE  PORTAL_UC4_SITE->DASHBOARD_TRIAGE_SITE
 Also search the whole InfrastructureSecurity folder (not data/, .venv) for os.environ / os.getenv / env.get reading any

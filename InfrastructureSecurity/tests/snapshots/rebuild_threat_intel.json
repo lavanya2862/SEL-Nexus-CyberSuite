@@ -141,7 +141,9 @@
      }
     ],
     "title": "str",
-    "users": []
+    "users": [
+     "str"
+    ]
    }
   ],
   "hunts": [
@@ -267,17 +269,6 @@
     "id": "str",
     "kind": "str",
     "match": "str",
-    "on_us": [
-     {
-      "announced": "str",
-      "app": "str",
-      "cve": "str",
-      "device": "str",
-      "known": "str",
-      "match": "str",
-      "version": "str"
-     }
-    ],
     "published": "str",
     "rating": "str",
     "score": "number",
@@ -296,9 +287,9 @@
     "str"
    ],
    "ai_model": "null|str",
-   "ai_status": "null|str",
-   "analysed_at": "null|str",
-   "confidence": "null|str",
+   "ai_status": "str",
+   "analysed_at": "str",
+   "confidence": "str",
    "cves": [
     {
      "cvss": "null|number",
@@ -331,7 +322,9 @@
        "id": "str",
        "severity": "str",
        "status": "str",
-       "techniques": [],
+       "techniques": [
+        "str"
+       ],
        "time": "str",
        "title": "str"
       }
@@ -359,13 +352,22 @@
        "what": "str"
       }
      ],
-     "users": []
+     "users": [
+      {
+       "account": "str",
+       "last_logon": "str",
+       "logon_types": [
+        "str"
+       ],
+       "logons": "number"
+      }
+     ]
     }
    ],
    "first_seen": "str",
    "fix": {
     "done_when": "str",
-    "model": "null|str",
+    "model": "null",
     "source": "str",
     "steps": [
      "str"
@@ -376,7 +378,7 @@
      "error": "null",
      "name": "str",
      "origin": "str",
-     "query": "str",
+     "query": "null|str",
      "row_count": "number",
      "started_at": "str",
      "status": "str",
@@ -404,7 +406,7 @@
    "rating": "str",
    "score": "number",
    "source": "str",
-   "summary": "null|str",
+   "summary": "str",
    "techniques": [
     {
      "id": "str",
@@ -416,7 +418,7 @@
     }
    ],
    "text": "str",
-   "threat_type": "null|str",
+   "threat_type": "str",
    "title": "str",
    "url": "str",
    "why": "str"

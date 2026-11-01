@@ -1,0 +1,20 @@
+// name: Windows Firewall switched off
+// kind: behaviour
+// technique: T1562.004
+// attack: 4
+union
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where (FileName =~ "netsh.exe" and ProcessCommandLine has "state" and ProcessCommandLine has "off")
+          or (FileName =~ "netsh.exe" and ProcessCommandLine has "opmode" and ProcessCommandLine has "disable")
+          or (ProcessCommandLine has "Set-NetFirewallProfile" and ProcessCommandLine matches regex @"(?i)-Enabled[\s:]+(\$?false|0)\b")
+     | project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+               InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceRegistryEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "RegistryValueSet" and RegistryKey has @"\FirewallPolicy\"
+     | where RegistryValueName =~ "EnableFirewall" and RegistryValueData in ("0", "0x00000000")
+     | where InitiatingProcessFileName !in~ ("svchost.exe")
+     | project Timestamp, DeviceId, DeviceName, AccountName = InitiatingProcessAccountName, FileName = RegistryValueName,
+               ProcessCommandLine = RegistryKey, InitiatingProcessFileName, InitiatingProcessCommandLine)
+| take 500

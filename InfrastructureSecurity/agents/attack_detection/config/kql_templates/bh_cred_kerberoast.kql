@@ -1,0 +1,22 @@
+// name: One account asking for many service tickets at once (Kerberoasting)
+// kind: behaviour
+// technique: T1558.003
+// attack: 2
+// needs: domain
+union
+    (DeviceEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "LdapSearch"
+     | extend SearchFilter = tostring(parse_json(AdditionalFields).SearchFilter)
+     | where SearchFilter has "serviceprincipalname"
+     | summarize Searches = count(), Filters = make_set(SearchFilter, 5), Timestamp = min(Timestamp),
+                 take_any(DeviceName, InitiatingProcessFileName, InitiatingProcessCommandLine)
+                 by DeviceId, InitiatingProcessAccountName, Window = bin(Timestamp, 10m)
+     | extend ProcessCommandLine = strcat("LDAP searches for service accounts: ", Searches)),
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ProcessCommandLine has_any ("kerberoast", "Invoke-Kerberoast", "KerberosRequestorSecurityToken", "asktgs")
+          or (FileName =~ "setspn.exe" and ProcessCommandLine matches regex @"(?i)\s[-/][qt]\s")
+     | project Timestamp, DeviceId, DeviceName, InitiatingProcessAccountName = AccountName, ProcessCommandLine,
+               InitiatingProcessFileName, InitiatingProcessCommandLine)
+| take 500

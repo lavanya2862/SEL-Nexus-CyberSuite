@@ -28,7 +28,7 @@ What `.env` needs:
 
 | Setting | Where it comes from |
 |---|---|
-| `UC4_TENANT_ID`, `UC4_CLIENT_ID`, `UC4_CLIENT_SECRET` | An Entra ID app registration with Microsoft Graph application permissions `SecurityIncident.Read.All`, `SecurityAlert.Read.All`, `ThreatHunting.Read.All` and WindowsDefenderATP `Machine.Read.All` (admin consent granted) |
+| `TRIAGE_TENANT_ID`, `TRIAGE_CLIENT_ID`, `TRIAGE_CLIENT_SECRET` | An Entra ID app registration with Microsoft Graph application permissions `SecurityIncident.Read.All`, `SecurityAlert.Read.All`, `ThreatHunting.Read.All` and WindowsDefenderATP `Machine.Read.All` (admin consent granted) |
 | `AZURE_FOUNDRY_ENDPOINT`, `AZURE_FOUNDRY_API_KEY`, `AZURE_FOUNDRY_DEPLOYMENT` | Azure AI Foundry model deployment (Foundry portal -> Models + endpoints). When all three are set the agent uses it instead of Gemini; `AI_PROVIDER=gemini` switches back. Reasoning models such as gpt-5 work too (`AZURE_FOUNDRY_REASONING_EFFORT`, default low) |
 | `GEMINI_API_KEY` | Free key from Google AI Studio (used when Azure AI Foundry is not set) |
 | `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3` … (optional) | Spare Gemini keys: when one key uses up its daily quota the next takes over. Each must be from a different Google Cloud project (keys in one project share its quota) |
@@ -38,9 +38,9 @@ Optional actions are **off** by default and need extra permissions when switched
 
 | Setting | Does | Extra permission |
 |---|---|---|
-| `UC4_WRITEBACK=1` | Posts one "AI triage" comment on each lab incident | Graph `SecurityIncident.ReadWrite.All` |
-| `UC4_RESPOND=1` | Asks Defender to scan / quarantine | WindowsDefenderATP `Machine.Scan`, `Machine.StopAndQuarantine` |
-| `UC4_CONTAIN=1` | Lets an analyst approve isolating a lab device (only names in `UC4_LAB_DEVICES`) | WindowsDefenderATP `Machine.Isolate` |
+| `TRIAGE_WRITEBACK=1` | Posts one "AI triage" comment on each lab incident | Graph `SecurityIncident.ReadWrite.All` |
+| `TRIAGE_RESPOND=1` | Asks Defender to scan / quarantine | WindowsDefenderATP `Machine.Scan`, `Machine.StopAndQuarantine` |
+| `TRIAGE_CONTAIN=1` | Lets an analyst approve isolating a lab device (only names in `TRIAGE_LAB_DEVICES`) | WindowsDefenderATP `Machine.Isolate` |
 
 ## Commands
 

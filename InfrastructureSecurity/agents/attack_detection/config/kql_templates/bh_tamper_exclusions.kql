@@ -1,0 +1,19 @@
+// name: "Ignore" rules added to Defender for a folder, file type or program
+// kind: behaviour
+// technique: T1562.001
+// attack: 4
+union
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ProcessCommandLine has_any ("Add-MpPreference", "Set-MpPreference")
+     | where ProcessCommandLine has_any ("ExclusionPath", "ExclusionExtension", "ExclusionProcess", "ExclusionIpAddress")
+     | project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+               InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceRegistryEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType in ("RegistryValueSet", "RegistryKeyCreated")
+     | where RegistryKey has @"\Windows Defender\Exclusions\"
+     | project Timestamp, DeviceId, DeviceName, AccountName = InitiatingProcessAccountName, FileName = RegistryValueName,
+               ProcessCommandLine = RegistryKey, InitiatingProcessFileName, InitiatingProcessCommandLine)
+| where InitiatingProcessFileName !in~ ("MsSense.exe", "SenseIR.exe", "SenseCM.exe")
+| take 500

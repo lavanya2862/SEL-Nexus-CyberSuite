@@ -1,0 +1,19 @@
+// name: Servers connecting out on unusual ports
+// kind: behaviour
+// technique: T1571
+// attack: 11
+let servers = DeviceInfo
+    | where Timestamp > ago(7d)
+    | where OSPlatform has "Server" or DeviceType =~ "Server"
+    | distinct DeviceId;
+DeviceNetworkEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where DeviceId in (servers)
+| where ActionType == "ConnectionSuccess" and RemoteIPType == "Public"
+| where RemotePort !in (80, 443, 53, 123, 25, 587, 465, 993, 995, 389, 636, 88, 3268, 1688, 5671, 8443, 8080)
+| where InitiatingProcessFileName !in~ ("MsSense.exe", "SenseNdr.exe", "MsMpEng.exe", "WindowsAzureGuestAgent.exe",
+                                        "WaAppAgent.exe")
+| summarize Connections = count(), Timestamp = min(Timestamp), Ports = make_set(RemotePort, 10),
+            Destinations = make_set(RemoteIP, 10), take_any(DeviceName, InitiatingProcessAccountName, InitiatingProcessCommandLine)
+            by DeviceId, InitiatingProcessFileName
+| take 500

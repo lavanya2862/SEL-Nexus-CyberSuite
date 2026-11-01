@@ -1,0 +1,18 @@
+// name: Windows logs cleared
+// kind: behaviour
+// technique: T1070.001
+// attack: 4
+union
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where (FileName =~ "wevtutil.exe" and ProcessCommandLine matches regex @"(?i)\s(cl|clear-log)\s")
+          or ProcessCommandLine has_any ("Clear-EventLog", "Remove-EventLog", "Limit-EventLog")
+          or (ProcessCommandLine has "EventLogSession" and ProcessCommandLine has "ClearLog")
+     | project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+               InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType in ("SecurityLogCleared", "EventLogCleared")
+     | project Timestamp, DeviceId, DeviceName, AccountName = InitiatingProcessAccountName, FileName = ActionType,
+               ProcessCommandLine = tostring(AdditionalFields), InitiatingProcessFileName, InitiatingProcessCommandLine)
+| take 500

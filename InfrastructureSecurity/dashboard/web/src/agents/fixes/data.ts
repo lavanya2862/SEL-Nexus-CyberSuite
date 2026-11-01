@@ -1,7 +1,7 @@
 // Fix' automatic fixing = Threat Intel's fix engine, reached through the portal (/api/fix -> Threat Intel's /api/fix).
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-export type FixStatus = 'proposed' | 'saved' | 'approved' | 'queued' | 'running' | 'done' | 'failed' | 'verified' | 'still_there' | 'gone' | 'info'
+export type FixStatus = 'proposed' | 'saved' | 'approved' | 'queued' | 'running' | 'done' | 'failed' | 'manual_required' | 'awaiting_vendor' | 'verified' | 'still_there' | 'gone' | 'info'
 export type FixMethod = 'runcommand' | 'liveresponse'
 export type FixSource = 'vulnerability' | 'threat_intel' | 'attack_detection'
 
@@ -23,8 +23,14 @@ export interface FixRow {
   /** The threats in the news that target this app on this computer (Threat Intel Agent), most urgent first */
   threats?: { id: string; title: string }[]
   finished_at: string | null; verified_at: string | null; message: string | null
-  /** Attack responses: the Remediation Agent's moves (quick_scan / full_scan / stop), why, and what Defender reported */
-  agent?: { action: 'quick_scan' | 'full_scan' | 'stop'; reason: string; result: string; status?: FixStatus }[] | null
+  /** The Remediation Agent's moves (scans for attack responses; winget / choco / uninstall / apply retries for the rest), why, and the result */
+  agent?: { action: 'quick_scan' | 'full_scan' | 'winget' | 'choco' | 'uninstall' | 'apply' | 'stop'; reason: string; result: string; status?: FixStatus }[] | null
+  /** When no allowed move remediated it: what the person who takes over needs (the Remediation Agent's, or standard steps) */
+  handover?: { cause: string; steps: string[]; owner: string; summary?: string; by_ai?: boolean; evidence: string[]; at: string } | null
+  /** A person remediated it by hand (then Defender verifies it as usual) */
+  manual?: { by: string; at: string; note: string } | null
+  /** who handed a remediation without an automatic fix to a person, and when */
+  handed_by?: string | null; handed_at?: string | null
   /** Security settings (kind 'setting', software_name 'setting:<config_id>'): what the fix engine changes */
   kind?: 'setting' | 'response' | null; config_id?: string | null; category?: string | null; subcategory?: string | null; impact?: number | null
   setting_kind?: 'asr' | 'defender' | 'registry' | null; setting_target?: string | null; setting_value?: number | null
@@ -40,8 +46,6 @@ export interface FixView {
   events: { at: string; fix_id: string | null; text: string }[]
   probes: Record<string, { error?: string; method?: string; checked_at?: string; winget?: string; apps?: string[]; reboot_pending?: boolean }>
   default_method: FixMethod
-  /** ATTACK_AUTO_FIX=1: the Attack Detection Agent approves and runs its own scan-and-clean responses */
-  attack_auto_fix?: boolean
   impact: { findings_open: number; findings_cleared: number }
   worker: { running: boolean; elsewhere: boolean; task: string; step: string; message: string }
 }
@@ -76,12 +80,12 @@ async function post(action: string, body: object = {}) {
   return out
 }
 
-/** approve / unapprove / save / unsave / run / probe / start-threat_intel, then refresh the view. */
+/** approve / unapprove / save / unsave / manual (done by hand, with a note) / run / probe / start-threat_intel, then refresh the view. */
 export function useFixAction() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ action, ids, method }: { action: 'approve' | 'unapprove' | 'save' | 'unsave' | 'run' | 'probe' | 'start-threat_intel'; ids?: string[]; method?: FixMethod }) =>
-      post(action, { ids: ids ?? [], ...(method ? { method } : {}) }),
+    mutationFn: ({ action, ids, method, note }: { action: 'approve' | 'unapprove' | 'save' | 'unsave' | 'handover' | 'manual' | 'run' | 'probe' | 'start-threat_intel'; ids?: string[]; method?: FixMethod; note?: string }) =>
+      post(action, { ids: ids ?? [], ...(method ? { method } : {}), ...(note ? { note } : {}) }),
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ['fix'] })
       qc.invalidateQueries({ queryKey: ['runs'] })     // a decision can end a run's Fix stage
@@ -90,6 +94,9 @@ export function useFixAction() {
 }
 
 /** Auto-fix: approve and run straight away, one click instead of Approve then Execute remediation (same allow-listed fix). */
+/** A response to a collected indicator seen on a device (Threat Intel Agent); the others answer behaviour hits (Attack Detection Agent). */
+export const isIndicatorResponse = (r: FixRow) => r.action === 'respond' && (r.category ?? '').startsWith('Warning sign')
+
 export function autoFix(act: ReturnType<typeof useFixAction>, ids: string[], method: FixMethod) {
   if (!ids.length) return
   act.mutateAsync({ action: 'approve', ids, method }).then(() => act.mutate({ action: 'run', ids })).catch(() => {})   // errors show via act.error
@@ -104,9 +111,11 @@ export const STATUS: Record<FixStatus, { label: string; tone: 'muted' | 'sky' | 
   done: { label: 'Pending verification', tone: 'teal' },
   verified: { label: 'Verified by Defender', tone: 'good' },
   failed: { label: 'Failed', tone: 'bad' },
+  manual_required: { label: 'Manual action required', tone: 'bad' },
+  awaiting_vendor: { label: 'Awaiting vendor package', tone: 'warn' },
   still_there: { label: 'Still listed by Defender', tone: 'warn' },
   gone: { label: 'Resolved before remediation', tone: 'muted' },
-  info: { label: 'No action', tone: 'muted' },
+  info: { label: 'No automatic fix', tone: 'muted' },
 }
 
 export const ACTION_LABEL: Record<FixRow['action'], string> = { upgrade: 'Update', remove: 'Remove', replace: 'Replace', setting: 'Change setting', respond: 'Scan and clean', none: 'No action' }
@@ -131,4 +140,4 @@ export function settingChange(r: Pick<FixRow, 'setting_kind' | 'setting_target' 
 }
 export const METHOD_LABEL: Record<FixMethod, string> = { runcommand: 'Azure Run Command', liveresponse: 'Defender Live Response' }
 export const canApprove = (r: FixRow) => r.action !== 'none' && ['proposed', 'saved', 'failed', 'still_there', 'gone'].includes(r.status)
-export const canWithdraw = (r: FixRow) => ['approved', 'failed', 'still_there'].includes(r.status)
+export const canWithdraw = (r: FixRow) => ['approved', 'failed', 'awaiting_vendor', 'still_there'].includes(r.status)

@@ -1,8 +1,12 @@
+import { ExpandableCard } from '@/components/DetailDialog'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowRight, CheckCircle2, ChevronDown, ExternalLink, Search, Zap } from 'lucide-react'
+import { ArrowRight, ExternalLink, Fingerprint, Monitor, Radar, Rss, Siren, Zap } from 'lucide-react'
 import { Chart, axisStyle } from '@/components/Chart'
-import { Card, Choice, DTable, Empty, Panel, SevTag, Tabs, legendStyle } from '@/components/kit'
+import {
+  Card, DTable, DateFilter, Empty, FilterBar, FilterChoice, FilterSearch, Panel, SevTag, Tabs, choiceChip, dateChip, inDateRange, legendStyle,
+  type ActiveFilter, type DateRange,
+} from '@/components/kit'
 import { Skeleton } from '@/components/ui/skeleton'
 import { num, shortDate } from '@/lib/format'
 import { chartTokens, statusColor, useTheme } from '@/lib/theme'
@@ -75,14 +79,14 @@ function Overview({ d }: { d: ThreatIntelData }) {
           </div>
           <p className="mt-3 max-w-md text-sm leading-relaxed text-ink-2">
             <b>{d.posture.urgent}</b> critical or high threats currently apply to managed devices.
-            In total <b>{num(d.posture.affecting)}</b> threats apply to managed devices (present vulnerabilities, or detections from hunts).
+            In total <b>{num(d.posture.affecting)}</b> threats from collected news apply to managed devices (vulnerabilities in installed software, or indicators seen on a device).
           </p>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {([
             [num(w.threats_collected), 'threats collected', `${when}: attack news, advisories and vulnerability lists`, 'var(--tint-blue)'],
             [num(Object.values(w.ioc_types).reduce((a, b) => a + b, 0)), 'indicators collected', `IPs, domains, URLs, file hashes · ${when} · ${num(d.ioc_hits)} observed on managed devices`, 'var(--tint-violet)'],
-            [num(d.posture.affecting), 'applicable threats', 'currently match software on managed devices', 'var(--tint-red)'],
+            [num(d.posture.affecting), 'applicable threats', `${num(d.posture.vulnerabilities ?? 0)} vulnerabilities in installed software · ${num(d.posture.indicators ?? 0)} with indicators seen on a device`, 'var(--tint-red)'],
           ] as const).map(([v, l, h, tint]) => (
             <div key={l} className="tint-box rounded-xl px-3.5 py-3" style={{ '--tint': tint } as React.CSSProperties}>
               <div className="tint-num tabular text-lg font-semibold leading-none">{v}</div>
@@ -111,14 +115,14 @@ function Overview({ d }: { d: ThreatIntelData }) {
       </Card>
       <Landscape d={d} />
       <Card title="Managed devices" description="Agent-collected context for each device">
-        <DTable head={[['Device'], ['OS'], ['Vulnerabilities', 'right'], ['Applicable threats', 'right'], ['Hunt matches', 'right'], ['Last seen by Defender']]}>
+        <DTable head={[['Device'], ['OS'], ['Vulnerabilities', 'right'], ['Applicable threats', 'right'], ['Indicators seen', 'right'], ['Last seen by Defender']]}>
           {d.devices.map((x) => (
             <tr key={x.device_name}>
               <td className="font-medium">{x.device_name}</td>
               <td className="text-ink-2">{x.os_platform}</td>
               <td className="tabular text-right">{num(x.vulns)}</td>
               <td className="tabular text-right">{num(x.exposed)}</td>
-              <td className="tabular text-right">{num(x.hits)}</td>
+              <td className="tabular text-right">{num(x.indicators ?? 0)}</td>
               <td className="tabular text-ink-3">{x.last_seen?.slice(0, 16)}</td>
             </tr>
           ))}
@@ -130,17 +134,19 @@ function Overview({ d }: { d: ThreatIntelData }) {
 
 /* ───────── affects us: each threat that matches our computers, with the hole, where it is and how to fix it ───────── */
 
-type Reach = 'all' | 'defender' | 'early' | 'sign' | 'closed'
+type Reach = 'all' | 'defender' | 'early' | 'indicator' | 'closed'
 const REACH: [Reach, string, string][] = [
   ['all', 'All', 'Everything currently applicable to managed devices'],
   ['defender', 'Confirmed by Defender', 'Threat intelligence names a vulnerability Defender also reports on a managed device'],
   ['early', 'Pending Defender confirmation', 'Threat intelligence names a vulnerability in an installed version; Defender has not reported it yet'],
-  ['sign', 'Detections', 'Hunt matches and indicators observed on managed devices'],
+  ['indicator', 'Indicators seen', 'Collected indicators (IPs, domains, URLs, file hashes) observed on a managed device'],
   ['closed', 'Not reported by Defender', 'The installed version is affected, but Defender did not report it within 30 days (often legacy, unsupported applications)'],
 ]
-/** How a threat reaches us; older Threat Intel output has no `match`, so fall back to what it had. */
-const reachOf = (e: ExplorerRow): Exclude<Reach, 'all'> | null =>
-  e.match !== undefined ? e.match : e.hits || isSign(e.kind) ? 'sign' : e.devices ? 'defender' : null
+/** How a news threat reaches us. Behaviour hits (and older output's 'sign') are the Attack Detection Agent's: null here. */
+const reachOf = (e: ExplorerRow): Exclude<Reach, 'all'> | null => {
+  if (isSign(e.kind) || e.kind === 'test' || e.match === 'behaviour' || e.match === 'sign') return null
+  return e.match !== undefined ? e.match : e.hits ? 'indicator' : e.devices ? 'defender' : null
+}
 
 function AffectsUs({ d }: { d: ThreatIntelData }) {
   const [params, setParams] = useSearchParams()
@@ -155,63 +161,55 @@ function AffectsUs({ d }: { d: ThreatIntelData }) {
     else next.set(key, value)
     return next
   }, { replace: true })
-  const inReach = (r: Reach) => real.filter((e) => (r === 'all' ? reachOf(e) !== 'closed' : reachOf(e) === r))
+  const { theme } = useTheme()
+  const [published, setPublished] = useState<DateRange>({ preset: 'any' })
+  const inReach = (r: Reach) => real.filter((e) => (r === 'all' ? reachOf(e) !== 'closed' : reachOf(e) === r) && inDateRange(e.published ?? e.first_seen, published))
   const all = inReach(show)
   const rows = sev === 'All' ? all : all.filter((e) => e.rating === sev)
+  const reachOptions = REACH.map(([r, label]) => ({ value: r, label, count: inReach(r).length }))
+  const sevOptions = (['All', ...RATINGS] as const).map((r) => ({ value: r, label: r === 'All' ? 'All severities' : r,
+    count: (r === 'All' ? all : all.filter((e) => e.rating === r)).length, dot: r === 'All' ? undefined : chartTokens[theme].severity[r] }))
+  const chips: ActiveFilter[] = [
+    ...dateChip(published, () => setPublished({ preset: 'any' })),
+    ...choiceChip('show', reachOptions, show, () => set('show', null)),
+    ...choiceChip('sev', sevOptions, sev, () => set('sev', null)),
+  ]
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Exposure path">
-        {REACH.map(([r, label, hint]) => {
-          const n = inReach(r).length
-          return (
-            <button key={r} onClick={() => set('show', r === 'all' ? null : r)} aria-pressed={show === r} title={hint}
-              className={cn('flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium', show === r ? 'pill-on' : 'border-hairline bg-panel hover:bg-well', !n && show !== r && 'opacity-50', r === 'closed' && 'sm:ml-auto')}>
-              {label} <span className="tabular opacity-60">{num(n)}</span>
-            </button>
-          )
-        })}
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Severity">
-        {(['All', ...RATINGS] as const).map((r) => {
-          const of = r === 'All' ? all : all.filter((e) => e.rating === r)
-          return (
-            <button key={r} onClick={() => set('sev', r === 'All' ? null : r)} aria-pressed={sev === r}
-              className={cn('flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs', sev === r ? 'pill-on' : 'border-hairline hover:bg-well', !of.length && sev !== r && 'opacity-50')}>
-              {r} <span className="tabular opacity-60">{num(of.length)}</span>
-            </button>
-          )
-        })}
-      </div>
-      <p className="text-sm text-ink-3">{REACH.find(([r]) => r === show)![2]}. Highest risk first; open one to view the vulnerability, affected devices, timeline and remediation. Ratings are rule-based.</p>
+      <FilterBar chips={chips} onClear={() => { setPublished({ preset: 'any' }); setParams((prev) => { const n = new URLSearchParams(prev); n.delete('show'); n.delete('sev'); return n }, { replace: true }) }}
+        count={`${num(rows.length)} threats`}>
+        <DateFilter label="Published" value={published} onChange={setPublished} />
+        <FilterChoice label="Exposure" icon={Radar} options={reachOptions} value={show} onChange={(r) => set('show', r === 'all' ? null : r)} />
+        <FilterChoice label="Severity" icon={Siren} options={sevOptions} value={sev} onChange={(r) => set('sev', r === 'All' ? null : r)} />
+      </FilterBar>
+      <p className="text-sm text-ink-3">{REACH.find(([r]) => r === show)![2]}. Highest risk first; select a card to view the vulnerability, affected devices, timeline and remediation. Ratings are rule-based.</p>
       {rows.length
-        ? rows.map((e, i) => <AffectCard key={e.id} e={e} story={storyOf(e, dd)} openAtStart={i === 0} />)
+        ? <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">{rows.map((e) => <li key={e.id}><AffectCard e={e} story={storyOf(e, dd)} /></li>)}</ul>
         : <Empty text={show === 'early' ? 'Nothing pending Defender confirmation: every vulnerability named in threat intelligence for installed versions is already reported by Defender.' : 'No items at present.'} />}
     </div>
   )
 }
 
-function AffectCard({ e, story, openAtStart }: { e: ExplorerRow; story: Story | null; openAtStart: boolean }) {
-  const [open, setOpen] = useState(openAtStart)
+function AffectCard({ e, story }: { e: ExplorerRow; story: Story | null }) {
   const devices = e.devices || [...new Set((e.on_us ?? []).map((x) => x.device))].join(', ')
+  const title = e.headline || e.title.replace(/^(TEST:\s*)?Hunt hit:\s*/, '').replace(/AI-drafted:\s*/, '')
   return (
-    <Panel className="overflow-hidden">
-      <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-start gap-4 px-5 py-4 text-left transition-colors hover:bg-well/40">
-        <div className="min-w-0 flex-1">
+    <ExpandableCard title={title} subtitle={`On ${devices || '–'}`}
+      eyebrow={<><SevTag sev={e.rating} /><span className="text-ink-3">{e.headline ? `${e.source}: ${e.title}` : e.source}</span><StoryBadge s={story} /></>}
+      summary={
+        <>
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <SevTag sev={e.rating} />
-            <span className="text-ink-3">{isSign(e.kind) ? 'Detection on a managed device' : e.source}</span>
             <ScoreBar score={e.score} width={64} />
             <StoryBadge s={story} />
           </div>
-          <div className="mt-1.5 font-semibold leading-snug">{e.title.replace(/^(TEST:\s*)?Hunt hit:\s*/, '').replace(/AI-drafted:\s*/, '')}</div>
-          <div className="mt-1 text-xs text-ink-3">
-            On {devices || '–'}{e.action && <> · <span className="text-ink-2">Do: {e.action}</span></>}
-          </div>
-        </div>
-        <ChevronDown className={cn('mt-1 size-4 shrink-0 text-ink-3 transition-transform', open && 'rotate-180')} aria-hidden />
-      </button>
-      {open && <AffectDetail e={e} story={story} />}
-    </Panel>
+          <div className="font-semibold leading-snug">{title}</div>
+          <div className="line-clamp-1 text-xs text-ink-3">{e.headline ? `${e.source}: ${e.title}` : e.source}</div>
+          <div className="line-clamp-2 text-xs text-ink-3">On {devices || '–'}{e.action && <> · <span className="text-ink-2">Do: {e.action}</span></>}</div>
+        </>
+      }>
+      <AffectDetail e={e} story={story} />
+    </ExpandableCard>
   )
 }
 
@@ -455,22 +453,22 @@ function ThreatList({ rows: all }: { rows: ExplorerRow[] }) {
     (r === 'All' || e.rating === r) && (src === 'All' || e.source === src) &&
     (!q || `${e.title} ${e.source} ${e.summary} ${e.devices} ${e.id}`.toLowerCase().includes(q.toLowerCase())))
   const reset = () => setShown(40)
+  const { theme } = useTheme()
+  const sevOptions = (['All', ...RATINGS] as const).map((x) => ({ value: x, label: x === 'All' ? 'All severities' : x,
+    count: (x === 'All' ? all : all.filter((e) => e.rating === x)).length, dot: x === 'All' ? undefined : chartTokens[theme].severity[x] }))
+  const srcOptions = [{ value: 'All', label: 'All sources' }, ...sources.map((x) => ({ value: x, label: x, count: all.filter((e) => e.source === x).length }))]
+  const chips: ActiveFilter[] = [
+    ...(q ? [{ key: 'q', label: `“${q}”`, onRemove: () => { setQ(''); reset() } }] : []),
+    ...choiceChip('sev', sevOptions, r, () => { setR('All'); reset() }),
+    ...choiceChip('src', srcOptions, src, () => { setSrc('All'); reset() }),
+  ]
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap gap-1.5">
-          {(['All', ...RATINGS] as const).map((x) => (
-            <button key={x} onClick={() => { setR(x); reset() }} aria-pressed={r === x}
-              className={cn('rounded-full border px-3 py-1 text-xs', r === x ? 'pill-on' : 'border-hairline hover:bg-well')}>{x}</button>
-          ))}
-        </div>
-        <Choice label="Source" value={src} onChange={(v) => { setSrc(v); reset() }} className="w-auto py-1.5 text-xs"
-          options={[{ value: 'All', label: 'All sources' }, ...sources.map((s) => ({ value: s, label: s }))]} />
-        <label className="ml-auto flex items-center gap-2 rounded-lg border border-hairline bg-well px-3 py-1.5 text-sm">
-          <Search className="size-3.5 text-ink-3" />
-          <input value={q} onChange={(e) => { setQ(e.target.value); reset() }} placeholder="Search threats" className="w-44 bg-transparent outline-none placeholder:text-ink-3" />
-        </label>
-      </div>
+      <FilterBar chips={chips} onClear={() => { setR('All'); setSrc('All'); setQ(''); reset() }} count={`${num(rows.length)} threats`}>
+        <FilterSearch value={q} onChange={(v) => { setQ(v); reset() }} placeholder="Search threats" />
+        <FilterChoice label="Severity" icon={Siren} options={sevOptions} value={r} onChange={(v) => { setR(v as 'All' | Rating); reset() }} />
+        <FilterChoice label="Source" icon={Rss} options={srcOptions} value={src} onChange={(v) => { setSrc(v); reset() }} />
+      </FilterBar>
       <div className="mt-4">
         {rows.length ? (
           <DTable head={[['Rating'], ['Score'], ['Threat'], ['Affected devices'], ['Published'], ['First action']]} minWidth={980}>
@@ -528,28 +526,25 @@ function ClueList({ from }: { from: string | null }) {   // from: start of the p
     (!types.length || types.includes(c.type)) && (src === 'All' || c.source === src) && (!seenOnly || c.seen_on.length) &&
     (!ql || `${c.value} ${c.malware} ${c.threat}`.toLowerCase().includes(ql)))
   const reset = () => setShown(60)
+  const kindOptions = CLUE_KINDS.map(([k, label, ts]) => ({ value: k, label: k === 'All' ? 'All types' : label,
+    count: ts.length ? all.filter((c) => ts.includes(c.type)).length : all.length }))
+  const srcOptions = [{ value: 'All', label: 'All sources' }, ...sources.map((x) => ({ value: x, label: x, count: all.filter((c) => c.source === x).length }))]
+  const seenOptions = [{ value: 'all', label: 'Observed or not', count: all.length },
+    { value: 'seen', label: 'Observed on managed devices', count: seen, dot: statusColor.critical }]
+  const chips: ActiveFilter[] = [
+    ...(q ? [{ key: 'q', label: `“${q}”`, onRemove: () => { setQ(''); reset() } }] : []),
+    ...choiceChip('kind', kindOptions, kind, () => { setKind('All'); reset() }),
+    ...choiceChip('src', srcOptions, src, () => { setSrc('All'); reset() }),
+    ...choiceChip('seen', seenOptions, seenOnly ? 'seen' : 'all', () => { setSeenOnly(false); reset() }),
+  ]
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap gap-1.5">
-          {CLUE_KINDS.map(([k, label, ts]) => (
-            <button key={k} onClick={() => { setKind(k); reset() }} aria-pressed={kind === k}
-              className={cn('flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs', kind === k ? 'pill-on' : 'border-hairline hover:bg-well')}>
-              {label} <span className="tabular opacity-60">{num(ts.length ? all.filter((c) => ts.includes(c.type)).length : all.length)}</span>
-            </button>
-          ))}
-        </div>
-        <Choice label="Source" value={src} onChange={(v) => { setSrc(v); reset() }} className="w-auto py-1.5 text-xs"
-          options={[{ value: 'All', label: 'All sources' }, ...sources.map((s) => ({ value: s, label: s }))]} />
-        <button onClick={() => { setSeenOnly(!seenOnly); reset() }} aria-pressed={seenOnly}
-          className={cn('flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs', seenOnly ? 'pill-on' : 'border-hairline hover:bg-well')}>
-          {seenOnly && <CheckCircle2 className="size-3" />} Observed on managed devices only <span className="tabular opacity-60">{num(seen)}</span>
-        </button>
-        <label className="ml-auto flex items-center gap-2 rounded-lg border border-hairline bg-well px-3 py-1.5 text-sm">
-          <Search className="size-3.5 text-ink-3" />
-          <input value={q} onChange={(e) => { setQ(e.target.value); reset() }} placeholder="Value or malware" className="w-44 bg-transparent outline-none placeholder:text-ink-3" />
-        </label>
-      </div>
+      <FilterBar chips={chips} onClear={() => { setKind('All'); setSrc('All'); setSeenOnly(false); setQ(''); reset() }} count={`${num(rows.length)} indicators`}>
+        <FilterSearch value={q} onChange={(v) => { setQ(v); reset() }} placeholder="Value or malware" />
+        <FilterChoice label="Type" icon={Fingerprint} options={kindOptions} value={kind} onChange={(v) => { setKind(v); reset() }} />
+        <FilterChoice label="Source" icon={Rss} options={srcOptions} value={src} onChange={(v) => { setSrc(v); reset() }} />
+        <FilterChoice label="Observed" icon={Monitor} options={seenOptions} value={seenOnly ? 'seen' : 'all'} onChange={(v) => { setSeenOnly(v === 'seen'); reset() }} />
+      </FilterBar>
       <p className="mt-3 text-xs text-ink-3">Indicators are defanged (hxxp, [.]) to prevent accidental access. Hunts search Defender for each one; a match shows the affected device.</p>
       <div className="mt-3">
         {rows.length ? (

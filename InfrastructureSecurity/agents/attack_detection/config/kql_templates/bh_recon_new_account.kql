@@ -1,0 +1,18 @@
+// name: Scouting by an account created in the last few days
+// kind: behaviour
+// technique: T1087
+// attack: 9
+let created = DeviceEvents
+    | where Timestamp > ago({{LOOKBACK}}d)
+    | where ActionType == "UserAccountCreated"
+    | project AccountKey = tolower(AccountName), CreatedAt = Timestamp;
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName in~ ("whoami.exe", "net.exe", "net1.exe", "systeminfo.exe", "ipconfig.exe", "nltest.exe", "quser.exe",
+                      "tasklist.exe", "netstat.exe", "dsquery.exe", "adfind.exe")
+| extend AccountKey = tolower(AccountName)
+| join kind=inner created on AccountKey
+| where Timestamp between (CreatedAt .. (CreatedAt + 7d))
+| project Timestamp, DeviceId, DeviceName, AccountName, CreatedAt, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

@@ -3,7 +3,7 @@
 The two fixed questions per screen live in the web app (web/src/lib/helpFaq.ts) and never call the AI. Free
 questions ("how many incidents, and from where?") come here: we hand Gemini the portal's own read-only numbers (the
 same /api/summary the pages show, the triage queue, recent agent runs) plus a short note about the screen the user is
-on, and it answers in plain words. It only talks: it can't start agents, fix apps or close incidents.
+on, and it answers in the suite's professional voice (infra_core/style.py). It only talks: it can't start agents, fix apps or close incidents.
 
 Key: GEMINI_API_KEY in the suite .env at the repository root (shared with the agents, never
 printed) or the environment. Questions and answers go to data/help/questions.jsonl; a daily cap (PORTAL_HELP_DAILY_CAP,
@@ -23,6 +23,7 @@ from pathlib import Path
 import httpx
 
 from dashboard import devicenames
+from infra_core.style import STYLE
 from dashboard.config import PORTAL_DIR, SUITE_ENV, _load_env_file
 from dashboard.agents.alert_triage import AlertTriageSource
 from dashboard.agents.threat_intel import ThreatIntelSource
@@ -39,7 +40,7 @@ SCREENS: dict[str, str] = {
     "home": "Summary: three headline numbers, Most vulnerable apps and Findings on each VM cards, agent status.",
     "threats": "Threats: attack news from public sources (NVD, NCSC-NL, CERT-EU, Microsoft, abuse.ch) rated for how much it applies to our devices. Tabs: Overview (posture, funnel and the threat landscape charts), Affects us (each threat that matches our devices: the vulnerability, the device and the remediation), Explorer (Threats and Clues kept apart: clues are IPs, domains, web links and file hashes), Health & metrics.",
     "threat": "Threat detail: one threat news item, why it matters to us, which devices are affected, and what to do.",
-    "hunts": "Attack hunting: searches through Microsoft Defender records for signs an attacker is already inside; hits are real or lab-test matches.",
+    "hunts": "Attack detection (Attack Detection Agent): Advanced Hunting queries through Microsoft Defender records for signs an attacker is already inside; hits are real or lab-test matches.",
     "weak": "Vulnerabilities: known software vulnerabilities (CVEs) Microsoft Defender found on our devices, by priority, VM, age/SLA, trends, devices.",
     "quality": "Data quality: automatic checks that the vulnerability data is complete and fresh (for example the row count matches Defender).",
     "fixes": "Remediation (Remediation Centre): software updates, OS security updates, software upgrades for unsupported software and configuration changes, highest priority first; vulnerabilities with no security update available are marked 'Attention required'; 'Remediate' adds a device to the queue, Execute remediation runs it.",
@@ -47,12 +48,11 @@ SCREENS: dict[str, str] = {
     "respond": "Alert triage: Defender/Sentinel incidents, each with the Alert Triage Agent's verdict (true positive, false positive, needs review).",
     "case": "Incident page: one incident, its evidence, the Alert Triage Agent's verdict, what Defender did, agree/disagree buttons.",
     "reports": "Reports: Word, PDF and Excel downloads made by the agents.",
-    "runs": "Agents: run the Threat Intel, Vulnerability and Alert Triage agents and watch each step; history of recent runs.",
+    "runs": "Agents: run the Threat Intel, Attack Detection, Vulnerability and Alert Triage agents and watch each step; history of recent runs.",
 }
 
-SYSTEM = """You are the help assistant inside "Infrastructure Security", the Microsoft Defender and infrastructure module of the "SEL Nexus CyberSuite" security portal. The person asking is new to
-security: answer in plain, short English (at most 120 words), explain any security word you use, and give exact
-numbers and names from the data.
+SYSTEM = """You are the help assistant inside "Infrastructure Security", the Microsoft Defender and infrastructure module of the "SEL Nexus CyberSuite" security portal. Answer as a senior security
+professional, in at most 120 words, with exact numbers and names from the data.
 
 Rules you must follow:
 - Use ONLY the PORTAL DATA below. If the answer is not in it, say "I can't see that in CyberSuite's data" and say which
@@ -66,10 +66,12 @@ Rules you must follow:
   step (usually: open Agents and run that agent again).
 - Use Microsoft Defender's verdict words: "true positive", "false positive",
   "needs review".
-- Agents: "Threat Intel Agent" (threat news + attack hunting), "Vulnerability Agent" (vulnerabilities), "Alert Triage
-  Agent" (incidents). Don't say Threat Intel/Vulnerability/Alert Triage.
+- Agents: "Threat Intel Agent" (threat news, vulnerabilities and indicators that apply to our devices), "Attack
+  Detection Agent" (Advanced Hunting for attacker behaviour), "Vulnerability Agent" (vulnerabilities), "Alert Triage
+  Agent" (incidents). Don't say Threat Intel/Attack Detection/Vulnerability/Alert Triage.
 Output ONLY JSON: {"answer": str, "screens": [str]} where screens lists 0-2 screens worth opening, chosen from:
-"home", "threats", "hunts", "weak", "quality", "fixes", "progress", "respond", "reports", "runs"."""
+"home", "threats", "hunts", "weak", "quality", "fixes", "progress", "respond", "reports", "runs".
+""" + STYLE
 
 LINKS = {"home": "/", "threats": "/threat-intel", "hunts": "/attack-detection", "weak": "/vulnerabilities", "quality": "/vulnerabilities/quality",
          "fixes": "/fixes", "progress": "/fixes/progress", "respond": "/alert-triage", "reports": "/reports", "runs": "/runs"}

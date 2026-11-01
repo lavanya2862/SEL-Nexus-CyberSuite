@@ -101,7 +101,7 @@ class AzureVMs:
     def _get(self, url: str) -> dict:
         r = self.http.request("GET", url)
         if r.status_code == 403 or r.status_code == 401:
-            raise FixError(f"Azure refused access ({_error_text(r)}). Give UC1-Hunting-Agent-Lab the role "
+            raise FixError(f"Azure refused access ({_error_text(r)}). Give the Threat Intel app registration (SEL-Nexus-Threat-Intel-Agent) the role "
                            f"'Virtual Machine Contributor' on resource group {self.settings.fix_resource_group}.")
         if r.status_code >= 400:
             raise FixError(f"Azure error {r.status_code}: {_error_text(r)}")
@@ -112,7 +112,7 @@ class AzureVMs:
             return [self.settings.azure_subscription_id]
         subs = [s["subscriptionId"] for s in self._get(f"{ARM}/subscriptions?api-version=2022-12-01").get("value", [])]
         if not subs:
-            raise FixError("Threat Intel can't see any Azure subscription yet. Give UC1-Hunting-Agent-Lab the role "
+            raise FixError("Threat Intel can't see any Azure subscription yet. Give the Threat Intel app registration (SEL-Nexus-Threat-Intel-Agent) the role "
                            f"'Virtual Machine Contributor' on resource group {self.settings.fix_resource_group} "
                            "(it can take a few minutes to apply).")
         return subs
@@ -159,7 +159,7 @@ class AzureVMs:
                     return vm
             raise FixError(f"{device_name} is Azure VM {resource_id.split('/')[-1]} in resource group "
                            f"{resource_id.split('/')[4] if resource_id.count('/') > 4 else '?'}, which Threat Intel can't reach. "
-                           f"Add that group to FIX_RESOURCE_GROUP and give UC1-Hunting-Agent-Lab "
+                           f"Add that group to FIX_RESOURCE_GROUP and give the Threat Intel app registration (SEL-Nexus-Threat-Intel-Agent) "
                            "'Virtual Machine Contributor' on it.")
         name = device_name.lower().split(".")[0]
         hits = [vm for vm in self.list() if name in (vm["name"].lower(), (vm["computer_name"] or "").lower())]
@@ -214,14 +214,20 @@ class AzureVMs:
             raise FixError(f"Could not start the VM: {_error_text(r)}")
         self._wait_async(r, 15 * 60, "Starting the VM")
 
-    def run_script(self, vm_id: str, script: str, timeout_s: float = 95 * 60) -> str:
-        r = self.http.request("POST", f"{ARM}{vm_id}/runCommand?api-version={COMPUTE_API}",
-                              json_body={"commandId": "RunPowerShellScript", "script": script.splitlines()})
+    def run_script(self, vm_id: str, script: str, timeout_s: float = 95 * 60, busy_wait_s: float = 20 * 60) -> str:
+        # a VM runs one Run Command at a time (a lab test, a probe or a scan still going): wait for it, don't fail
+        busy_until = time.monotonic() + busy_wait_s
+        while True:
+            r = self.http.request("POST", f"{ARM}{vm_id}/runCommand?api-version={COMPUTE_API}",
+                                  json_body={"commandId": "RunPowerShellScript", "script": script.splitlines()})
+            if r.status_code != 409 or time.monotonic() > busy_until:
+                break
+            self.sleep(30.0)
         if r.status_code in (401, 403):
-            raise FixError(f"Azure refused Run Command ({_error_text(r)}). Give UC1-Hunting-Agent-Lab the role "
+            raise FixError(f"Azure refused Run Command ({_error_text(r)}). Give the Threat Intel app registration (SEL-Nexus-Threat-Intel-Agent) the role "
                            f"'Virtual Machine Contributor' on resource group {self.settings.fix_resource_group}.")
         if r.status_code == 409:
-            raise FixError(f"The VM is busy with another Run Command ({_error_text(r)}); try again in a few minutes")
+            raise FixError(f"The VM was still busy with another Run Command after {int(busy_wait_s / 60)} minutes ({_error_text(r)}); try again later")
         if r.status_code >= 400:
             raise FixError(f"Run Command error {r.status_code}: {_error_text(r)}")
         result = self._wait_async(r, timeout_s, "Run Command") if r.status_code == 202 else r.json()
@@ -290,7 +296,7 @@ class LiveResponseExecutor:
         text = _error_text(r)
         if r.status_code in (401, 403):
             return FixError(f"{what}: Defender refused ({text}). Add WindowsDefenderATP application permissions "
-                            "Machine.LiveResponse and Library.Manage to UC1-Hunting-Agent-Lab and grant admin consent.")
+                            "Machine.LiveResponse and Library.Manage to the Threat Intel app registration (SEL-Nexus-Threat-Intel-Agent) and grant admin consent.")
         if "LiveResponse" in text and ("disabled" in text.lower() or "not enabled" in text.lower()):
             return FixError(f"{what}: {text}. Turn on Live Response and 'Live Response unsigned script execution' "
                             "in Defender: Settings > Endpoints > Advanced features.")

@@ -38,7 +38,7 @@ def evidence(f: dict) -> str:
     users = ", ".join(dict.fromkeys(u["account"] for u in _j(f["users"]))) or "unknown"
     alerts = "; ".join(f"{a['title']} ({a.get('severity', '')}, {a.get('status', '')})" for a in _j(f["alerts"])[:5]) or "none"
     lines = [f"Device: {f['device_name']}", f"What our search looked for: {f['detail']}",
-             f"Search type: {'known attacker indicator' if f['kind'] == 'ioc_hit' else 'attacker behaviour'}",
+             "Search type: attacker behaviour",
              f"First seen: {f['first_hit']}", f"Accounts recently logged on: {users}", f"Defender alerts: {alerts}",
              "Events:"]
     lines += [f"- {e['time']} {e['what'][:400]}" for e in _j(f["timeline"])[:12]]
@@ -52,8 +52,6 @@ def standard(f: dict) -> dict:
     steps = [f"Isolate {dev} in Microsoft Defender (device page, Isolate device) so it cannot reach other computers.",
              f"Ask {user} whether they recognise this activity ({f['detail']}).",
              f"Run a full antivirus scan on {dev} from Microsoft Defender and remove anything it finds."]
-    if f["kind"] == "ioc_hit":
-        steps.append(f"Block the indicator in Microsoft Defender (Settings, Endpoints, Indicators): {f['detail'].removeprefix('matched ')}.")
     steps += [f"If the activity was not expected, reset the password of {user} and sign them out of all sessions.",
               f"Release {dev} from isolation once the scan is clean and the activity is explained."]
     return {"what_happened": f"Our search for '{f['detail']}' found matching activity on {dev}.", "steps": steps,

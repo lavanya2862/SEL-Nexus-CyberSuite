@@ -1,0 +1,20 @@
+// name: Known weak driver loaded that attackers use to kill security tools
+// kind: behaviour
+// technique: T1068
+// attack: 4
+let weak = dynamic(["rtcore64.sys", "rtcore32.sys", "gdrv.sys", "dbutil_2_3.sys", "dbutildrv2.sys", "aswarpot.sys",
+                    "mhyprot2.sys", "mhyprot3.sys", "zamguard64.sys", "zam64.sys", "kprocesshacker.sys",
+                    "procexp152.sys", "iqvw64e.sys", "capcom.sys", "asrdrv103.sys", "atillk64.sys", "gmer64.sys",
+                    "truesight.sys", "ksapi64.sys", "wnbios.sys", "speedfan.sys", "windbg.sys"]);
+union
+    (DeviceEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "DriverLoad" and tolower(FileName) in (weak)
+     | project Timestamp, DeviceId, DeviceName, ActionType, FileName, FolderPath, SHA256,
+               InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceFileEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "FileCreated" and tolower(FileName) in (weak)
+     | project Timestamp, DeviceId, DeviceName, ActionType, FileName, FolderPath, SHA256,
+               InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine)
+| take 500

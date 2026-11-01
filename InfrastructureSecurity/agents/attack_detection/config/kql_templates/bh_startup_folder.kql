@@ -1,6 +1,7 @@
 // name: File placed in the Startup folder
 // kind: behaviour
 // technique: T1547.001
+// attack: 7
 DeviceFileEvents
 | where Timestamp > ago({{LOOKBACK}}d)
 | where ActionType in ("FileCreated", "FileRenamed")

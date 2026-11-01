@@ -1,0 +1,21 @@
+// name: Real-time protection switched off
+// kind: behaviour
+// technique: T1562.001
+// attack: 4
+union
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ProcessCommandLine has_any ("DisableRealtimeMonitoring", "DisableBehaviorMonitoring", "DisableIOAVProtection",
+                                         "DisableScriptScanning", "DisableAntiSpyware", "DisableAntiVirus")
+     | where ProcessCommandLine matches regex @"(?i)Disable\w+\s+(\$true|1|true)\b"
+     | project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+               InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceRegistryEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "RegistryValueSet" and RegistryKey has @"\Windows Defender"
+     | where RegistryValueName in~ ("DisableRealtimeMonitoring", "DisableBehaviorMonitoring", "DisableIOAVProtection",
+                                    "DisableAntiSpyware", "DisableAntiVirus", "DisableOnAccessProtection")
+     | where RegistryValueData in ("1", "0x00000001")
+     | project Timestamp, DeviceId, DeviceName, AccountName = InitiatingProcessAccountName, FileName = RegistryValueName,
+               ProcessCommandLine = RegistryKey, InitiatingProcessFileName, InitiatingProcessCommandLine)
+| take 500

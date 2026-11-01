@@ -1,0 +1,14 @@
+// name: One account signing in to many machines within a short time
+// kind: behaviour
+// technique: T1078
+// attack: 5
+DeviceLogonEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "LogonSuccess" and LogonType in ("Network", "RemoteInteractive")
+| where isnotempty(AccountName) and AccountName !endswith "$"
+| where AccountName !in~ ("system", "local service", "network service", "anonymous logon")
+| summarize Devices = dcount(DeviceId), DeviceNames = make_set(DeviceName, 20), Timestamp = min(Timestamp),
+            take_any(DeviceId, DeviceName) by AccountName, AccountDomain, Window = bin(Timestamp, 1h)
+| where Devices >= 5
+| project Timestamp, DeviceId, DeviceName, AccountName, AccountDomain, Devices, DeviceNames
+| take 500

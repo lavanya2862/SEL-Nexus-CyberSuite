@@ -1,0 +1,13 @@
+// name: Lookups of trusted domains
+// kind: behaviour
+// technique: T1482
+// attack: 9
+// needs: domain
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where (FileName =~ "nltest.exe" and ProcessCommandLine has_any ("domain_trusts", "trusted_domains", "dclist"))
+     or ProcessCommandLine has_any ("Get-ADTrust", "Get-DomainTrust", "Get-NetDomainTrust", "trustedDomain",
+                                    "GetAllTrustRelationships")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

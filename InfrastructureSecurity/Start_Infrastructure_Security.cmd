@@ -25,17 +25,12 @@ timeout /t 2 /nobreak >nul
 
 rem A copy pulled from git after the restructure still has its data in the old folders (git leaves them behind)
 call :move_data Unified_Cyber_Portal dashboard
-call :move_data UC1_Threat_Intel_Hunting_Agent agents\threat_intel
-call :move_data UC3_MDE_Vuln_Extraction agents\vulnerability
-call :move_data UC4_Alert_Triage_Agent agents\alert_triage
 
 call :setup dashboard dashboard || goto :failed
 call :setup agents\threat_intel threat_intel || goto :failed
 call :setup agents\vulnerability vulnerability || goto :failed
 call :setup agents\alert_triage alert_triage || goto :failed
 call :setup agents\attack_detection attack_detection || goto :failed
-rem Data from before the agents were renamed: each database file takes its agent's name
-for %%a in ("threat_intel uc1" "vulnerability uc3" "alert_triage uc4") do call :rename_db %%~a
 rem (Re)build the website when it is missing or older than its source files
 powershell -NoProfile -Command "$d='web\dist\index.html'; if (-not (Test-Path $d)) { exit 1 }; $t=(Get-Item $d).LastWriteTime; if (Get-ChildItem web\src -Recurse -File | Where-Object { $_.LastWriteTime -gt $t } | Select-Object -First 1) { exit 1 }"
 if errorlevel 1 (

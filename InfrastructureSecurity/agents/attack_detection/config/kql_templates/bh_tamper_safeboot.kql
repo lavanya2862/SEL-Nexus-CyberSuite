@@ -1,0 +1,10 @@
+// name: Machine set to restart in Safe Mode (bcdedit safeboot)
+// kind: behaviour
+// technique: T1562.009
+// attack: 4
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName =~ "bcdedit.exe" and ProcessCommandLine has "safeboot" and not(ProcessCommandLine has "deletevalue")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

@@ -1,0 +1,13 @@
+// name: Listing shared folders across many machines (net view)
+// kind: behaviour
+// technique: T1135
+// attack: 9
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where (FileName in~ ("net.exe", "net1.exe") and ProcessCommandLine has "view")
+     or (FileName in~ ("net.exe", "net1.exe") and ProcessCommandLine has "share" and ProcessCommandLine has "\\\\")
+     or ProcessCommandLine has_any ("Invoke-ShareFinder", "Find-DomainShare", "Get-NetShare")
+     or (ProcessCommandLine has "Get-SmbShare" and ProcessCommandLine has "-CimSession")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500
