@@ -1,6 +1,7 @@
 // name: Antivirus detections (malware caught by Defender)
 // kind: behaviour
 // technique: T1204.002
+// attack: 6
 DeviceEvents
 | where Timestamp > ago({{LOOKBACK}}d)
 | where ActionType in ("AntivirusDetection", "AntivirusDetectionActionType", "AntivirusMalwareBlocked")

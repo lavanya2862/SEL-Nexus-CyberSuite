@@ -1,0 +1,15 @@
+// name: Programs started through remote WMI
+// kind: behaviour
+// technique: T1047
+// attack: 5
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where (InitiatingProcessFileName =~ "WmiPrvSE.exe"
+         and FileName in~ ("cmd.exe", "powershell.exe", "pwsh.exe", "rundll32.exe", "mshta.exe", "notepad.exe",
+                           "wscript.exe", "cscript.exe", "regsvr32.exe", "certutil.exe"))
+     or (FileName =~ "wmic.exe" and ProcessCommandLine has "/node:" and ProcessCommandLine has "process" and ProcessCommandLine has "call")
+     or (ProcessCommandLine has_any ("Invoke-WmiMethod", "Invoke-CimMethod") and ProcessCommandLine has "Win32_Process"
+         and ProcessCommandLine has_any ("-ComputerName", "-CimSession"))
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

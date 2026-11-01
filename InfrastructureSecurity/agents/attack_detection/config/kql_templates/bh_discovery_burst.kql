@@ -1,6 +1,7 @@
 // name: Burst of system discovery commands
 // kind: behaviour
 // technique: T1082
+// attack: 9
 DeviceProcessEvents
 | where Timestamp > ago({{LOOKBACK}}d)
 | where FileName in~ ("whoami.exe", "net.exe", "net1.exe", "systeminfo.exe", "ipconfig.exe", "nltest.exe", "quser.exe",

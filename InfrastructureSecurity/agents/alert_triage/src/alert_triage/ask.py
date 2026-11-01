@@ -8,6 +8,7 @@ Questions and answers are appended to data/feedback/ask.jsonl (the website never
 
 from __future__ import annotations
 
+from infra_core.style import STYLE
 import json
 import logging
 import threading
@@ -26,8 +27,8 @@ HISTORY_TURNS = 4                 # earlier Q&A on the same incident sent along,
 _lock = threading.Lock()
 
 SYSTEM = """You answer an analyst's questions about ONE security incident that an AI triage agent has already
-looked at. The analyst is new to security: answer in plain, short English (at most 120 words), explain any
-security word you use, and be concrete (name the file, computer, account or search you mean).
+looked at. Answer as a senior SOC analyst, in at most 120 words, and be concrete (name the file, device, account
+or Advanced Hunting query you mean).
 
 Rules you must follow:
 - Use ONLY the incident data given below. If the answer is not in it, say "That isn't in the evidence the assistant
@@ -43,7 +44,7 @@ Rules you must follow:
 - Do not invent facts, file names, IP addresses, CVEs or times.
 Output ONLY JSON: {"answer": str, "based_on": [str]} where based_on lists the parts you used, chosen from:
 "verdict", "evidence", "alerts", "entities", "searches", "threat_intel", "history", "context", "defender",
-"actions"."""
+"actions".""" + "\n" + STYLE
 
 PARTS = {"verdict", "evidence", "alerts", "entities", "searches", "threat_intel", "history", "context", "defender",
          "actions"}

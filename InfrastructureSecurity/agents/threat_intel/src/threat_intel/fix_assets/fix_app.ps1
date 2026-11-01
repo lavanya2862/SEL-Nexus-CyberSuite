@@ -2,14 +2,16 @@ param([string]$Spec)
 # Threat Intel fix script - runs INSIDE a lab VM as SYSTEM (sent by Azure Run Command or Defender Live Response).
 # It only does what the spec says, and the spec is built by Threat Intel from config\fix_catalog.csv (an allow-list).
 #   action = probe    : report winget/choco and the installed versions of the listed apps (changes nothing)
-#   action = upgrade  : close the app, update it with winget (fallback: Chocolatey)
+#   action = upgrade  : close the app, update it with winget (fallback: Chocolatey); engine = winget or choco runs only
+#                       that one (the Remediation Agent's move); with winget, nothing changes when winget's newest
+#                       published version is already installed (no_newer)
 #   action = remove   : close the app, uninstall every matching entry (end-of-life versions)
 #   action = replace  : remove the old app, then install the current one
 #   action = setting  : change ONE security setting (from config\setting_fix_catalog.csv), reading it before and after:
 #                       kind asr = attack-protection rule, defender = a Defender Antivirus option, registry = a DWORD
 #   action = respond  : after a sign of attack: update Defender's signatures, quick (or full) scan, remove what it finds
 #                       (kind scan_clean, the only response), counting active threats before and after; for a lab
-#                       test (lab_cleanup) it also removes the fixed UC1LabTest leftovers of scripts\lab\Invoke-UC1LabTest.ps1
+#                       test (lab_cleanup) it also removes the fixed AttackLabTest leftovers of scripts\lab\Invoke-AttackLabTest.ps1
 # The last line of output is "FIXRESULT {json}" - Threat Intel reads that. Windows PowerShell 5.1 compatible, ASCII only.
 
 $ErrorActionPreference = 'Continue'
@@ -155,15 +157,35 @@ function Invoke-Choco([string]$id) {
     return $r.code
 }
 
+# engine (chosen by the Remediation Agent from a fixed list): 'winget' or 'choco' only; empty = winget, then Chocolatey
 function Install-Current([string]$verb) {
-    $code = Invoke-Winget $verb $s.winget
-    if ($null -eq $code -or $code -notin $okCodes) {
-        $c2 = Invoke-Choco $s.choco
-        if ($null -ne $c2) { $code = $c2; $script:engine = 'choco' } else { $script:engine = 'winget' }
-    } else { $script:engine = 'winget' }
+    if ("$($s.engine)" -eq 'choco') {
+        $code = Invoke-Choco $s.choco
+        $script:engine = 'choco'
+        if ($null -eq $code) { Say 'Chocolatey is not allowed or has no package for this app'; $code = -993 }
+    } else {
+        $code = Invoke-Winget $verb $s.winget
+        if ("$($s.engine)" -ne 'winget' -and ($null -eq $code -or $code -notin $okCodes)) {
+            $c2 = Invoke-Choco $s.choco
+            if ($null -ne $c2) { $code = $c2; $script:engine = 'choco' } else { $script:engine = 'winget' }
+        } else { $script:engine = 'winget' }
+        if ($null -eq $code) { $code = -992 }
+    }
     if ($code -in $rebootCodes) { $script:reboot = $true }
     return $code
 }
+
+# winget's newest published version of the catalogue package (read-only); '' when winget can't tell
+function Get-WingetLatest([string]$id) {
+    $wg = Find-Winget
+    if (-not $wg -or -not $id -or -not (Ready-Winget $wg)) { return '' }
+    $r = Run-Exe $wg "show --id $id --exact --source winget --accept-source-agreements --disable-interactivity" 3
+    $m = [regex]::Match("$($r.text)", '(?m)^\s*Version:\s*(\S+)')
+    if ($m.Success) { return $m.Groups[1].Value }
+    return ''
+}
+
+function Same-Version([string]$a, [string]$b) { return (($a -replace '(\.0)+$', '') -eq ($b -replace '(\.0)+$', '')) }
 
 function Uninstall-Entry($e) {
     if ($e.bundle -and -not (Test-Path -LiteralPath $e.bundle)) { Say "remove $($e.name): its installer is gone from the Package Cache"; return -994 }
@@ -299,16 +321,16 @@ if ($s.action -eq 'respond') {
         # Only these fixed names: what the lab script creates. Nothing here comes from the spec or the evidence.
         $cleaned = New-Object System.Collections.Generic.List[string]
         $run = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run'
-        if (Get-ItemProperty -Path $run -Name 'UC1LabTest' -ErrorAction SilentlyContinue) {
-            Remove-ItemProperty -Path $run -Name 'UC1LabTest' -ErrorAction SilentlyContinue; $cleaned.Add('Run key UC1LabTest')
+        if (Get-ItemProperty -Path $run -Name 'AttackLabTest' -ErrorAction SilentlyContinue) {
+            Remove-ItemProperty -Path $run -Name 'AttackLabTest' -ErrorAction SilentlyContinue; $cleaned.Add('Run key AttackLabTest')
         }
-        $startup = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp\UC1LabTest.cmd'
-        if (Test-Path $startup) { Remove-Item $startup -Force -ErrorAction SilentlyContinue; $cleaned.Add('Startup file UC1LabTest.cmd') }
-        if (Get-LocalUser -Name 'UC1LabTest' -ErrorAction SilentlyContinue) {
-            Remove-LocalUser -Name 'UC1LabTest' -ErrorAction SilentlyContinue; $cleaned.Add('local user UC1LabTest')
+        $startup = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp\AttackLabTest.cmd'
+        if (Test-Path $startup) { Remove-Item $startup -Force -ErrorAction SilentlyContinue; $cleaned.Add('Startup file AttackLabTest.cmd') }
+        if (Get-LocalUser -Name 'AttackLabTest' -ErrorAction SilentlyContinue) {
+            Remove-LocalUser -Name 'AttackLabTest' -ErrorAction SilentlyContinue; $cleaned.Add('local user AttackLabTest')
         }
-        if (Get-Service -Name 'UC1LabTest' -ErrorAction SilentlyContinue) {
-            & sc.exe delete UC1LabTest | Out-Null; $cleaned.Add('service UC1LabTest')
+        if (Get-Service -Name 'AttackLabTest' -ErrorAction SilentlyContinue) {
+            & sc.exe delete AttackLabTest | Out-Null; $cleaned.Add('service AttackLabTest')
         }
         $result.lab_cleaned = @($cleaned)
         Say ("lab test clean-up: " + $(if ($cleaned.Count) { $cleaned -join ', ' } else { 'nothing left to remove' }))
@@ -357,9 +379,20 @@ if ($s.action -eq 'probe') {
         exit 0
     }
     if (@($targets | Where-Object { $_.user }).Count -gt 0) { Say 'note: installed for one user only (per-user install)' }
-    Stop-Apps
+    # An update through winget when winget's newest version is already installed changes nothing (no forced reinstall)
+    $noNewer = $false
+    if ($s.action -eq 'upgrade') {
+        $latest = Get-WingetLatest $s.winget
+        $result.available = $latest
+        if ("$($s.engine)" -eq 'winget' -and $latest -and @($before | Where-Object { Same-Version "$($_.version)" $latest }).Count -gt 0) {
+            Say "winget's newest published version ($latest) is already installed - changed nothing"
+            $result.no_newer = $true
+            $noNewer = $true
+        }
+    }
+    if (-not $noNewer) { Stop-Apps }
     switch ($s.action) {
-        'upgrade' { $code = Install-Current 'upgrade' }
+        'upgrade' { if ($noNewer) { $code = 0; $engine = 'winget' } else { $code = Install-Current 'upgrade' } }
         'remove'  { Remove-Matching @($s.remove); $code = 0; $engine = 'uninstall' }
         'replace' {
             Remove-Matching @($s.remove)

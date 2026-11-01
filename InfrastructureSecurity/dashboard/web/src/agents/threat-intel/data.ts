@@ -11,7 +11,9 @@ export interface ExplorerRow {
   first_seen?: string   // when Threat Intel collected it, "YYYY-MM-DD HH:MM" UTC (older Threat Intel output doesn't have it)
   /** How it reaches us: a sign of attack, a CVE Defender lists on our computer, one it doesn't list yet (the installed
    *  version is affected), or one it never listed after 30 days (EARLY_DAYS). null = not on our computers. Older Threat Intel output: absent. */
-  match?: 'sign' | 'defender' | 'early' | 'closed' | null
+  /** what is on our devices, e.g. "Python 3.8.10.0 on opcc-wks-01: CVE-…" (vulnerability matches only) */
+  headline?: string | null
+  match?: 'behaviour' | 'indicator' | 'sign' | 'defender' | 'early' | 'closed' | null   // 'sign': output from before 31 Oct 2026
   /** Its CVEs on our computers ("cve" = Defender lists it), with when the CVE was announced and when we first knew */
   on_us?: { cve: string; device: string; app: string; version: string; match: 'cve' | 'early' | 'closed'; announced: string; known: string }[]
 }
@@ -39,7 +41,7 @@ export interface ThreatIntelData {
   days: string[]
   series: Record<string, number[]>
   ratings: Record<Rating, number>
-  posture: { rating: Rating; urgent: number; affecting: number }
+  posture: { rating: Rating; urgent: number; affecting: number; vulnerabilities?: number; indicators?: number }
   funnel: { stage: string; value: number; note: string }[]
   matrix: { device_name: string; app: string; cves: number }[]
   apps: string[]
@@ -51,7 +53,7 @@ export interface ThreatIntelData {
   top: ExplorerRow[]
   explorer: ExplorerRow[]
   hits: Hit[]
-  devices: { device_name: string; opco: string; os_platform: string; last_seen: string; exposed: number; hits: number; test_hits: number; vulns: number }[]
+  devices: { device_name: string; opco: string; os_platform: string; last_seen: string; exposed: number; hits: number; test_hits: number; indicators?: number; vulns: number }[]
   alerts: Alert[]
   feeds: Feed[]
   hunts: Hunt[]

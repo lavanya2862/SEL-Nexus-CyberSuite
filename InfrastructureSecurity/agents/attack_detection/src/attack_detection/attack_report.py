@@ -11,7 +11,7 @@ from attack_detection.config import Settings
 from attack_detection.resolve import for_findings
 from attack_detection.store import Store, utcnow
 
-KIND_WORDS = {"ioc_hit": "Warning sign found", "behaviour_hit": "Suspicious behaviour"}
+KIND_WORDS = {"behaviour_hit": "Suspicious behaviour"}
 
 
 def _j(value):

@@ -10,11 +10,10 @@ from __future__ import annotations
 import ipaddress
 import re
 from collections import defaultdict
-from datetime import timedelta
 from urllib.parse import urlsplit
 
 from threat_intel.config import read_csv
-from threat_intel.feeds.common import FeedContext, FeedError, FeedSkipped, content_hash, find_cves, http
+from threat_intel.feeds.common import FeedContext, FeedError, FeedSkipped, content_hash, find_cves, http, is_new, window_start
 from threat_intel.store import to_utc, utcnow
 
 THREATFOX = "https://threatfox-api.abuse.ch/api/v1/"
@@ -157,19 +156,22 @@ def collect_abusech(ctx: FeedContext) -> dict[str, int]:
         raise FeedError("ABUSECH_AUTH_KEY is not set in .env (free key from https://auth.abuse.ch/)")
     headers = {"Auth-Key": key}
     results = {}
-    tf = http(ctx, "POST", THREATFOX, json={"query": "get_iocs", "days": 1}, headers=headers).json()
+    new_only = lambda rows, since: [r for r in rows if is_new(r["first_seen"], since)]
+    since = window_start(ctx, "threatfox")
+    days = min(7, max(1, -(-int((utcnow() - since).total_seconds()) // 86400)))     # ThreatFox takes whole days, 1 to 7
+    tf = http(ctx, "POST", THREATFOX, json={"query": "get_iocs", "days": days}, headers=headers).json()
     ctx.save_raw("threatfox", tf)
-    results["threatfox"] = save_groups(ctx, "ThreatFox", "threatfox", _group(parse_threatfox(tf)), _describe)
+    results["threatfox"] = save_groups(ctx, "ThreatFox", "threatfox", _group(new_only(parse_threatfox(tf), since)), _describe)
     ctx.store.save_feed_state("threatfox", "ok", results["threatfox"])
 
     uh = http(ctx, "GET", URLHAUS.format(limit=500), headers=headers).json()
     ctx.save_raw("urlhaus", uh)
-    results["urlhaus"] = save_groups(ctx, "URLhaus", "urlhaus", _group(parse_urlhaus(uh)), _describe)
+    results["urlhaus"] = save_groups(ctx, "URLhaus", "urlhaus", _group(new_only(parse_urlhaus(uh), window_start(ctx, "urlhaus"))), _describe)
     ctx.store.save_feed_state("urlhaus", "ok", results["urlhaus"])
 
     mb = http(ctx, "POST", BAZAAR, data={"query": "get_recent", "selector": "100"}, headers=headers).json()
     ctx.save_raw("malwarebazaar", mb)
-    results["malwarebazaar"] = save_groups(ctx, "MalwareBazaar", "bazaar", _group(parse_bazaar(mb)), _describe)
+    results["malwarebazaar"] = save_groups(ctx, "MalwareBazaar", "bazaar", _group(new_only(parse_bazaar(mb), window_start(ctx, "malwarebazaar"))), _describe)
     ctx.store.save_feed_state("malwarebazaar", "ok", results["malwarebazaar"])
     return results
 
@@ -208,8 +210,7 @@ def collect_otx(ctx: FeedContext) -> int:
     key = ctx.settings.otx_api_key
     if not key:
         raise FeedSkipped("OTX_API_KEY is not set in .env (optional feed)")
-    state = ctx.store.feed_state("otx")
-    since = to_utc(state.get("cursor")) or utcnow() - timedelta(days=ctx.settings.feed_backfill_days)
+    since = window_start(ctx, "otx")
     started, new, page = utcnow(), 0, 1
     while page <= 5:
         payload = http(ctx, "GET", OTX, params={"modified_since": since.isoformat(), "limit": 20, "page": page},

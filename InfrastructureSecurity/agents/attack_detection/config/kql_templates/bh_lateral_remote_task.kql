@@ -1,0 +1,11 @@
+// name: Scheduled tasks created on another machine (schtasks /s)
+// kind: behaviour
+// technique: T1053.005
+// attack: 5
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where (FileName =~ "schtasks.exe" and ProcessCommandLine has "/create" and ProcessCommandLine matches regex @"(?i)\s[/-]s\s+\S+")
+     or (ProcessCommandLine has "Register-ScheduledTask" and ProcessCommandLine has "-CimSession")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

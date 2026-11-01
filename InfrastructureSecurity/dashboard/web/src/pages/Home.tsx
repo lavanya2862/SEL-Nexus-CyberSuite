@@ -13,6 +13,7 @@ import {
 import { AGENT_LABEL, useRuns, type AgentKey } from '@/lib/runs'
 import { VERDICT, VERDICT_ORDER, sourceNames, useTriageQueue, utc } from '@/agents/alert-triage/data'
 import { attackType, useThreatIntelData } from '@/agents/threat-intel/data'
+import { useAttackDetectionData } from '@/agents/attack-detection/data'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Chart } from '@/components/Chart'
 import { Chip, InfoTip, Panel, Tabs } from '@/components/kit'
@@ -162,7 +163,7 @@ function HealthPill({ h }: { h: PillHealth }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="flex items-center gap-2 rounded-full border border-hairline bg-panel py-1.5 pl-2.5 pr-3.5 text-xs">
+        <span className="flex items-center gap-2 rounded-lg border border-hairline bg-panel py-1.5 pl-2.5 pr-3.5 text-xs">
           <st.icon className="size-3.5" style={{ color: st.color }} />
           <span className="font-medium">{AGENT_LABEL[h.key]}</span>
           <span className="text-ink-3">{st.label} · {ago(h.data_as_of)}</span>
@@ -407,7 +408,7 @@ function FiltersButton({ s }: { s: Summary }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="flex items-center gap-2 rounded-full border border-hairline bg-panel px-3.5 py-1.5 text-xs font-medium hover:bg-well">
+        <button className="flex items-center gap-2 rounded-lg border border-hairline bg-panel px-3.5 py-1.5 text-xs font-medium hover:bg-well">
           <SlidersHorizontal className="size-3.5" /> Filters
           {active ? <span className="tabular grid size-4 place-items-center rounded-full btn-blue text-[10px] text-white">{active}</span> : null}
         </button>
@@ -432,7 +433,7 @@ function ActiveFilters() {
     <div className="-mt-2 flex flex-wrap items-center gap-2 text-xs">
       <span className="text-ink-3">Filtered by</span>
       {opco !== 'all' && (
-        <button onClick={() => setOpco('all')} className="flex items-center gap-1.5 rounded-full btn-blue px-3 py-1 text-white">
+        <button onClick={() => setOpco('all')} className="flex items-center gap-1.5 rounded-lg btn-blue px-3 py-1 text-white">
           {opco} <X className="size-3" />
         </button>
       )}
@@ -578,7 +579,7 @@ function TriagePanel({ s }: { s: Summary }) {
 /** Attack Detection Agent: the same numbers as the Attack detection page (our own checks + attacks Microsoft's
  *  alarms caught, i.e. the triage agent's true positives). */
 function AttackPanel() {
-  const { data } = useThreatIntelData()
+  const { data } = useAttackDetectionData()
   const { data: triage } = useTriageQueue()
   const health = useAttackHealth()
   const hits = data?.hits ?? []

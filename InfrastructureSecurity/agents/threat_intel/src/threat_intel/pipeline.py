@@ -1,12 +1,9 @@
 ﻿"""Two runs use this database:
 
 - Threat Intel run (`threat_intel run`): collect -> inventory -> derive -> EPSS -> analyse -> exposure -> score -> link the
-  exposure to computers -> AI fix steps for the threats that affect us -> alerts -> report -> dashboard -> metrics
-  -> hunt inputs (data/out/hunt_inputs.json for the Attack Detection Agent) -> fix (the fix plan, with the fixes
-  that are new in this run).
-- Attack import (`threat_intel attack-import`, started by the Attack Detection Agent at the end of its run): import its
-  data/out/findings.json -> re-score -> alerts -> dashboard -> fix (a scan-and-clean response for every new sign of
-  attack, run straight away when auto-fix is on).
+  exposure to computers -> search Defender for the collected clues (IOC sweeps) -> resolution steps for the hits ->
+  re-score -> AI fix steps for the threats that affect us -> alerts -> report -> dashboard -> metrics
+  -> fix (the fix plan, with the fixes that are new in this run).
 The fix step only PROPOSES: a person fixes or saves each new fix for later on the portal's run page (or in the Fix
 Centre), and nothing on a computer changes without that approval. `python -m threat_intel fix-plan` rebuilds it on its own.
 
@@ -24,7 +21,8 @@ import traceback
 from contextlib import contextmanager
 from datetime import datetime
 
-from threat_intel import alerts, analyse, attack_import, correlate, dashboard, derive, exposure, fix_advice, hunt_inputs, inventory, metrics, report, scoring
+from threat_intel import (alerts, analyse, correlate, dashboard, derive, exposure, fix_advice,
+                          inventory, ioc_hunt, metrics, report, resolve, scoring)
 from threat_intel.ai.azure_client import AzureFoundryClient, make_client
 from threat_intel.ai.gemini_client import AIUnavailable, GeminiClient
 from threat_intel.api_client import DefenderClient
@@ -177,6 +175,14 @@ class Pipeline:
     def correlate(self):
         return self.step("correlate", correlate.run, self.store, self.defender, self.run_id)
 
+    def ioc_hunt(self):
+        if not self.defender:
+            return self.skip("ioc_hunt", "Defender not configured")
+        self.step("ioc_hunt", ioc_hunt.run, self.store, self.defender, self.run_id, self.settings.hunt_lookback_days,
+                  self.settings.feed_backfill_days)
+        self.step("resolve", resolve.run, self.store, self.ai)
+        self.step("rescore", scoring.run, self.store)          # threats whose clues were found become Critical
+
     def fix_advice(self):
         return self.step("fix_advice", fix_advice.run, self.store, self.settings, self.ai)   # AI fix steps per threat
 
@@ -185,59 +191,11 @@ class Pipeline:
         self.step("report", report.build, self.store, self.settings, self.run_id, self.ai, self.steps)
         self.step("dashboard", lambda: str(dashboard.build(self.store, self.settings)))
         self.step("metrics", metrics.write, self.store, self.settings)
-        self.step("hunt_inputs", hunt_inputs.write, self.store, self.settings)     # for the Attack Detection Agent
 
     def fix_plan(self, source: str):
         """Last step of both runs: rebuild the fix plan and list the fixes that are new in this run (proposals only)."""
         from threat_intel.fix import plan as fix_plan
         return self.step("fix_plan", fix_plan.refresh, self.store, self.settings, source)
-
-    def auto_fix(self) -> dict:
-        """Auto-fix (on unless ATTACK_AUTO_FIX=0): approve every scan-and-clean response nobody has decided on (this
-        run's new ones and earlier runs' still pending), plus the ones that are not clean yet, and run them now.
-        The runner repeats each with a stronger scan until Defender lists no active threat; what is still not clean
-        is tried again on the next run. A person still sees each result and can defer (Save for later stops
-        auto-fix for that one), retry or undo as usual."""
-        from threat_intel.fix import plan as fix_plan
-        from threat_intel.fix.runner import FixRunner, fix_active
-        from threat_intel.fix.state import FixState
-        plan = fix_plan.read_plan(self.settings)
-        decided = FixState(self.settings.fix_dir / "state.json").read()["fixes"]
-        new = set(plan.get("new_ids", []))
-        ids = [i["fix_id"] for i in plan.get("items", []) if i.get("kind") == "response"
-               and (decided.get(i["fix_id"]) or {}).get("status", "proposed") in ("proposed", "failed", "still_there")]
-        if not ids:
-            return {"approved": 0, "earlier": 0, "ran": 0, "done": 0, "failed": 0}
-        approved = fix_plan.approve(self.settings, ids, who="Attack Detection Agent (auto-fix)")["approved"]
-        earlier = sum(1 for fid in approved if fid not in new)
-        if fix_active(self.settings):      # another remediation run is going: these stay approved for the next Execute
-            return {"approved": len(approved), "earlier": earlier, "ran": 0, "done": 0, "failed": 0, "busy": True}
-        return {"approved": len(approved), "earlier": earlier, **FixRunner(self.settings).run_approved(approved)}
-
-    def attack_import(self) -> dict:
-        """After an Attack Detection run: take in its signs of attack, then re-score, alert, refresh the dashboard data
-        and propose (and with auto-fix, run) a scan-and-clean for every new one."""
-        started = utcnow()
-        self.store.upsert("runs", [{"run_id": self.run_id, "command": "attack-import", "started_at": started,
-                                    "status": "running", "steps": {}}])
-        self.step("import", attack_import.run, self.store, self.settings)
-        self.score("rescore")          # threats with new signs of attack get their rating raised
-        self.step("alerts", alerts.run, self.store, self.settings)
-        self.step("dashboard", lambda: str(dashboard.build(self.store, self.settings)))
-        self.fix_plan("attack_detection")
-        if self.settings.attack_auto_fix:
-            self.step("auto_fix", self.auto_fix)
-        else:
-            self.skip("auto_fix", "ATTACK_AUTO_FIX=0: responses wait for approval")
-        failed = [k for k, v in self.steps.items() if v["status"] == "error"]
-        status = "ok" if not failed else "partial"
-        finished = utcnow()
-        self.store.upsert("runs", [{"run_id": self.run_id, "command": "attack-import", "started_at": started,
-                                    "finished_at": finished, "status": status, "steps": self.steps}])
-        (self.settings.data_dir / "last_attack_check.json").write_text(json.dumps({
-            "run_id": self.run_id, "status": status, "started_at": started.isoformat(), "finished_at": finished.isoformat(),
-            "failed_steps": failed}), encoding="utf-8")
-        return {"run_id": self.run_id, "status": status, "failed_steps": failed, "steps": self.steps}
 
     def run_all(self) -> dict:
         started = utcnow()
@@ -248,7 +206,8 @@ class Pipeline:
         self.enrich()
         self.analyse()
         self.score()
-        self.correlate()               # no hunts in this run: refreshes which computers each threat affects
+        self.correlate()               # refreshes which computers each threat affects
+        self.ioc_hunt()                # searches the devices for the collected clues
         self.fix_advice()
         self.outputs()
         self.fix_plan("threat_intel")

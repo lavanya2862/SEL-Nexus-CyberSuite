@@ -1,4 +1,5 @@
 import { useEffect, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react'
+import { FixRecordHost } from '@/components/FixRecord'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Bot, ChevronRight, Crosshair, FileText, Grip, LayoutGrid, Moon, PanelLeftClose, PanelLeftOpen, Play, Radar,
@@ -31,7 +32,7 @@ const TAB_NAMES: Record<string, string> = {
   affects: 'Applicable threats', explorer: 'Explorer', health: 'Health & metrics',
   threat: 'Threat detail', opco: 'By VM', age: 'Age & SLA', trends: 'Trends', devices: 'Devices',
   quality: 'Data quality',
-  threat_intel: 'Threat Intel Agent', vulnerability: 'Vulnerability Agent', alert_triage: 'Alert Triage Agent', progress: 'Remediation progress',
+  threat_intel: 'Threat Intel Agent', vulnerability: 'Vulnerability Agent', alert_triage: 'Alert Triage Agent', attack_detection: 'Attack Detection Agent', progress: 'Remediation progress',
 }
 
 const NAV_KEY = 'portal-nav-collapsed'
@@ -152,6 +153,7 @@ export function AppShell() {
           <div id="top" className="mx-auto max-w-[1680px] scroll-mt-32">
             {!onHome && <Breadcrumb pathname={pathname} activeItem={activeItem} />}
             <Outlet />
+            <FixRecordHost />
           </div>
         </main>
       </div>

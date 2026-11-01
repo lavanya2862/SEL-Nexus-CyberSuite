@@ -1,0 +1,13 @@
+// name: regsvr32 or rundll32 loading code from the internet
+// kind: behaviour
+// technique: T1218.010
+// attack: 3
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName in~ ("regsvr32.exe", "rundll32.exe")
+     or ProcessVersionInfoOriginalFileName in~ ("REGSVR32.EXE", "RUNDLL32.EXE")
+| where ProcessCommandLine has_any ("http://", "https://", "scrobj.dll", "javascript:", "\\\\")
+| where not(ProcessCommandLine has_any ("shell32.dll,Control_RunDLL", "printui.dll"))
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

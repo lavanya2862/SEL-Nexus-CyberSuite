@@ -1,0 +1,15 @@
+// name: Accounts created by a script or a service rather than by an admin tool
+// kind: behaviour
+// technique: T1136.001
+// attack: 8
+DeviceEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "UserAccountCreated"
+| where InitiatingProcessFileName in~ ("powershell.exe", "pwsh.exe", "cmd.exe", "wscript.exe", "cscript.exe", "mshta.exe",
+                                       "rundll32.exe", "regsvr32.exe", "WmiPrvSE.exe", "taskeng.exe", "svchost.exe",
+                                       "wsmprovhost.exe", "psexesvc.exe")
+     or InitiatingProcessAccountName =~ "system"
+     or InitiatingProcessParentFileName in~ ("svchost.exe", "taskeng.exe", "services.exe", "WmiPrvSE.exe")
+| project Timestamp, DeviceId, DeviceName, ActionType, AccountName, AccountDomain, InitiatingProcessAccountName,
+          InitiatingProcessFileName, InitiatingProcessParentFileName, InitiatingProcessCommandLine
+| take 500

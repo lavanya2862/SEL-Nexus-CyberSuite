@@ -6,7 +6,7 @@ import re
 
 import feedparser
 
-from threat_intel.feeds.common import FeedContext, clean_text, content_hash, find_cves, http
+from threat_intel.feeds.common import FeedContext, clean_text, content_hash, find_cves, http, is_new, window_start
 from threat_intel.store import to_utc
 
 RSS_FEEDS = {
@@ -39,9 +39,10 @@ def parse_rss(feed_key: str, raw: bytes) -> list[dict]:
 
 def collect_rss(ctx: FeedContext, feed_key: str) -> int:
     _, url = RSS_FEEDS[feed_key]
+    since = window_start(ctx, feed_key)
     raw = http(ctx, "GET", url).content
     ctx.save_raw(feed_key, raw)
-    items = parse_rss(feed_key, raw)
+    items = [i for i in parse_rss(feed_key, raw) if is_new(i["published_at"], since)]
     new = ctx.store.add_threats({k: v for k, v in i.items() if k != "cves"} for i in items)
     for i in items:
         ctx.store.link(i["threat_id"], "cve", i["cves"])
@@ -101,6 +102,8 @@ def msrc_threats(month_id: str, url: str, summary: dict, released) -> list[dict]
 def collect_msrc(ctx: FeedContext) -> int:
     updates = http(ctx, "GET", MSRC_UPDATES, headers={"Accept": "application/json"}).json().get("value", [])
     updates = sorted(updates, key=lambda u: u.get("InitialReleaseDate") or "")[-2:]   # current + previous month
+    since = window_start(ctx, "msrc")                 # only a release (or revision) published in the window
+    updates = [u for u in updates if is_new(u.get("CurrentReleaseDate") or u.get("InitialReleaseDate"), since)]
     state = ctx.store.feed_state("msrc")
     seen = dict(p.split("=", 1) for p in (state.get("cursor") or "").split(";") if "=" in p)
     new = 0

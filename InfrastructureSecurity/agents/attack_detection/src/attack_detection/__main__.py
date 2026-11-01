@@ -46,12 +46,10 @@ def main(argv: list[str] | None = None) -> int:
     setup_logging(settings, verbose=not args.quiet)
 
     if args.command == "check":
-        inp = settings.threat_intel_dir / "data" / "out" / "hunt_inputs.json" if settings.threat_intel_dir else None
-        print(f"Attack Detection check\n  Folder: {settings.data_dir.parent}\n  Threat Intel input: {inp} "
-              f"({'found' if inp and inp.is_file() else 'not there yet'})\n")
+        print(f"Attack Detection check\n  Folder: {settings.data_dir.parent}\n  Fix engine: {settings.fix_engine_dir}\n")
         print("Settings in .env (values are never shown):")
         for name, is_set, why in settings.describe():
-            if name.startswith(("DEFENDER_", "GEMINI_", "AZURE_FOUNDRY_")):
+            if name.startswith(("DEFENDER_", "ATTACK_DEFENDER_", "GEMINI_", "AZURE_FOUNDRY_")):
                 print(f"  [{'set' if is_set else '---'}] {name:24s} {why}")
         return 0
 
@@ -62,10 +60,6 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "report":
             print(attack_report.build(store, settings))
-            return 0
-        if args.command == "import-history":
-            from attack_detection import history
-            print(history.copy_from_threat_intel(store, settings))
             return 0
         with run_lock(settings):
             p = Pipeline(settings, store, defender=make_defender(settings), ai=make_ai(settings, store))

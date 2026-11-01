@@ -1,10 +1,10 @@
 real_name,show_as
+opcd-wks-01,VM 1
+opcb-wks-01,VM 2
 opca-wks-01,VM 1
 opcc-wks-01,VM 2
-opcb-wks-01,VM 3
-opcd-wks-01,VM 4
+UNMAPPED,VM 1
+Unassigned,VM 1
+OpCo B,VM 2
 OpCo A,VM 1
 OpCo C,VM 2
-OpCo B,VM 3
-UNMAPPED,VM 4
-Unassigned,VM 4

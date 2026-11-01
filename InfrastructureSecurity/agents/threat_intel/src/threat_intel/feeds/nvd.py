@@ -1,6 +1,6 @@
 """NVD CVE API 2.0: official details (description, CVSS, affected products) of every CVE.
 
-Downloads CVEs modified since the last run (first run: NVD_BACKFILL_DAYS). NVD CVEs are enrichment, not
+Downloads CVEs modified since the last run (first run: FIRST_RUN_HOURS). NVD CVEs are enrichment, not
 threats by themselves (hundreds change every day); `derive.py` turns a CVE into a threat only when it is
 serious (CVSS >= 7) and its product is installed on one of our Defender devices.
 """
@@ -123,7 +123,7 @@ def fetch_cves(ctx: FeedContext, cve_ids: list[str]) -> int:
 def collect(ctx: FeedContext) -> int:
     state = ctx.store.feed_state("nvd")
     end = utcnow()
-    start = to_utc(state.get("cursor")) or end - timedelta(days=ctx.settings.nvd_backfill_days)
+    start = to_utc(state.get("cursor")) or end - timedelta(hours=ctx.settings.first_run_hours)
     start = max(start - timedelta(minutes=5), end - MAX_WINDOW)      # small overlap, NVD window limit
     total = fetch_window(ctx, start, end, tag=end.strftime("%H%M"))
     ctx.store.save_feed_state("nvd", "ok", total, cursor=end.isoformat())

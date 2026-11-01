@@ -4,7 +4,7 @@ The portal is the only user interface; this service has no web pages, only the A
   GET  /api/status       is a run in progress (here or by the scheduled task)? which step? last run?
   POST /api/run          start a run now (same job as `threat_intel run`; one at a time; needs the X-Threat-Intel header)
   GET  /api/fix          fix engine: plan + approvals + results + what the fixer is doing
-  POST /api/fix/approve | /api/fix/unapprove | /api/fix/save | /api/fix/unsave | /api/fix/run | /api/fix/probe
+  POST /api/fix/approve | /api/fix/unapprove | /api/fix/save | /api/fix/unsave | /api/fix/handover | /api/fix/manual | /api/fix/run | /api/fix/probe
                          (need the header X-Threat-Intel: fix; save = "Save for later" on a new fix)
 
 Design: every run exports its data to files (data/dashboard/*.json) and the portal reads those directly; this
@@ -16,11 +16,12 @@ requires a custom header (other websites can't send it).
 from __future__ import annotations
 
 import json
+import re
 import logging
 import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from threat_intel.config import Settings
 from threat_intel.store import Store
@@ -185,6 +186,11 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(200, s.status())
         if path == "/api/fix":
             return self._json(200, s.fix_view())
+        if path == "/api/fix/detail":
+            from threat_intel.fix.plan import detail
+            fid = (parse_qs(urlsplit(self.path).query).get("id") or [""])[0]
+            d = detail(s.settings, fid) if re.fullmatch(r"fx_[0-9a-f]{12}", fid) else None
+            return self._json(200, d) if d else self._json(404, {"error": "no such remediation"})
         return self._json(404, {"error": "not found"})
 
     def _body(self) -> dict:
@@ -214,6 +220,10 @@ class _Handler(BaseHTTPRequestHandler):
                 result = plan.save(s.settings, ids, by)
             elif path == "/api/fix/unsave":
                 result = plan.unsave(s.settings, ids, by)
+            elif path == "/api/fix/handover":
+                result = plan.hand_over(s.settings, ids, by)
+            elif path == "/api/fix/manual":
+                result = plan.mark_manual(s.settings, ids, by, str(body.get("note") or ""))
             elif path in ("/api/fix/run", "/api/fix/probe"):
                 started, message = s.start_fix("probe" if path.endswith("probe") else "run", method, ids)
                 result = {"started": started, "message": message}

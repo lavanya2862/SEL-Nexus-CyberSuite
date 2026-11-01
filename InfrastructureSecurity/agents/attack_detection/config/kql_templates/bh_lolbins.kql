@@ -1,10 +1,11 @@
-// name: Windows tools misused to download or run code (LOLBins)
+// name: certutil downloading a file from the internet
 // kind: behaviour
-// technique: T1218
+// technique: T1105
+// attack: 3
 DeviceProcessEvents
 | where Timestamp > ago({{LOOKBACK}}d)
-| where FileName in~ ("mshta.exe", "regsvr32.exe", "rundll32.exe", "certutil.exe", "bitsadmin.exe")
-| where ProcessCommandLine matches regex @"(?i)(https?://|javascript:|vbscript:|scrobj\.dll|-urlcache|/transfer)"
+| where FileName =~ "certutil.exe" or ProcessVersionInfoOriginalFileName =~ "CertUtil.exe"
+| where ProcessCommandLine has_any ("-urlcache", "/urlcache", "-verifyctl", "/verifyctl", "-split", "http://", "https://")
 | project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
           InitiatingProcessFileName, InitiatingProcessCommandLine
 | take 500

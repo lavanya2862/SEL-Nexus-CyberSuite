@@ -1,0 +1,30 @@
+// name: New sign-ins after the weak program misbehaved
+// kind: behaviour
+// technique: T1078
+// attack: 12
+let weak = DeviceTvmSoftwareVulnerabilities
+    | where CveId in ({{HOT_CVES}})
+    | extend Product = replace_regex(tolower(SoftwareName), @"[^a-z0-9]", "")
+    | distinct DeviceId, Product;
+let misbehaved = DeviceProcessEvents
+    | where Timestamp > ago({{LOOKBACK}}d)
+    | where FileName in~ ("cmd.exe", "powershell.exe", "pwsh.exe", "wscript.exe", "cscript.exe", "mshta.exe",
+                          "rundll32.exe", "regsvr32.exe", "WerFault.exe")
+    | extend Product = replace_regex(tolower(InitiatingProcessVersionInfoProductName), @"[^a-z0-9]", "")
+    | where isnotempty(Product)
+    | join kind=inner weak on DeviceId, Product
+    | summarize EventTime = min(Timestamp), WeakProgram = take_any(InitiatingProcessFileName) by DeviceId;
+let usual = DeviceLogonEvents
+    | where Timestamp > ago({{LOOKBACK}}d)
+    | where ActionType == "LogonSuccess"
+    | join kind=inner misbehaved on DeviceId
+    | where Timestamp < EventTime
+    | distinct DeviceId, AccountName;
+DeviceLogonEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "LogonSuccess" and AccountName !endswith "$"
+| join kind=inner misbehaved on DeviceId
+| where Timestamp between (EventTime .. (EventTime + 1d))
+| join kind=leftanti usual on DeviceId, AccountName
+| project Timestamp, DeviceId, DeviceName, AccountName, LogonType, RemoteIP, WeakProgram, EventTime
+| take 500

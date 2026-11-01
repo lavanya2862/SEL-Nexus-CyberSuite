@@ -1,0 +1,14 @@
+// name: Hidden channels with names attack tools use by default (named pipes)
+// kind: behaviour
+// technique: T1570
+// attack: 11
+DeviceEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "NamedPipeEvent"
+| extend PipeName = tostring(parse_json(AdditionalFields).PipeName)
+| where PipeName matches regex @"(?i)\\(msagent_[0-9a-f]{1,4}|MSSE-[0-9]{1,5}-server|postex_[0-9a-f]{2,6}|postex_ssh_[0-9a-f]{2,6}|status_[0-9a-f]{2}|mojo\.5688\.8052\.[0-9a-f]+|win_svc|ntsvcs_?[0-9a-f]*|scerpc_?[0-9a-f]*|DserNamePipe[0-9a-f]*|SearchTextHarvester|halfduplex_[0-9a-f]+|interprocess_[0-9a-f]+|lsadump|demoagent_[0-9]+|gruntsvc|isapi_http|winsock_[0-9a-f]+)$"
+| summarize Timestamp = min(Timestamp), take_any(DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName,
+            InitiatingProcessCommandLine) by DeviceId, PipeName
+| project Timestamp, DeviceId, DeviceName, PipeName, InitiatingProcessAccountName, InitiatingProcessFileName,
+          InitiatingProcessCommandLine
+| take 500

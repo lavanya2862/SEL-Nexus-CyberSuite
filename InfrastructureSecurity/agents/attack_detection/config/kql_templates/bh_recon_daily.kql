@@ -1,0 +1,17 @@
+// name: Same account scouting a little every day, over several days
+// kind: behaviour
+// technique: T1087
+// attack: 9
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName in~ ("whoami.exe", "net.exe", "net1.exe", "systeminfo.exe", "ipconfig.exe", "nltest.exe", "quser.exe",
+                      "tasklist.exe", "hostname.exe", "arp.exe", "route.exe", "netstat.exe", "dsquery.exe",
+                      "adfind.exe", "nslookup.exe")
+| where InitiatingProcessFileName !in~ ("MsSense.exe", "SenseIR.exe", "SenseCM.exe", "WindowsAzureGuestAgent.exe",
+                                        "CollectGuestLogs.exe")
+| where isnotempty(AccountName) and AccountName !in~ ("system", "local service", "network service")
+| summarize Days = dcount(startofday(Timestamp)), Commands = make_set(ProcessCommandLine, 30), Runs = count(),
+            Timestamp = min(Timestamp), LastSeen = max(Timestamp), take_any(DeviceName)
+            by DeviceId, AccountName
+| where Days >= 3
+| take 500

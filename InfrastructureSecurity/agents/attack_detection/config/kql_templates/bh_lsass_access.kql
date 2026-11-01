@@ -1,6 +1,7 @@
 // name: Unusual access to LSASS memory (credential theft)
 // kind: behaviour
 // technique: T1003.001
+// attack: 2
 DeviceEvents
 | where Timestamp > ago({{LOOKBACK}}d)
 | where ActionType == "OpenProcessApiCall" and FileName =~ "lsass.exe"

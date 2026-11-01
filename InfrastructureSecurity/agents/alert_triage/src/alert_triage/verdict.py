@@ -6,6 +6,7 @@ is returned instead (see `rules_only`).
 
 from __future__ import annotations
 
+from infra_core.style import STYLE
 import json
 import logging
 
@@ -25,7 +26,7 @@ Rules you must follow:
   "history", "alert", or "watchlist") and quote only values that appear in that source.
 - Output ONLY JSON matching the schema. Keep the summary to at most 4 factual sentences.
 - When you name a verdict in text, use Microsoft Defender's words: "true positive", "false positive",
-  "informational, expected activity" or "needs review"."""
+  "informational, expected activity" or "needs review".""" + "\n" + STYLE
 
 SCHEMA_HINT = """Return JSON with exactly these keys:
 {"summary": str, "verdict": "likely_true_positive|likely_false_positive|benign_positive|needs_investigation",

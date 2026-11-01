@@ -1,6 +1,7 @@
 """Settings for the Attack Detection Agent, read from environment variables and the suite .env file.
 
 Defender and AI settings are shared with the other agents (DEFENDER_*, GEMINI_*, AZURE_FOUNDRY_*); its own are ATTACK_*.
+ATTACK_DEFENDER_TENANT_ID / _CLIENT_ID / _CLIENT_SECRET give it its own Entra app registration instead of the shared one.
 
 Secrets are never printed: `missing()` and `describe()` only report whether a value is set.
 """
@@ -77,6 +78,7 @@ class Settings:
     tenant_id: str | None = None
     client_id: str | None = None
     client_secret: str | None = field(default=None, repr=False)
+    own_app: bool = False                     # True when the ATTACK_DEFENDER_* app registration is used
     gemini_api_key: str | None = field(default=None, repr=False)
     gemini_extra_keys: tuple[str, ...] = field(default=(), repr=False)   # GEMINI_API_KEY_2, _3 ...
     gemini_models: tuple[str, ...] = ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite")
@@ -106,9 +108,8 @@ class Settings:
     fix_allow_choco: bool = False                   # Chocolatey fallback (downloads + runs its installer as SYSTEM): opt-in
     fix_start_vms: bool = True                      # start a stopped lab VM before fixing it
     fix_devices: tuple[str, ...] = ()               # empty = every Defender device in the plan
-    attack_auto_fix: bool = True                    # the Attack Detection Agent approves and runs its own scan-and-clean (0 = wait for a person)
     # the Vulnerability Agent's folder: its data says when Defender first listed each CVE on each computer
-    threat_intel_dir: Path | None = None         # where the Threat Intel Agent publishes data/out/hunt_inputs.json
+    fix_engine_dir: Path | None = None           # the fix engine (Fix Centre; today in the Threat Intel folder) that proposes the scan-and-clean responses
 
     # ---------- paths ----------
     @property
@@ -178,13 +179,15 @@ class Settings:
 
     def describe(self) -> list[tuple[str, bool, str]]:
         """(setting, is_set, why it matters) for every secret/key. Never includes values."""
+        prefix, why = ("ATTACK_DEFENDER_", "Defender login: this agent's own app registration") if self.own_app \
+            else ("DEFENDER_", "Defender login: the app registration the agents share")
         return [
-            ("DEFENDER_TENANT_ID", bool(self.tenant_id), "Defender login (inventory, hunts)"),
-            ("DEFENDER_CLIENT_ID", bool(self.client_id), "Defender login (inventory, hunts)"),
-            ("DEFENDER_CLIENT_SECRET", bool(self.client_secret), "Defender login (inventory, hunts)"),
+            (f"{prefix}TENANT_ID", bool(self.tenant_id), why),
+            (f"{prefix}CLIENT_ID", bool(self.client_id), why),
+            (f"{prefix}CLIENT_SECRET", bool(self.client_secret), why),
             ("AZURE_FOUNDRY_API_KEY", self.has_azure, "AI via Azure AI Foundry (with ENDPOINT + DEPLOYMENT)"
              + (" - in use" if self.ai_provider == "azure" else "")),
-            ("GEMINI_API_KEY", self.has_gemini, "AI via Gemini: summaries, KQL drafts, report summary"
+            ("GEMINI_API_KEY", self.has_gemini, "AI via Gemini: fix steps and report summary"
              + _key_count(self) + (" - in use" if self.ai_provider == "gemini" else "")),
             ("NVD_API_KEY", bool(self.nvd_api_key), "optional: 10x faster NVD downloads"),
             ("ABUSECH_AUTH_KEY", bool(self.abusech_auth_key), "IOC feeds (ThreatFox, URLhaus, MalwareBazaar)"),
@@ -204,9 +207,12 @@ def load_settings(env_file: Path | None = None) -> Settings:
         data_dir=_resolve(_env("ATTACK_DATA_DIR") or "./data"),
         log_dir=_resolve(_env("ATTACK_LOG_DIR") or "./logs"),
         api_base=api_base,
-        tenant_id=_env("DEFENDER_TENANT_ID"),
-        client_id=_env("DEFENDER_CLIENT_ID"),
-        client_secret=_env("DEFENDER_CLIENT_SECRET"),
+        # its own Entra app registration when ATTACK_DEFENDER_CLIENT_ID is set, else the one the agents share
+        tenant_id=_env("ATTACK_DEFENDER_TENANT_ID") or _env("DEFENDER_TENANT_ID"),
+        client_id=_env("ATTACK_DEFENDER_CLIENT_ID") or _env("DEFENDER_CLIENT_ID"),
+        client_secret=(_env("ATTACK_DEFENDER_CLIENT_SECRET") if _env("ATTACK_DEFENDER_CLIENT_ID")
+                       else _env("DEFENDER_CLIENT_SECRET")),
+        own_app=bool(_env("ATTACK_DEFENDER_CLIENT_ID")),
         gemini_api_key=_env("GEMINI_API_KEY"),
         gemini_extra_keys=_extra_gemini_keys(),
         gemini_models=models,
@@ -235,8 +241,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         fix_allow_choco=(_env("FIX_ALLOW_CHOCO") or "0").lower() in ("1", "true", "yes"),
         fix_start_vms=(_env("FIX_START_VMS") or "1") not in ("0", "false", "no"),
         fix_devices=tuple(d.strip().lower() for d in (_env("FIX_DEVICES") or "").split(",") if d.strip()),
-        attack_auto_fix=(_env("ATTACK_AUTO_FIX") or "1").lower() not in ("0", "false", "no"),
-        threat_intel_dir=_resolve(_env("ATTACK_THREAT_INTEL_DIR") or "../threat_intel"),
+        fix_engine_dir=_resolve(_env("ATTACK_FIX_ENGINE_DIR") or "../threat_intel"),
     )
 
 

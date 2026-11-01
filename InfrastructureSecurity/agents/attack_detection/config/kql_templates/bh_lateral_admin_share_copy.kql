@@ -1,0 +1,11 @@
+// name: Files copied through hidden admin shares (C$, ADMIN$)
+// kind: behaviour
+// technique: T1021.002
+// attack: 5
+DeviceFileEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType in ("FileCreated", "FileModified")
+| where ShareName in~ ("C$", "ADMIN$", "D$", "IPC$") and isnotempty(RequestSourceIP)
+| project Timestamp, DeviceId, DeviceName, ActionType, FileName, FolderPath, SHA256, ShareName,
+          RemoteIP = RequestSourceIP, AccountName = RequestAccountName, InitiatingProcessFileName
+| take 500

@@ -1,0 +1,22 @@
+// name: Account added to Domain Admins
+// kind: behaviour
+// technique: T1098
+// attack: 8
+// needs: domain
+union
+    (DeviceEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType in ("UserAccountAddedToLocalGroup", "UserAccountAddedToGroup")
+     | extend Fields = parse_json(AdditionalFields)
+     | where tostring(Fields.GroupSid) endswith "-512" or tostring(Fields.GroupSid) endswith "-519"
+          or tostring(Fields.GroupName) in~ ("Domain Admins", "Enterprise Admins")
+     | project Timestamp, DeviceId, DeviceName, AccountName, Group = tostring(Fields.GroupName),
+               InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ProcessCommandLine has_any ("Domain Admins", "Enterprise Admins")
+     | where ProcessCommandLine has_any ("/add", "Add-ADGroupMember", "Add-ADPrincipalGroupMembership")
+     | project Timestamp, DeviceId, DeviceName, AccountName, Group = "Domain Admins",
+               InitiatingProcessAccountName = AccountName, InitiatingProcessFileName,
+               InitiatingProcessCommandLine = ProcessCommandLine)
+| take 500

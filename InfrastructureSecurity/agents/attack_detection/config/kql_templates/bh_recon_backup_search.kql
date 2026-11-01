@@ -1,0 +1,15 @@
+// name: Searches for backup servers and backup software
+// kind: behaviour
+// technique: T1518
+// attack: 9
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName in~ ("net.exe", "net1.exe", "nltest.exe", "dsquery.exe", "adfind.exe", "nslookup.exe", "ping.exe",
+                      "tasklist.exe", "sc.exe", "wmic.exe", "findstr.exe", "powershell.exe", "pwsh.exe", "cmd.exe")
+| where ProcessCommandLine has_any ("veeam", "commvault", "backupexec", "veritas", "arcserve", "acronis", "rubrik",
+                                    "cohesity", "netbackup", "datto")
+| where InitiatingProcessFileName !in~ ("MsSense.exe", "SenseIR.exe", "msiexec.exe")
+| where not(ProcessCommandLine has_any ("Program Files\\Veeam", "Program Files\\Commvault"))
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

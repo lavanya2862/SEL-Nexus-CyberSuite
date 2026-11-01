@@ -12,6 +12,7 @@ import logging
 
 from threat_intel.api_client import MAX_HUNT_ROWS, DefenderClient
 from threat_intel.config import read_csv
+from infra_core.settings import ignored_devices
 from threat_intel.store import Store, to_utc, utcnow
 
 log = logging.getLogger("threat_intel.inventory")
@@ -57,8 +58,10 @@ def opco_for(device: dict, rules: list[dict] | None = None) -> str:
 def pull_devices(client: DefenderClient) -> list[dict]:
     now = utcnow()
     rules = read_csv("opco_mapping.csv")
-    devices = []
+    devices, skip = [], ignored_devices()
     for m in client.get_all("/api/machines"):
+        if (m.get("computerDnsName") or "").split(".")[0].lower() in skip:
+            continue
         d = {"device_id": m.get("id"), "device_name": (m.get("computerDnsName") or "").split(".")[0].lower(),
              "os_platform": m.get("osPlatform"), "os_version": m.get("version"),
              "rbac_group": m.get("rbacGroupName"), "tags": ",".join(m.get("machineTags") or []),
@@ -92,6 +95,9 @@ def pull(store: Store, client: DefenderClient) -> dict:
     if len(vuln_rows) >= MAX_HUNT_ROWS:
         log.warning("Vulnerability query hit the 100k limit: use the Vulnerability Agent's export method for this estate size")
 
+    skip = ignored_devices()
+    software = [r for r in software if (r["device_name"] or "").lower() not in skip]
+    vulns = [r for r in vulns if (r["device_name"] or "").lower() not in skip]
     # replace the snapshot (current state only; history is not needed for Threat Intel)
     for table, rows in (("devices", devices), ("software", software), ("device_vulns", vulns)):
         store.execute(f"DELETE FROM {table}")
@@ -109,6 +115,7 @@ def pull(store: Store, client: DefenderClient) -> dict:
                           "category": r.get("ConfigurationCategory") or "", "subcategory": r.get("ConfigurationSubcategory") or "",
                           "impact": r.get("ConfigurationImpact"), "snapshot_at": now}
                          for r in client.run_query(SETTINGS_QUERY) if r.get("ConfigurationId")]
+        settings_rows = [r for r in settings_rows if (r["device_name"] or "").lower() not in skip]
         store.execute("DELETE FROM device_settings")
         store.upsert("device_settings", settings_rows)
         result["wrong_settings"] = len(settings_rows)

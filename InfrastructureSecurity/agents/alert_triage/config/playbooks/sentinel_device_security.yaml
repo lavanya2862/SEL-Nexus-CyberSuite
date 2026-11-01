@@ -3,7 +3,7 @@ label: Sentinel Windows security incident on a lab computer
 description: Sentinel rules on the lab VMs' Windows security log (failed logons, new users, admin rights, password resets, log cleared).
 scope: sentinel
 match:
-  any_title: ["uc4 lab - ", "failed logon", "local user", "added to administrators", "password of", "security log cleared"]
+  any_title: ["alert triage lab - ", "failed logon", "local user", "added to administrators", "password of", "security log cleared"]
 queries:
   - Q25_host_security_events
   - Q06_logon_failures_then_success

@@ -1,0 +1,16 @@
+// name: Machines contacting file-sharing sites
+// kind: behaviour
+// technique: T1567.002
+// attack: 10
+DeviceNetworkEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "ConnectionSuccess"
+| where RemoteUrl has_any ("mega.nz", "mega.co.nz", "mega.io", "transfer.sh", "dropboxapi.com", "content.dropboxapi.com",
+                           "anonfiles.com", "file.io", "gofile.io", "sendspace.com", "temp.sh", "catbox.moe",
+                           "pcloud.com", "wetransfer.com", "uploadfiles.io", "ufile.io", "bashupload.com", "oshi.at")
+| where InitiatingProcessFileName !in~ ("chrome.exe", "msedge.exe", "firefox.exe", "iexplore.exe", "opera.exe", "brave.exe",
+                                        "Dropbox.exe")
+| summarize Connections = count(), Timestamp = min(Timestamp), LastSeen = max(Timestamp),
+            take_any(DeviceName, InitiatingProcessAccountName, InitiatingProcessCommandLine, RemoteIP)
+            by DeviceId, InitiatingProcessFileName, RemoteUrl
+| take 500

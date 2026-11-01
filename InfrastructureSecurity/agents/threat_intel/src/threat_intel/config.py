@@ -25,9 +25,6 @@ class ConfigError(ValueError):
 
 # Setting names from before the agents got their names; they still work (infra_core.settings logs a hint once).
 OLD_NAMES = {
-    "THREAT_INTEL_DATA_DIR": ("UC1_DATA_DIR",),
-    "THREAT_INTEL_LOG_DIR": ("UC1_LOG_DIR",),
-    "THREAT_INTEL_VULN_AGENT_DIR": ("UC1_VULN_AGENT_DIR",),
 }
 
 
@@ -98,7 +95,7 @@ class Settings:
     otx_api_key: str | None = field(default=None, repr=False)
     teams_webhook_url: str | None = field(default=None, repr=False)
     cve_window_days: int = 30
-    nvd_backfill_days: int = 3
+    first_run_hours: int = 24                     # a feed's first run collects this much; later runs collect since the last one
     feed_backfill_days: int = 7
     hunt_lookback_days: int = 30
     # fix loop: which lab VMs Threat Intel may fix and how
@@ -108,10 +105,9 @@ class Settings:
     fix_allow_choco: bool = False                   # Chocolatey fallback (downloads + runs its installer as SYSTEM): opt-in
     fix_start_vms: bool = True                      # start a stopped lab VM before fixing it
     fix_devices: tuple[str, ...] = ()               # empty = every Defender device in the plan
-    attack_auto_fix: bool = True                    # the Attack Detection Agent approves and runs its own scan-and-clean (0 = wait for a person)
     # the Vulnerability Agent's folder: its data says when Defender first listed each CVE on each computer
     vuln_agent_dir: Path | None = None
-    attack_agent_dir: Path | None = None          # where the Attack Detection Agent publishes data/out/findings.json
+    attack_agent_dir: Path | None = None          # fix engine only: the Attack Detection Agent's data/out/findings.json
 
     # ---------- paths ----------
     @property
@@ -132,7 +128,7 @@ class Settings:
 
     @property
     def out_dir(self) -> Path:
-        """What this agent publishes for the others (hunt_inputs.json, see contracts/)."""
+        """What this agent publishes for the others (see contracts/)."""
         return self.data_dir / "out"
 
     @property
@@ -229,7 +225,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         otx_api_key=_env("OTX_API_KEY"),
         teams_webhook_url=_env("TEAMS_WEBHOOK_URL"),
         cve_window_days=_int("CVE_WINDOW_DAYS", 30),
-        nvd_backfill_days=_int("NVD_BACKFILL_DAYS", 3),
+        first_run_hours=_int("FIRST_RUN_HOURS", 24),
         feed_backfill_days=_int("FEED_BACKFILL_DAYS", 7),
         hunt_lookback_days=min(30, _int("HUNT_LOOKBACK_DAYS", 30)),
         azure_subscription_id=_env("AZURE_SUBSCRIPTION_ID"),
@@ -238,7 +234,6 @@ def load_settings(env_file: Path | None = None) -> Settings:
         fix_allow_choco=(_env("FIX_ALLOW_CHOCO") or "0").lower() in ("1", "true", "yes"),
         fix_start_vms=(_env("FIX_START_VMS") or "1") not in ("0", "false", "no"),
         fix_devices=tuple(d.strip().lower() for d in (_env("FIX_DEVICES") or "").split(",") if d.strip()),
-        attack_auto_fix=(_env("ATTACK_AUTO_FIX") or "1").lower() not in ("0", "false", "no"),
         vuln_agent_dir=_resolve(_env("THREAT_INTEL_VULN_AGENT_DIR") or "../vulnerability"),
         attack_agent_dir=_resolve(_env("THREAT_INTEL_ATTACK_AGENT_DIR") or "../attack_detection"),
     )

@@ -57,4 +57,13 @@ class FixAdvice(BaseModel):
 class RemediationMove(BaseModel):
     action: str = Field(description="One of: quick_scan, full_scan, stop")
     reason: str = Field(description="Why this is the right next move, from the evidence and the results so far, max 30 words")
-    summary: str = Field(default="", description="Only with stop: the outcome for the administrator, plain English, max 40 words")
+    summary: str = Field(default="", description="Only with stop: the outcome for the administrator, professional and concise, max 40 words")
+
+
+class AppRemediationMove(BaseModel):
+    action: str = Field(description="One of the moves listed in the instructions, or stop")
+    reason: str = Field(description="Why this is the right next move, from the results so far, professional, max 30 words")
+    summary: str = Field(default="", description="Only with stop: outcome, cause and required next action for the security administrator, professional and concise, max 50 words")
+    cause: str = Field(default="", description="Only with stop and not fixed: the root cause, from the results only, max 30 words")
+    steps: list[str] = Field(default_factory=list, description="Only with stop and not fixed: 2 to 5 manual steps for the owner, each starting with a verb, max 25 words each")
+    owner: str = Field(default="", description="Only with stop and not fixed: who must act, e.g. IT operations, device owner, endpoint security team")

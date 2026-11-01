@@ -1,0 +1,21 @@
+// name: One program injecting code into another
+// kind: behaviour
+// technique: T1055
+// attack: 11
+DeviceEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType in ("CreateRemoteThreadApiCall", "QueueUserApcRemoteApiCall", "SetThreadContextRemoteApiCall",
+                       "NtAllocateVirtualMemoryRemoteApiCall", "NtMapViewOfSectionRemoteApiCall")
+| where InitiatingProcessFileName !in~ ("MsMpEng.exe", "MsSense.exe", "SenseIR.exe", "csrss.exe", "services.exe",
+                                        "svchost.exe", "wininit.exe", "lsass.exe", "smss.exe", "explorer.exe",
+                                        "dwm.exe", "taskmgr.exe", "WerFault.exe", "conhost.exe", "procexp64.exe",
+                                        "devenv.exe", "vsjitdebugger.exe", "msiexec.exe", "TiWorker.exe")
+| where FileName in~ ("lsass.exe", "explorer.exe", "svchost.exe", "rundll32.exe", "dllhost.exe", "notepad.exe",
+                      "werfault.exe", "spoolsv.exe", "winlogon.exe", "powershell.exe", "msedge.exe", "chrome.exe",
+                      "searchprotocolhost.exe", "gpupdate.exe")
+| summarize Calls = count(), Timestamp = min(Timestamp), Kinds = make_set(ActionType),
+            take_any(DeviceName, InitiatingProcessAccountName, InitiatingProcessCommandLine, InitiatingProcessSHA256)
+            by DeviceId, InitiatingProcessFileName, Target = FileName
+| project Timestamp, DeviceId, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName,
+          InitiatingProcessCommandLine, FileName = Target, Kinds, Calls, SHA256 = InitiatingProcessSHA256
+| take 500

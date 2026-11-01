@@ -1,0 +1,13 @@
+attack,name,description,tactics,severity,lab_test
+1,Ransomware,"Mass file encryption or deletion, shadow copy and backup removal, and ransom notes written to disk.","Impact, Defense Evasion",Critical,Test-01-Ransomware.ps1
+2,Credential theft,"Access to LSASS memory, credential dumping tools, and harvesting of stored or cached credentials.",Credential Access,Critical,Test-02-PasswordTheft.ps1
+3,Malicious scripts,"Obfuscated or encoded PowerShell, script hosts launched from Office or browsers, and abuse of built-in Windows binaries (LOLBins).","Execution, Defense Evasion",High,Test-03-HarmfulScripts.ps1
+4,Defender tampering,"Attempts to disable Microsoft Defender protection, add exclusions or stop security services.",Defense Evasion,High,Test-04-DefenderTamper.ps1
+5,Lateral movement,"Remote execution, remote service creation and admin-share access from one device to another.",Lateral Movement,High,Test-05-Spreading.ps1
+6,Known malware,"Files and processes that Microsoft Defender Antivirus or threat intelligence identifies as known malware.",Execution,High,Test-06-KnownMalware.ps1
+7,Persistence,"Mechanisms that survive a restart: Run keys, Startup items, scheduled tasks, services, WMI event subscriptions and accessibility-feature hijacks.",Persistence,High,Test-07-HiddenBackdoor.ps1
+8,Rogue administrator account,"New local or domain accounts, and accounts added to privileged groups outside the normal process.","Persistence, Privilege Escalation",High,Test-08-SecretAdminAccount.ps1
+9,Discovery,"Bursts of reconnaissance commands that enumerate users, groups, shares, hosts and network configuration.",Discovery,Medium,Test-09-QuietScouting.ps1
+10,Data exfiltration,"Staging and archiving of data followed by unusual outbound transfers, including slow transfers spread over time.","Collection, Exfiltration",High,Test-10-SlowDataTheft.ps1
+11,Command and control,"Periodic beaconing, named pipes used by attack frameworks, and programs that normally never connect to the internet doing so.",Command and Control,High,Test-11-CallingHome.ps1
+12,Exploited vulnerability,"A device with a Critical or High vulnerability that has a public exploit, combined with signs of exploitation or of attacks 1 to 11 on the same device.",Initial Access,Critical,Test-12-OpenDoor.ps1

@@ -1,0 +1,25 @@
+// name: One program contacting the same address at a steady rhythm
+// kind: behaviour
+// technique: T1071.001
+// attack: 11
+DeviceNetworkEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType in ("ConnectionSuccess", "ConnectionAttempt") and RemoteIPType == "Public"
+| where InitiatingProcessFileName !in~ ("MsSense.exe", "SenseNdr.exe", "SenseCncProxy.exe", "MsMpEng.exe",
+                                        "chrome.exe", "msedge.exe", "firefox.exe", "OneDrive.exe", "Teams.exe",
+                                        "ms-teams.exe", "WindowsAzureGuestAgent.exe", "WaAppAgent.exe", "svchost.exe")
+| extend Target = coalesce(RemoteUrl, RemoteIP)
+| project Timestamp, DeviceId, DeviceName, InitiatingProcessFileName, Target, RemoteIP, RemotePort,
+          InitiatingProcessAccountName, InitiatingProcessCommandLine
+| sort by DeviceId asc, InitiatingProcessFileName asc, Target asc, Timestamp asc
+| extend Gap = iff(prev(DeviceId) == DeviceId and prev(InitiatingProcessFileName) == InitiatingProcessFileName
+                   and prev(Target) == Target, datetime_diff("second", Timestamp, prev(Timestamp)), long(null))
+| where Gap > 30
+| summarize Calls = count(), AvgGap = avg(Gap), StdGap = stdev(Gap), Timestamp = min(Timestamp), LastSeen = max(Timestamp),
+            take_any(DeviceName, RemoteIP, RemotePort, InitiatingProcessAccountName, InitiatingProcessCommandLine)
+            by DeviceId, InitiatingProcessFileName, Target
+| where Calls >= 24 and AvgGap between (60.0 .. 3600.0) and StdGap / AvgGap < 0.2
+| project Timestamp, DeviceId, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName,
+          InitiatingProcessCommandLine, RemoteUrl = Target, RemoteIP, RemotePort, Calls,
+          EverySeconds = round(AvgGap, 0), LastSeen
+| take 500

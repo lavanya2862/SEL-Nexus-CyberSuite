@@ -1,0 +1,25 @@
+// name: New service created on a machine from another machine
+// kind: behaviour
+// technique: T1021.002
+// attack: 5
+union
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where (FileName =~ "sc.exe" and ProcessCommandLine matches regex @"(?i)\\\\[^\s\\]+\s+(create|config)\b")
+          or (ProcessCommandLine has "New-Service" and ProcessCommandLine has_any ("-ComputerName", "-CimSession", "Invoke-Command"))
+     | project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+               InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "ServiceInstalled"
+     | join kind=inner (DeviceLogonEvents
+                        | where Timestamp > ago({{LOOKBACK}}d)
+                        | where ActionType == "LogonSuccess" and LogonType == "Network" and RemoteIPType == "Private"
+                        | project DeviceId, LogonTime = Timestamp, RemoteIP, LogonAccount = AccountName) on DeviceId
+     | where Timestamp between (LogonTime .. (LogonTime + 2m))
+     | extend Fields = parse_json(AdditionalFields)
+     | summarize arg_min(Timestamp, *) by DeviceId, ServiceName = tostring(Fields.ServiceName)
+     | project Timestamp, DeviceId, DeviceName, AccountName = LogonAccount, FileName = ServiceName,
+               ProcessCommandLine = strcat("service installed after a network sign-in from ", RemoteIP),
+               InitiatingProcessFileName, InitiatingProcessCommandLine)
+| take 500

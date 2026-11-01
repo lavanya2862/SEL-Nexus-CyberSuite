@@ -113,5 +113,4 @@ class ThreatIntelSource:
         folder = self.root / "data" / "reports"
         files = sorted(folder.glob("*.*"), key=lambda p: p.stat().st_mtime, reverse=True) if folder.is_dir() else []
         return [{"name": p.name, "size": p.stat().st_size, "modified": mtime_iso(p)}
-                for p in files if p.suffix.lower() in (".docx", ".pdf", ".xlsx")
-                and not p.name.startswith("UC1_Threat_Hunting_Report")]    # replaced by Threat_Intel / Attack_Detection
+                for p in files if p.suffix.lower() in (".docx", ".pdf", ".xlsx")]

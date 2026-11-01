@@ -1,0 +1,15 @@
+// name: PowerShell logging switched off
+// kind: behaviour
+// technique: T1562.002
+// attack: 4
+DeviceRegistryEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where (ActionType == "RegistryValueSet" and RegistryKey has @"\PowerShell\"
+         and RegistryValueName in~ ("EnableScriptBlockLogging", "EnableModuleLogging", "EnableTranscripting",
+                                    "EnableScriptBlockInvocationLogging")
+         and RegistryValueData in ("0", "0x00000000"))
+     or (ActionType in ("RegistryValueDeleted", "RegistryKeyDeleted")
+         and RegistryKey has_any ("ScriptBlockLogging", "ModuleLogging", "Transcription"))
+| project Timestamp, DeviceId, DeviceName, ActionType, RegistryKey, RegistryValueName, RegistryValueData,
+          InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

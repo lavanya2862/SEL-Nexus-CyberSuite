@@ -1,0 +1,11 @@
+// name: Windows backup list being wiped (wbadmin)
+// kind: behaviour
+// technique: T1490
+// attack: 1
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName =~ "wbadmin.exe"
+| where ProcessCommandLine has "delete" and ProcessCommandLine has_any ("catalog", "systemstatebackup", "backup")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

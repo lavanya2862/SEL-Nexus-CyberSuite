@@ -1,17 +1,20 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, ArrowRight, Bookmark, Bot, CheckCircle2, ChevronDown, ListChecks, Newspaper, ShieldAlert, ShieldCheck, Sparkles, Undo2, Wrench, Zap } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Bookmark, Bot, CheckCircle2, ListChecks, Newspaper, ShieldAlert, ShieldCheck, Sparkles, Undo2, Wrench, Zap } from 'lucide-react'
 import { StatusPill } from '@/components/FixLoop'
 import { Panel, SevTag } from '@/components/kit'
 import { VulnList } from '@/components/VulnList'
 import { BasketBar } from '@/agents/fixes/FixCentre'
-import { FixDown, autoFix, canApprove, isSetting, settingChange, useFix, useFixAction, type FixRow } from '@/agents/fixes/data'
+import { FixDown, autoFix, canApprove, isIndicatorResponse, isSetting, settingChange, useFix, useFixAction, type FixRow } from '@/agents/fixes/data'
+import { ManualAction } from '@/components/ManualAction'
+import { RecordLink } from '@/components/FixRecord'
 import { num, shortDate } from '@/lib/format'
 import { AGENT_NAME, type RunFix, type AgentKey } from '@/lib/runs'
 import { GettingReady, useAutoStart } from '@/lib/services'
-import { statusColor } from '@/lib/theme'
-import { PRIORITY, daysBetween, fixKind, useVulnData, vmDetails, vmKey, type FixKind, type VulnData, type VulnFixApp, type VulnFixSetting, type VmCve } from '@/agents/vulnerability/data'
+import { chartTokens, statusColor, useTheme } from '@/lib/theme'
+import { PRIORITY, daysBetween, useVulnData, vmDetails, vmKey, type VulnData, type VulnFixApp, type VulnFixSetting, type VmCve } from '@/agents/vulnerability/data'
 import { cn } from '@/lib/utils'
+import { useAttackDetectionData } from '@/agents/attack-detection/data'
 
 /** The fix engine's stages (Threat Intel fix plan): 1 urgent, 2 end of life, 3 other updates. Settings are stage 3. */
 const STAGE = {
@@ -20,9 +23,6 @@ const STAGE = {
   3: { label: 'Routine update', color: 'var(--sky)' },
 } as const
 
-const KIND_LABEL: Record<FixKind, string> = {
-  update: 'Software update', os: 'OS security update', upgrade: 'Software upgrade', none: 'Attention required: no security update available',
-}
 
 const isResponse = (r: FixRow) => r.action === 'respond'
 const stageOf = (r: FixRow) =>
@@ -134,9 +134,7 @@ export function NewFixes({ fix, uc, since }: { fix: RunFix; uc: AgentKey; since:
               </h2>
               <p className="mt-1 max-w-[70ch] text-sm text-ink-3">
                 {attack && fix.new > 0 && <>For every new detection: a Defender update, quick scan and clean-up of the affected device. Device isolation is outside this agent's scope; perform it in Microsoft Defender. </>}
-                {attack && fix.new > 0 && v?.attack_auto_fix
-                  ? <>Auto-fix is on: the agent approved and ran these itself. Check each result below; <b className="text-ink-2">Approve</b> again retries one that failed.</>
-                  : fix.new
+                {fix.new
                   ? <>Review each item. <b className="text-ink-2">Approve</b> adds it to the remediation queue; no device is changed until you select <b className="text-ink-2">Execute remediation</b> and confirm. <b className="text-ink-2">Defer</b> keeps it in Remediation for later.</>
                   : attack ? 'No new detections; no response required.' : 'Defender reported no new findings since the last run.'}
               </p>
@@ -268,37 +266,17 @@ function fixLinks(uc: AgentKey, since: string | null, fix: RunFix): [string, str
 
 function Count({ n, label, color, strong }: { n: number; label: string; color?: string; strong?: boolean }) {
   return (
-    <span className={cn('inline-flex items-center gap-1.5 rounded-full border border-hairline px-3 py-1', strong && 'bg-well')}>
+    <span className={cn('inline-flex items-center gap-1.5 rounded-lg border border-hairline px-3 py-1', strong && 'bg-well')}>
       <b className="tabular text-sm" style={{ color }}>{num(n)}</b> <span className="text-ink-3">{label}</span>
     </span>
   )
 }
 
-function Stat({ n, label, color }: { n: number; label: string; color?: string }) {
-  return (
-    <div className="rounded-lg bg-well px-2.5 py-1.5">
-      <div className="tabular text-base font-semibold leading-tight" style={{ color }}>{num(n)}</div>
-      <div className="text-[11px] text-ink-3">{label}</div>
-    </div>
-  )
-}
-
-function More({ title, children }: { title: ReactNode; children: ReactNode }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="rounded-lg border border-hairline">
-      <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-ink-2 hover:bg-well">
-        {title} <ChevronDown className={cn('size-3.5 transition-transform', open && 'rotate-180')} />
-      </button>
-      {open && <div className="border-t border-hairline px-3 py-2.5 animate-in fade-in duration-200">{children}</div>}
-    </div>
-  )
-}
-
-const MOVE_LABEL = { quick_scan: 'Quick scan', full_scan: 'Full scan', stop: 'Finished' } as const
+const MOVE_LABEL = { quick_scan: 'Quick scan', full_scan: 'Full scan', winget: 'Install with winget', choco: 'Install with Chocolatey',
+  uninstall: 'Uninstall', apply: 'Apply setting', stop: 'Finished' } as const
 
 /** What the Remediation Agent did on this device, move by move, while it runs and after. */
-function AgentMoves({ r }: { r: FixRow }) {
+export function AgentMoves({ r }: { r: FixRow }) {
   const moves = r.agent ?? []
   const running = r.status === 'running' || r.status === 'queued'
   if (!moves.length && !running && !(r.message && r.status !== 'proposed' && r.status !== 'saved')) return null
@@ -334,6 +312,7 @@ export function FixCardSmall({ r, busy, onFix, onAutoFix, onSave, onUndo, detail
   onAutoFix?: () => void
   detail?: CardDetail; added?: number; onList?: () => void
 }) {
+  if (isResponse(r)) return <ResponseCard r={r} busy={busy} onFix={onFix} onAutoFix={onAutoFix} onSave={onSave} onUndo={onUndo} />
   const auto = onAutoFix && (
     <button onClick={onAutoFix} disabled={busy} title="Approve and run this remediation now"
       className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
@@ -351,8 +330,7 @@ export function FixCardSmall({ r, busy, onFix, onAutoFix, onSave, onUndo, detail
   const late = left != null && left < 0
   const noFix = cves.filter((c) => c.nofix).length
   const total = cves.length || r.findings
-  const advice = app?.ai ?? setting?.ai ?? null
-  const remediationLink = setting ? '/fixes/settings' : isResponse(r) ? '/fixes/attacks' : `/fixes?sw=${encodeURIComponent(r.software_name)}`
+  const remediationLink = setting ? '/fixes/settings' : isResponse(r) ? (isIndicatorResponse(r) ? '/fixes/indicators' : '/fixes/attacks') : `/fixes?sw=${encodeURIComponent(r.software_name)}`
   return (
     <li className={cn('flex flex-col overflow-hidden rounded-xl border border-hairline bg-panel transition-opacity', r.status === 'saved' && 'opacity-70')}>
       <span className="h-1" style={{ background: stage.color }} />
@@ -367,111 +345,42 @@ export function FixCardSmall({ r, busy, onFix, onAutoFix, onSave, onUndo, detail
         <div className="text-sm font-semibold leading-snug">
           {r.app} {r.version && <span className="font-normal text-ink-3">{r.version}</span>}
         </div>
-        {app && (
-          <div className="text-[11px] text-ink-3">
-            {KIND_LABEL[fixKind(app)]}
-            {due && (late
-              ? <> · <b className="font-medium" style={{ color: statusColor.critical }}>overdue since {shortDate(due)}</b></>
-              : <> · due <b className="font-medium text-ink-2">{shortDate(due)}</b></>)}
-          </div>
-        )}
-        {detail?.firstSeen && !isSetting(r) && !isResponse(r) && (
-          <div className="text-[11px] text-ink-3" title="The deadline counts from the day Defender first found the vulnerability on this device, plus the patching rule's days for its severity. The agent proposing it in this run does not restart that clock.">
-            Defender first found these on this device on <b className="font-medium text-ink-2">{shortDate(detail.firstSeen)}</b>
-          </div>
-        )}
+        {/* one line to decide on; everything else (CVEs, AI advice, first seen) is on the Remediation card */}
         <div className="text-xs text-ink-2">{whatItDoes(r)}</div>
-        {isResponse(r) && r.note && <div className="line-clamp-2 break-all rounded-md bg-well px-2 py-1 font-mono text-[11px] text-ink-3" title={r.note}>{r.note}</div>}
         {isResponse(r) && <AgentMoves r={r} />}
-
-        {added ? (
-          <div className="rounded-md px-2 py-1 text-[11px] font-medium" style={{ color: statusColor.warning, background: `color-mix(in oklab, ${statusColor.warning} 12%, transparent)` }}>
-            +{num(added)} new vulnerabilit{added === 1 ? 'y' : 'ies'} found in this run
-            {total > added && (
-              <div className="mt-0.5 font-normal text-ink-2">
-                Same update for all of them: approving clears all <b>{num(total)}</b> ({num(total - added)} from earlier runs + {num(added)} new).
-              </div>
-            )}
+        {!isSetting(r) && !isResponse(r) && total > 0 && (
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-ink-3">
+            <span><b className="tabular font-semibold text-ink">{num(total)}</b> vulnerabilit{total === 1 ? 'y' : 'ies'}</span>
+            {severe > 0 && <span style={{ color: statusColor.critical }}><b className="tabular font-semibold">{num(severe)}</b> critical / high</span>}
+            {due && <span style={late ? { color: statusColor.critical } : undefined}>{late ? `${num(-left!)} d overdue` : left != null ? `due in ${num(left)} d` : `due ${shortDate(due)}`}</span>}
+            {noFix > 0 && <span style={{ color: statusColor.warning }}>{num(noFix)} without update</span>}
           </div>
-        ) : null}
-
-        {detail && !isSetting(r) && !isResponse(r) && total > 0 ? (
-          <>
-            <div className="grid grid-cols-3 gap-1.5">
-              <Stat n={total} label="Vulnerabilities" />
-              <Stat n={severe} label="Critical / high" color={severe ? statusColor.critical : undefined} />
-              {left != null ? (
-                <div className="rounded-lg bg-well px-2.5 py-1.5">
-                  <div className="tabular text-base font-semibold leading-tight" style={{ color: late ? statusColor.critical : undefined }}>{num(Math.abs(left))}</div>
-                  <div className="text-[11px] text-ink-3">{late ? `day${left === -1 ? '' : 's'} overdue` : `day${left === 1 ? '' : 's'} left`}</div>
-                </div>
-              ) : <Stat n={cves.filter((c) => c.nofix).length} label="No update yet" />}
-            </div>
-            {cves.length > 0 && (
-              <ul className="divide-y divide-hairline rounded-lg border border-hairline text-[11px]">
-                {cves.slice(0, 3).map((c) => (
-                  <li key={c.cve} className="flex items-center gap-2 px-2.5 py-1.5">
-                    <span className="font-mono text-ink">{c.cve}</span>
-                    <span className="ml-auto flex items-center gap-1.5 text-ink-2">
-                      <SevTag sev={c.sev} />{c.cvss != null && <span className="tabular text-ink-3">{c.cvss}</span>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {noFix > 0 && (
-              <div className="text-[11px]" style={{ color: statusColor.warning }}>
-                {noFix >= cves.length ? 'No security update available for any of these' : `No security update available for ${num(noFix)} of them (the update remediates the rest)`}
-              </div>
-            )}
-            {/* one update or removal clears the whole version, whichever agent reported each vulnerability */}
-            {r.threats?.length && !added ? (
-              <div className="rounded-md bg-well px-2 py-1 text-[11px] text-ink-2">
-                Approving clears <b>all {num(total)}</b> vulnerabilities on {r.app} {r.version} on {r.device_name}, not only the ones in threat intelligence.
-              </div>
-            ) : null}
-          </>
-        ) : !isSetting(r) && r.findings > 0 ? (
-          <div className="text-xs text-ink-3">{num(r.findings)} vulnerabilit{r.findings === 1 ? 'y' : 'ies'}</div>
-        ) : null}
-
+        )}
         {setting && (
           <div className="text-[11px] text-ink-3">
-            {setting.category}{setting.subcategory && ` · ${setting.subcategory}`}{setting.impact ? ` · impact ${setting.impact}` : ''}
-            {setting.user_impact && <span style={{ color: statusColor.warning }}> · users may notice the change</span>}
+            {setting.category}{setting.impact ? ` · impact ${setting.impact}/10` : ''}
+            {setting.user_impact && <span style={{ color: statusColor.warning }}> · users may notice</span>}
           </div>
         )}
-
-        {r.threats && r.threats.length > 0 && (
-          <div className="flex items-start gap-1.5 text-[11px] text-violet" title={r.threats.map((t) => t.title).join('\n')}>
-            <Newspaper className="mt-0.5 size-3.5 shrink-0" />
-            <span className="line-clamp-2">In the news: {r.threats[0].title}{r.threats.length > 1 && ` +${r.threats.length - 1} more`}</span>
+        {(added || (r.threats && r.threats.length > 0)) ? (
+          <div className="flex items-center gap-1.5 text-[11px] font-medium" style={{ color: added ? statusColor.warning : 'var(--violet)' }}>
+            {added ? <>+{num(added)} new in this run</> : <><Newspaper className="size-3.5 shrink-0" /><span className="truncate" title={r.threats!.map((t) => t.title).join('\n')}>In the news: {r.threats![0].title}</span></>}
           </div>
-        )}
+        ) : null}
 
-        {(advice?.what_is_wrong || setting?.microsoft.risk) && (
-          <p className="line-clamp-3 text-xs leading-relaxed text-ink-2">{advice?.what_is_wrong || setting?.microsoft.risk}</p>
-        )}
-        {advice && (advice.why_now || advice.side_effects) && (
-          <More title="Why now and user impact">
-            {advice.why_now && <p className="text-xs leading-relaxed text-ink-2">{advice.why_now}</p>}
-            {advice.worst_case && <p className="mt-1.5 text-xs text-ink-2"><b className="text-ink">Potential impact: </b>{advice.worst_case}</p>}
-            {advice.side_effects && <p className="mt-1.5 text-xs text-ink-2"><b className="text-ink">User impact: </b>{advice.side_effects}</p>}
-          </More>
-        )}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          {onList && detail && !isSetting(r) && (
+            <button onClick={onList} className="inline-flex items-center gap-1 font-medium text-sky hover:underline">
+              <ListChecks className="size-3.5" /> View {total === 1 ? 'it' : 'all'}
+            </button>
+          )}
+          <Link to={remediationLink} className="ml-auto inline-flex items-center gap-1 font-medium text-ink-2 hover:text-ink hover:underline">
+            Details in Remediation <ArrowRight className="size-3.5" />
+          </Link>
+        </div>
 
-        {detail && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-            {onList && (
-              <button onClick={onList} className="inline-flex items-center gap-1.5 font-semibold text-sky hover:underline">
-                <ListChecks className="size-3.5" /> {total === 1 ? 'View the vulnerability' : `View all ${num(total)} vulnerabilities`}
-              </button>
-            )}
-            <Link to={remediationLink} className="ml-auto inline-flex items-center gap-1 font-medium text-ink-2 hover:text-ink hover:underline">
-              Full card in Remediation <ArrowRight className="size-3.5" />
-            </Link>
-          </div>
-        )}
+        <ManualAction r={r} compact />
+        {r.started_at && <RecordLink id={r.fix_id} />}
 
         <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2">
           {r.status === 'proposed' ? (
@@ -503,6 +412,75 @@ export function FixCardSmall({ r, busy, onFix, onAutoFix, onSave, onUndo, detail
               ) : r.status === 'verified' ? (
                 <ShieldCheck className="size-4" style={{ color: statusColor.good }} />
               ) : null}
+            </>
+          )}
+        </div>
+      </div>
+    </li>
+  )
+}
+
+/**
+ * A response to a detection, as a decision card: what was found and where, in a few readable lines, the latest
+ * result once it has run, and the decision buttons. The evidence, hunt results and full agent log stay on the
+ * Attack detection and Remediation pages, one click away.
+ */
+function ResponseCard({ r, busy, onFix, onAutoFix, onSave, onUndo }: {
+  r: FixRow; busy: boolean; onFix: () => void; onAutoFix?: () => void; onSave: () => void; onUndo: (action: 'unapprove' | 'unsave') => void
+}) {
+  const { theme } = useTheme()
+  const detections = useAttackDetectionData().data
+  const h = detections?.hits.find((x) => `response:${x.finding_id}` === r.software_name)
+  const indicator = isIndicatorResponse(r)
+  const sevColor = h ? (chartTokens[theme].severity as Record<string, string>)[h.severity] ?? statusColor.warning : statusColor.critical
+  const last = (r.agent ?? []).filter((m) => m.result).slice(-1)[0]
+  const result = last?.result ?? (r.status !== 'proposed' && r.status !== 'saved' ? r.message : null)
+  const ok = last?.status === 'done' || r.status === 'done' || r.status === 'verified'
+  const what = h ? (h.resolution?.what_happened || h.detail) : indicator ? 'A collected indicator of compromise was observed on this device.' : r.app
+  const link = indicator ? '/fixes/indicators' : `/fixes/attacks?show=all&fix=${encodeURIComponent(r.fix_id)}`
+  const btn = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50'
+  return (
+    <li className={cn('flex flex-col overflow-hidden rounded-xl border border-hairline bg-panel', r.status === 'saved' && 'opacity-70')}>
+      <span className="h-1" style={{ background: sevColor }} />
+      <div className="flex flex-1 flex-col gap-2 p-4">
+        <div className="flex items-center justify-between gap-2 text-[11px] font-medium">
+          <span className="flex min-w-0 items-center gap-2">
+            {h ? <><SevTag sev={h.severity} /><span className="truncate font-normal text-ink-3">Attack {h.attack} · {h.attack_name}</span></>
+              : <span className="font-normal text-ink-3">{indicator ? 'Indicator seen on the device' : 'Detection'}</span>}
+          </span>
+          <span className="shrink-0 rounded-md bg-well px-1.5 py-0.5 text-ink-2">{r.device_name}</span>
+        </div>
+        <div className="font-semibold leading-snug">{h ? h.search_name : r.app}</div>
+        <p className="line-clamp-3 text-xs leading-relaxed text-ink-2">{what}</p>
+        <div className="text-[11px] text-ink-3">
+          Response: Defender scan and clean
+          {h?.first_hit ? <> · first seen {shortDate(h.first_hit.slice(0, 10))}</> : null}
+        </div>
+        {result && (
+          <div className="flex items-start gap-1.5 rounded-lg px-2.5 py-1.5 text-xs" style={{ color: ok ? statusColor.good : statusColor.critical, background: `color-mix(in oklab, ${ok ? statusColor.good : statusColor.critical} 10%, transparent)` }}>
+            {ok ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" /> : <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />}
+            <span className="line-clamp-2">{result}</span>
+          </div>
+        )}
+        <Link to={link} className="inline-flex items-center gap-1 self-start text-xs font-medium text-blue hover:underline">
+          Evidence and full details <ArrowRight className="size-3.5" />
+        </Link>
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2">
+          {r.status === 'proposed' ? (
+            <>
+              <button onClick={onSave} disabled={busy} className={cn(btn, 'border border-hairline font-medium hover:bg-well')}><Bookmark className="size-3.5" /> Defer</button>
+              <span className="flex gap-1.5">
+                <button onClick={onFix} disabled={busy} className={cn(btn, onAutoFix ? 'border border-hairline hover:bg-well' : 'btn-blue')}><Zap className="size-3.5" /> Approve</button>
+                {onAutoFix && <button onClick={onAutoFix} disabled={busy} title="Approve and run this remediation now" className={cn(btn, 'btn-blue')}><Sparkles className="size-3.5" /> Auto-fix</button>}
+              </span>
+            </>
+          ) : (
+            <>
+              <StatusPill r={r} />
+              {r.status === 'saved' ? <button onClick={() => onUndo('unsave')} disabled={busy} className={cn(btn, 'font-medium text-ink-2 hover:bg-well')}><Undo2 className="size-3.5" /> Undo</button>
+                : r.status === 'approved' ? <button onClick={() => onUndo('unapprove')} disabled={busy} className={cn(btn, 'font-medium text-ink-2 hover:bg-well')}><Undo2 className="size-3.5" /> Remove</button>
+                : r.status === 'failed' || r.status === 'still_there' ? <button onClick={onAutoFix ?? onFix} disabled={busy} className={cn(btn, 'btn-blue')}><Sparkles className="size-3.5" /> Try again</button>
+                : null}
             </>
           )}
         </div>

@@ -1,0 +1,15 @@
+// name: PowerShell started hidden, with safety checks skipped
+// kind: behaviour
+// technique: T1059.001
+// attack: 3
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName in~ ("powershell.exe", "pwsh.exe")
+| where ProcessCommandLine matches regex @"(?i)\s[-/]w(indowstyle|in|i)?\s+(hidden|1)\b"
+| where ProcessCommandLine matches regex @"(?i)\s[-/](ep|exec|executionpolicy)\s+(bypass|unrestricted)\b"
+| where ProcessCommandLine matches regex @"(?i)\s[-/](nop|noprofile|noni|noninteractive)\b"
+| where InitiatingProcessFileName !in~ ("MsSense.exe", "SenseIR.exe", "SenseCM.exe", "WindowsAzureGuestAgent.exe",
+                                        "CollectGuestLogs.exe", "gc_worker.exe")
+| project Timestamp, DeviceId, DeviceName, AccountName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

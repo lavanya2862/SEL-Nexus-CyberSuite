@@ -1,0 +1,14 @@
+// name: Files packed into password-protected archives
+// kind: behaviour
+// technique: T1560.001
+// attack: 10
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where (FileName in~ ("7z.exe", "7za.exe", "7zr.exe", "7zg.exe") or ProcessVersionInfoOriginalFileName in~ ("7z.exe", "7za.exe"))
+         and ProcessCommandLine matches regex @"(?i)\sa\s.*\s-p\S*"
+     or (FileName in~ ("rar.exe", "winrar.exe") and ProcessCommandLine matches regex @"(?i)\sa\s.*\s-(hp|p)\S*")
+     or (FileName in~ ("zip.exe", "wzzip.exe") and ProcessCommandLine matches regex @"(?i)\s-(P|s)\s")
+     or ProcessCommandLine has_any ("Compress-7Zip", "-ArchiveFileName") and ProcessCommandLine has "-Password"
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

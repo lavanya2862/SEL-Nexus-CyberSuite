@@ -1,0 +1,12 @@
+// name: PowerShell or curl sending files out
+// kind: behaviour
+// technique: T1048.003
+// attack: 10
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where (FileName in~ ("powershell.exe", "pwsh.exe") and ProcessCommandLine has_any ("Invoke-WebRequest", "Invoke-RestMethod", "iwr", "irm", "WebClient")
+         and ProcessCommandLine matches regex @"(?i)(-InFile|UploadFile|UploadData|-Method\s+(Put|Post))")
+     or (FileName =~ "curl.exe" and ProcessCommandLine matches regex @"(?i)(\s-T\s|--upload-file|\s-F\s+\S*=@|--form\s+\S*=@|--data-binary\s+@)")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

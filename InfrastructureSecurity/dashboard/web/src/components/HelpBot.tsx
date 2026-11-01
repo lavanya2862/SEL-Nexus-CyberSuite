@@ -166,7 +166,7 @@ export function HelpBot() {
                   {m.links && m.links.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {m.links.map((l) => (
-                        <button key={l.to} onClick={() => navigate(l.to)} className="inline-flex items-center gap-1 rounded-full border border-hairline bg-panel px-2.5 py-1 text-xs font-medium hover:bg-well">
+                        <button key={l.to} onClick={() => navigate(l.to)} className="inline-flex items-center gap-1 rounded-lg border border-hairline bg-panel px-2.5 py-1 text-xs font-medium hover:bg-well">
                           Open {l.label} <ArrowRight className="size-3" />
                         </button>
                       ))}

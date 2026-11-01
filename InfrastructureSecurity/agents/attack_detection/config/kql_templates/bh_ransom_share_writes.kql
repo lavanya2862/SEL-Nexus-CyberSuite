@@ -1,0 +1,15 @@
+// name: One machine changing many files on a shared network folder
+// kind: behaviour
+// technique: T1486
+// attack: 1
+DeviceFileEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType in ("FileModified", "FileRenamed", "FileDeleted")
+| where isnotempty(ShareName) and isnotempty(RequestSourceIP)
+| summarize Changes = count(), Files = dcount(FileName), Examples = make_set(FileName, 10), FirstSeen = min(Timestamp),
+            take_any(DeviceName, ShareName, RequestAccountName)
+            by DeviceId, RequestSourceIP, Window = bin(Timestamp, 10m)
+| where Files >= 100
+| project Timestamp = FirstSeen, DeviceId, DeviceName, ShareName, RequestSourceIP, AccountName = RequestAccountName,
+          Changes, Files, Examples
+| take 500

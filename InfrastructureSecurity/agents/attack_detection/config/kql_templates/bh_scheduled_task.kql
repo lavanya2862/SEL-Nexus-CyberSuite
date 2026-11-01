@@ -1,6 +1,7 @@
 // name: New scheduled tasks created from the command line
 // kind: behaviour
 // technique: T1053.005
+// attack: 7
 DeviceProcessEvents
 | where Timestamp > ago({{LOOKBACK}}d)
 | where FileName =~ "schtasks.exe" and ProcessCommandLine contains "/create"

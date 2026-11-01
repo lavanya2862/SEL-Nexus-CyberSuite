@@ -32,11 +32,6 @@ class ThreatAnalysis(BaseModel):
     confidence: str = Field(description="high, medium or low: how clear the source is")
 
 
-class KqlDraft(BaseModel):
-    query: str = Field(description="One read-only KQL query for Microsoft Defender Advanced Hunting")
-    explanation: str = Field(description="What the query looks for, max 40 words")
-
-
 class ExecutiveSummary(BaseModel):
     headline: str = Field(description="One sentence: the most important message")
     paragraphs: list[str] = Field(description="2-3 short paragraphs for a non-expert manager")

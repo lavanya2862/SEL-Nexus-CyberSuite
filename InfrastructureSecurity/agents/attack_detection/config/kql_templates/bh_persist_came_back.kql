@@ -1,0 +1,19 @@
+// name: An auto-start entry that was removed and came back
+// kind: behaviour
+// technique: T1547.001
+// attack: 7
+let removed = DeviceRegistryEvents
+    | where Timestamp > ago({{LOOKBACK}}d)
+    | where ActionType == "RegistryValueDeleted"
+    | where RegistryKey has_any (@"\CurrentVersion\Run", @"\CurrentVersion\RunOnce", @"\Winlogon")
+    | project DeviceId, RegistryKey, RegistryValueName, RemovedAt = Timestamp;
+DeviceRegistryEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "RegistryValueSet"
+| where RegistryKey has_any (@"\CurrentVersion\Run", @"\CurrentVersion\RunOnce", @"\Winlogon")
+| join kind=inner removed on DeviceId, RegistryKey, RegistryValueName
+| where Timestamp > RemovedAt + 1m
+| summarize arg_min(Timestamp, *) by DeviceId, RegistryKey, RegistryValueName
+| project Timestamp, DeviceId, DeviceName, RemovedAt, RegistryKey, RegistryValueName, RegistryValueData,
+          InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

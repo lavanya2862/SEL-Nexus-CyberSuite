@@ -1,4 +1,4 @@
-# UC4 runtime + test dependencies (same versions as UC1, Python 3.14)
+# Alert Triage runtime + test dependencies (same versions as Threat Intel, Python 3.14)
 msal==1.39.0            # Microsoft Entra login (Graph + Defender APIs)
 requests==2.34.2        # Graph, Defender, threat-intel look-ups
 duckdb==1.5.6           # single-file database (also reads the GUIDE CSVs)

@@ -1,0 +1,12 @@
+// name: Windows told to keep passwords in plain text (WDigest switched on)
+// kind: behaviour
+// technique: T1112
+// attack: 2
+DeviceRegistryEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where ActionType == "RegistryValueSet"
+| where RegistryKey has @"\Control\SecurityProviders\WDigest" and RegistryValueName =~ "UseLogonCredential"
+| where RegistryValueData in ("1", "0x00000001")
+| project Timestamp, DeviceId, DeviceName, ActionType, RegistryKey, RegistryValueName, RegistryValueData,
+          InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

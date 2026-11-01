@@ -1,0 +1,15 @@
+// name: Scouting started by an odd parent (Word, a web server)
+// kind: behaviour
+// technique: T1082
+// attack: 9
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName in~ ("whoami.exe", "net.exe", "net1.exe", "systeminfo.exe", "ipconfig.exe", "nltest.exe", "quser.exe",
+                      "tasklist.exe", "hostname.exe", "netstat.exe", "arp.exe", "dsquery.exe", "adfind.exe")
+| where InitiatingProcessFileName in~ ("winword.exe", "excel.exe", "powerpnt.exe", "outlook.exe", "w3wp.exe",
+                                       "httpd.exe", "nginx.exe", "tomcat.exe", "tomcat9.exe", "java.exe", "javaw.exe",
+                                       "php-cgi.exe", "sqlservr.exe", "UMWorkerProcess.exe", "7zFM.exe", "WinRAR.exe")
+     or InitiatingProcessParentFileName in~ ("winword.exe", "excel.exe", "outlook.exe", "w3wp.exe", "sqlservr.exe")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessParentFileName, InitiatingProcessCommandLine
+| take 500

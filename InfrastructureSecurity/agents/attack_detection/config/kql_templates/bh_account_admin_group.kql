@@ -1,0 +1,21 @@
+// name: Account added to the Administrators group
+// kind: behaviour
+// technique: T1098
+// attack: 8
+union
+    (DeviceEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "UserAccountAddedToLocalGroup"
+     | extend Fields = parse_json(AdditionalFields)
+     | where tostring(Fields.GroupSid) == "S-1-5-32-544" or tostring(Fields.GroupName) =~ "Administrators"
+     | project Timestamp, DeviceId, DeviceName, ActionType, AccountName, AccountSid, Group = tostring(Fields.GroupName),
+               InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where (FileName in~ ("net.exe", "net1.exe") and ProcessCommandLine has "localgroup" and ProcessCommandLine has "administrators"
+              and ProcessCommandLine has "/add")
+          or (ProcessCommandLine has "Add-LocalGroupMember" and ProcessCommandLine has "Administrators")
+     | project Timestamp, DeviceId, DeviceName, ActionType = "ProcessCreated", AccountName, AccountSid,
+               Group = "Administrators", InitiatingProcessAccountName = AccountName, InitiatingProcessFileName,
+               InitiatingProcessCommandLine = ProcessCommandLine)
+| take 500

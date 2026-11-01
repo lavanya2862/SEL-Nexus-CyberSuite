@@ -26,6 +26,7 @@ PACKAGE_ID = re.compile(r"^[A-Za-z0-9.+_-]{1,80}$")
 PATTERN = re.compile(r"^[A-Za-z0-9 .+_()*{}-]{1,60}$")
 PROCESS = re.compile(r"^[A-Za-z0-9 .+_-]{1,40}$")
 STILL_THERE_AFTER = timedelta(hours=24)       # Defender normally notices a change within 2-6 hours
+VENDOR_RECHECK = timedelta(hours=24)          # an update awaiting its vendor's package is tried again after a day
 OPEN = ("approved", "queued", "running")
 
 
@@ -100,7 +101,7 @@ def build_spec(item: dict, allow_choco: bool = True) -> dict:
     """What the script on the VM gets (base64 JSON). Built from the catalogue row only."""
     action = item["action"]
     if action == "respond":
-        # a lab test's sign of attack: the script also removes the fixed UC1LabTest leftovers (names live in the script)
+        # a lab test's sign of attack: the script also removes the fixed AttackLabTest leftovers (names live in the script)
         return {"id": item["fix_id"], "action": "respond", "kind": "scan_clean", "check": [], "remove": [], "procs": [],
                 "allow_choco": False, "lab_cleanup": bool(item.get("is_test"))}
     if action == "setting":
@@ -156,8 +157,22 @@ RESPONSE_STAGE = 1
 _EVIDENCE = re.compile(r"^Hunt '[^']*': ")
 
 
+def _attack_findings(settings: Settings) -> list[dict]:
+    """The Attack Detection Agent's published findings (data/out/findings.json); missing or older = none."""
+    path = settings.attack_agent_dir / "data" / "out" / "findings.json" if settings.attack_agent_dir else None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path and path.is_file() else {}
+    except (OSError, ValueError):
+        return []
+    if data.get("schema_version") != 1:
+        return []
+    return [{**f, "opco": f.get("opco") or "Unassigned"} for f in data.get("findings") or []
+            if f.get("kind") == "behaviour_hit" and f.get("device_name")]
+
+
 def response_items(store: Store, settings: Settings, limit_devices: bool = True) -> list[dict]:
-    """One row per sign of attack (attack check finding): scan that computer with Defender and remove what it finds.
+    """One row per finding: the Threat Intel Agent's indicator hits (its database) and the Attack Detection Agent's
+    behaviour hits (its findings.json). Scan that computer with Defender and remove what it finds.
     The only response the fix engine can do with its permissions (Machine.LiveResponse / Azure Run Command);
     isolating a computer needs Machine.Isolate and stays a job for a person in Defender. Not a vulnerability:
     findings/CVEs stay 0. Findings are kept from run to run, so these rows never turn "verified"."""
@@ -165,9 +180,9 @@ def response_items(store: Store, settings: Settings, limit_devices: bool = True)
         SELECT f.finding_id, f.kind, f.device_id, f.device_name, COALESCE(f.opco, d.opco, 'Unassigned') AS opco,
                f.detail, f.timeline, f.is_test, f.created_at
         FROM findings f LEFT JOIN devices d ON d.device_id = f.device_id
-        WHERE f.kind <> 'exposure' AND f.device_name IS NOT NULL""")
+        WHERE f.kind = 'ioc_hit' AND f.device_name IS NOT NULL""")
     items = []
-    for r in rows:
+    for r in rows + _attack_findings(settings):
         if limit_devices and settings.fix_devices and r["device_name"].lower() not in settings.fix_devices:
             continue
         timeline = json.loads(r["timeline"]) if isinstance(r["timeline"], str) else (r["timeline"] or [])
@@ -180,6 +195,7 @@ def response_items(store: Store, settings: Settings, limit_devices: bool = True)
             "findings": 0, "cves": 0, "max_epss": 0, "max_cvss": 0,
             "winget_id": "", "choco_id": "", "match": "", "processes": [], "stage": RESPONSE_STAGE, "action": "respond",
             "category": sign + (" (test)" if r["is_test"] else ""), "note": evidence, "is_test": bool(r["is_test"]),
+            "origin": "threat_intel" if r["kind"] == "ioc_hit" else "attack_detection",
             "snapshot_at": r["created_at"].isoformat() if isinstance(r["created_at"], datetime) else r["created_at"]})
     return items
 
@@ -276,7 +292,8 @@ def verify(state: FixState, current_ids: set[str], inventory_at: datetime | None
         for fid, f in data["fixes"].items():
             status = f.get("status")
             done_at, decided_at = f.get("finished_at"), f.get("approved_at") or f.get("saved_at")
-            if fid not in current_ids and status in ("done", "failed", "still_there") and after(done_at) \
+            if fid not in current_ids and status in ("done", "failed", "still_there", "awaiting_vendor", "manual_required") \
+                    and after(done_at) \
                     and seen_since(f, done_at):
                 f.update(status="verified", verified_at=now.isoformat())
                 event(data, f"Verified by Defender: {_label(f)} is no longer vulnerable", fid)
@@ -294,6 +311,21 @@ def verify(state: FixState, current_ids: set[str], inventory_at: datetime | None
     return counts
 
 
+def requeue_awaiting(state: FixState, now: datetime | None = None) -> int:
+    """Updates awaiting a vendor package go back to approved a day after their last attempt, under the original
+    approval: the next remediation run checks the package sources again and changes nothing if still none is newer."""
+    now = now or utcnow()
+    count = 0
+    with state.edit() as data:
+        for fid, f in data["fixes"].items():
+            done_at = f.get("finished_at")
+            if f.get("status") == "awaiting_vendor" and done_at and now - datetime.fromisoformat(done_at) > VENDOR_RECHECK:
+                f.update(status="approved", requeued_at=now.isoformat())
+                event(data, f"Re-queued under the original approval: {_label(f)} (checking for a newer vendor package)", fid)
+                count += 1
+    return count
+
+
 def _label(f: dict) -> str:
     return _what(f.get("item", {}))
 
@@ -308,8 +340,9 @@ def _what(item: dict) -> str:
 # news threat targets belongs to both the Vulnerability and the Threat Intel Agent, and one decision covers both.
 DOMAINS = {
     "vulnerability": lambda i: i.get("kind") != "response",                          # Defender's vulnerabilities + settings
-    "threat_intel": lambda i: i.get("kind") != "response" and bool(i.get("threats")),  # ... that a threat in the news targets
-    "attack_detection": lambda i: i.get("kind") == "response",                        # responses to signs of attack
+    "threat_intel": lambda i: (i.get("kind") != "response" and bool(i.get("threats"))   # ... that a threat in the news targets
+                               or i.get("origin") == "threat_intel"),                   # responses to indicators seen
+    "attack_detection": lambda i: i.get("kind") == "response" and i.get("origin") != "threat_intel",  # behaviour hits
 }
 SOURCES = set(DOMAINS)
 
@@ -340,6 +373,7 @@ def refresh(store: Store, settings: Settings, source: str | None = None) -> dict
         installed.setdefault((str(r["device_name"]).lower(), str(r["name"]).lower()), set()).add(str(r["version"]))
     state = FixState(settings.fix_dir / "state.json")
     checked = verify(state, {i["fix_id"] for i in everything}, inventory_at, devices=devices, installed=installed)
+    checked["requeued"] = requeue_awaiting(state)
     decided = state.read()["fixes"]
     fixable = [i for i in items if i["action"] != "none"]
     now = utcnow().isoformat()
@@ -411,7 +445,7 @@ def view(settings: Settings) -> dict:
     events = [e for i, e in enumerate(data["events"]) if i >= recent or e.get("fix_id") in ran]
     return {"generated_at": plan.get("generated_at"), "inventory_at": plan.get("inventory_at"), "stages": plan.get("stages", STAGES),
             "rows": rows, "totals": total, "events": events[::-1], "probes": data.get("probes", {}),
-            "default_method": settings.fix_method, "attack_auto_fix": settings.attack_auto_fix,
+            "default_method": settings.fix_method,
             "impact": {"findings_open": sum(r["findings"] for r in rows if r["status"] not in ("verified", "gone")),
                        "findings_cleared": sum(r["findings"] for r in fixed)}}
 
@@ -425,7 +459,8 @@ def _row(item: dict, f: dict) -> dict:
                                         "setting_kind", "setting_target", "setting_value")},
             "status": status, **{k: f.get(k) for k in ("method", "approved_by", "approved_at", "saved_by", "saved_at",
                                                       "started_at", "finished_at",
-                                                      "verified_at", "message", "result", "agent")}}
+                                                      "verified_at", "message", "result", "agent", "handover", "manual",
+                                                      "handed_by", "handed_at")}}
 
 
 def approve(settings: Settings, ids: list[str], method: str | None = None, who: str | None = None) -> dict:
@@ -443,11 +478,114 @@ def approve(settings: Settings, ids: list[str], method: str | None = None, who: 
                 skipped.append(fid)
                 continue
             spec = build_spec(item, settings.fix_allow_choco)
+            prev = data["fixes"].get(fid) or {}
             data["fixes"][fid] = {"status": "approved", "method": method, "approved_by": who,
-                                  "approved_at": utcnow().isoformat(), "item": item, "spec": spec}
+                                  "approved_at": utcnow().isoformat(), "item": item, "spec": spec,
+                                  "trail": prev.get("trail") or [], "attempts": _attempts(prev)}
             event(data, f"Approved by {who} ({_METHOD[method]}): {_what(item)}", fid)
             done.append(fid)
     return {"approved": done, "skipped": skipped}
+
+
+MAX_ATTEMPTS_KEPT = 20
+ATTEMPT_KEYS = ("status", "message", "method", "approved_by", "approved_at", "started_at", "finished_at", "verified_at",
+                "result", "agent", "handover", "manual")
+
+
+def _attempts(prev: dict) -> list[dict]:
+    """A new approval starts a new attempt: the earlier ones (with their result, agent moves, handover and manual
+    record) are kept on the fix, newest last, so re-approving never erases what happened before."""
+    old = list(prev.get("attempts") or [])
+    if prev.get("started_at") or prev.get("manual"):
+        old.append({k: prev.get(k) for k in ATTEMPT_KEYS if prev.get(k) is not None})
+    return old[-MAX_ATTEMPTS_KEPT:]
+
+
+def detail(settings: Settings, fid: str) -> dict | None:
+    """Everything kept about one fix, for its full record: the row, the device's full output, what the script was
+    allowed to run, the earlier attempts and the fix's own event trail (older fixes: the shared event list)."""
+    data = FixState(settings.fix_dir / "state.json").read()
+    f = data["fixes"].get(fid)
+    item = (f or {}).get("item") or next((i for i in read_plan(settings).get("items", []) if i["fix_id"] == fid), None)
+    if not item:
+        return None
+    f = f or {}
+    spec = f.get("spec") or {}
+    trail = f.get("trail") or [{"at": e["at"], "text": e["text"]} for e in data.get("events", []) if e.get("fix_id") == fid]
+    next_check = None
+    if f.get("status") == "awaiting_vendor" and f.get("finished_at"):
+        next_check = (datetime.fromisoformat(f["finished_at"]) + VENDOR_RECHECK).isoformat()
+    return {"row": _row(item, f), "output": f.get("output") or "", "requeued_at": f.get("requeued_at"),
+            "next_check_at": next_check, "trail": trail, "attempts": f.get("attempts") or [],
+            "allowed": {k: spec.get(k) for k in ("action", "winget", "choco", "allow_choco", "kind", "target", "value",
+                                                  "check", "remove", "procs") if spec.get(k) not in (None, "", [])}}
+
+
+def _no_fix_handover(item: dict) -> dict:
+    """The handover for a remediation the agent has no automatic fix for (action none), from its catalogue note."""
+    device, app, note = item.get("device_name") or "the computer", item.get("app") or "the application", item.get("note") or ""
+    if item.get("kind") == "setting":
+        owner, steps = "Endpoint security team", [
+            f"Review '{app}' on {device} with the device owner and the people who use it",
+            "Apply it through Group Policy or Intune, with a rollback plan",
+            "Confirm the setting on the computer, then mark the remediation as done manually"]
+    elif note.lower().startswith("not an app but a part"):
+        owner, steps = "IT operations", [
+            f"Update the applications on {device} that include {app} (listed in the cause)",
+            "Wait for Microsoft Defender to rescan the device",
+            "Mark the remediation as done manually once those applications are updated"]
+    else:
+        owner, steps = "IT operations", [
+            f"Find how {app} {item.get('version') or ''} was installed on {device}: installer, bundle or copied folder".replace("  ", " "),
+            "Update it to the vendor's fixed version, or remove it if nothing needs it",
+            "Confirm it in Apps & features or on disk, then mark the remediation as done manually"]
+    return {"cause": note or "CyberSuite has no automatic remediation for this item.", "steps": steps, "owner": owner,
+            "summary": "", "by_ai": False, "evidence": [], "at": utcnow().isoformat()}
+
+
+def hand_over(settings: Settings, ids: list[str], who: str | None = None) -> dict:
+    """A person hands a remediation the agent cannot do (no automatic fix) to the people who must do it by hand:
+    it becomes manual_required with a handover (cause, steps, owner), then follows the manual flow (mark_manual)."""
+    who = who or _user()
+    items = {i["fix_id"]: i for i in read_plan(settings).get("items", [])}
+    done, skipped = [], []
+    with FixState(settings.fix_dir / "state.json").edit() as data:
+        for fid in ids:
+            item = items.get(fid)
+            prev = data["fixes"].get(fid) or {}
+            if not item or item.get("action") != "none" or prev.get("status") in OPEN + ("manual_required", "verified"):
+                skipped.append(fid)
+                continue
+            h = _no_fix_handover(item)
+            data["fixes"][fid] = {"status": "manual_required", "item": item, "handover": h, "handed_by": who,
+                                  "handed_at": h["at"], "finished_at": h["at"],
+                                  "trail": prev.get("trail") or [], "attempts": _attempts(prev)}
+            event(data, f"Handed to a person by {who}: {_label(data['fixes'][fid])}. Owner: {h['owner']}", fid)
+            done.append(fid)
+    return {"handed": done, "skipped": skipped}
+
+
+MANUAL_FROM = ("manual_required", "failed", "still_there", "awaiting_vendor")
+
+
+def mark_manual(settings: Settings, ids: list[str], who: str | None = None, note: str = "") -> dict:
+    """A person remediated it by hand: done (pending verification), with who, when and their note. Defender's next
+    inventory verifies it like any other fix, or it shows as still listed."""
+    who = who or _user()
+    note = " ".join(str(note or "").split())[:500]
+    done, skipped = [], []
+    with FixState(settings.fix_dir / "state.json").edit() as data:
+        for fid in ids:
+            f = data["fixes"].get(fid)
+            if not f or f.get("status") not in MANUAL_FROM:
+                skipped.append(fid)
+                continue
+            now = utcnow().isoformat()
+            f.update(status="done", finished_at=now, manual={"by": who, "at": now, "note": note},
+                     message=f"Remediated manually by {who}." + (f" Note: {note}" if note else ""))
+            event(data, f"Remediated manually by {who}: {_label(f)}" + (f". Note: {note}" if note else ""), fid)
+            done.append(fid)
+    return {"marked": done, "skipped": skipped}
 
 
 def unapprove(settings: Settings, ids: list[str], who: str | None = None) -> dict:

@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Check, CheckCircle2, ChevronDown, Clock, History, Loader2, Minus, Monitor, ShieldCheck, Wrench, X, XCircle } from 'lucide-react'
+import { ArrowLeft, Check, CheckCircle2, ChevronDown, Clock, History, Loader2, Minus, Monitor, ShieldCheck, UserCog, Wrench, X, XCircle } from 'lucide-react'
 import { Empty, Panel } from '@/components/kit'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ago, dateTime, num, utc } from '@/lib/format'
 import { ACTION_LABEL, FixDown, METHOD_LABEL, STATUS, isSetting, useFix, type FixRow, type FixView } from '@/agents/fixes/data'
+import { ManualAction, PersonLine } from '@/components/ManualAction'
+import { RecordLink } from '@/components/FixRecord'
 import { GettingReady, useAutoStart } from '@/lib/services'
 import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
@@ -20,6 +22,8 @@ function stops(r: FixRow): StopState[] {
     case 'done': return ['done', 'done', 'done', 'now']
     case 'verified': return ['done', 'done', 'done', 'done']
     case 'failed': return ['done', 'failed', 'todo', 'todo']
+    case 'awaiting_vendor': return ['done', 'now', 'todo', 'todo']
+    case 'manual_required': return ['done', 'failed', 'todo', 'todo']
     case 'still_there': return ['done', 'done', 'done', 'failed']
     default: return ['todo', 'todo', 'todo', 'todo']
   }
@@ -33,17 +37,22 @@ function latestRun(v: FixView): FixRow[] {
   return started.filter((r) => newest - new Date(r.started_at!).getTime() < 2 * 3600_000)
 }
 
-/** Fix › Fix progress: the whole run on one screen, one lane per computer. */
-export function FixProgress() {
+/** Remediation › progress: the whole run on one screen, one lane per computer. embedded = shown as a Remediation tab
+ *  (the tab bar already names it, so no back link or page title). */
+export function FixProgress({ embedded }: { embedded?: boolean } = {}) {
   const { data: v, error, isLoading } = useFix()
   const auto = useAutoStart(error instanceof FixDown, 'fix')
   return (
     <div className="flex flex-col gap-5">
-      <Link to="/fixes" className="inline-flex w-fit items-center gap-1.5 text-sm text-ink-3 hover:text-ink"><ArrowLeft className="size-4" /> Remediation</Link>
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Remediation progress</h1>
-        <p className="mt-1 text-sm text-ink-3">Each remediation advances as the device reports back. Remediations continue if you leave this page.</p>
-      </div>
+      {embedded ? (
+        <p className="text-sm text-ink-3">Each remediation advances as the device reports back. Remediations continue if you leave this page.</p>
+      ) : <>
+        <Link to="/fixes" className="inline-flex w-fit items-center gap-1.5 text-sm text-ink-3 hover:text-ink"><ArrowLeft className="size-4" /> Remediation</Link>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Remediation progress</h1>
+          <p className="mt-1 text-sm text-ink-3">Each remediation advances as the device reports back. Remediations continue if you leave this page.</p>
+        </div>
+      </>}
       {isLoading ? <Skeleton className="h-64 rounded-2xl" /> : error ? (
         <Panel className="p-6">
           {error instanceof FixDown ? <GettingReady what="remediation progress" {...auto} /> : <Empty text={`Unable to load remediations: ${(error as Error).message}`} />}
@@ -53,8 +62,13 @@ export function FixProgress() {
   )
 }
 
+const WAITING = ['manual_required', 'awaiting_vendor']
+
 function Body({ v }: { v: FixView }) {
-  const rows = latestRun(v)
+  // every remediation still waiting for a person (first) or a vendor, from any run
+  const waiting = v.rows.filter((r) => WAITING.includes(r.status))
+    .sort((a, b) => Number(b.status === 'manual_required') - Number(a.status === 'manual_required') || (b.finished_at ?? '').localeCompare(a.finished_at ?? ''))
+  const rows = latestRun(v).filter((r) => !WAITING.includes(r.status))
   const live = v.worker.running || v.worker.elsewhere || rows.some((r) => r.status === 'queued' || r.status === 'running')
   const finished = rows.filter((r) => !['queued', 'running'].includes(r.status)).length
   const pct = rows.length ? Math.round((finished / rows.length) * 100) : 0
@@ -71,7 +85,7 @@ function Body({ v }: { v: FixView }) {
             {live ? <Loader2 className="mt-0.5 size-6 animate-spin text-sky" /> : <CheckCircle2 className="mt-0.5 size-6" style={{ color: statusColor.good }} />}
             <div>
               <h2 className="text-xl font-semibold tracking-tight">
-                {live ? (v.worker.task === 'probe' ? 'Checking device connectivity…' : 'Remediating…') : rows.length ? 'Last remediation run complete' : 'No remediations executed yet'}
+                {live ? (v.worker.task === 'probe' ? 'Checking device connectivity…' : 'Remediating…') : rows.length ? 'Last remediation run complete' : waiting.length ? 'Nothing running now' : 'No remediations executed yet'}
               </h2>
               <p key={v.worker.step || v.worker.message} className="mt-0.5 text-sm text-ink-3 animate-in fade-in slide-in-from-left-1 duration-300">
                 {live ? words(v.worker.step || 'Starting') : v.worker.message ||'Add items to the remediation queue in Remediation, then select Execute remediation.'}
@@ -101,6 +115,7 @@ function Body({ v }: { v: FixView }) {
             { icon: Wrench, label: 'Remediated', value: count((r) => r.status === 'done' || r.status === 'verified'), color: 'var(--sky)' },
             { icon: ShieldCheck, label: 'Verified by Defender', value: count((r) => r.status === 'verified'), color: statusColor.good },
             { icon: XCircle, label: 'Failed', value: count((r) => r.status === 'failed' || r.status === 'still_there'), color: statusColor.critical },
+            { icon: UserCog, label: 'Manual action required', value: count((r) => r.status === 'manual_required'), color: statusColor.critical },
             { icon: Clock, label: 'Still to do', value: count((r) => r.status === 'queued' || r.status === 'running'), color: 'var(--ink-3)' },
           ].map((t) => (
             <Panel key={t.label} className="p-5">
@@ -109,6 +124,20 @@ function Body({ v }: { v: FixView }) {
             </Panel>
           ))}
         </div>
+      )}
+
+      {/* waiting for a person or a vendor: pinned here from any run until someone resolves it */}
+      {waiting.length > 0 && (
+        <Panel className="p-6" id="waiting">
+          <div className="flex flex-wrap items-center gap-2">
+            <UserCog className="size-4" style={{ color: statusColor.critical }} />
+            <h3 className="font-semibold tracking-tight">Waiting for a person or a vendor</h3>
+            <span className="text-xs text-ink-3">· {waiting.length} open · stays here until it is resolved, whichever run it came from</span>
+          </div>
+          <ul className="mt-4 flex flex-col divide-y divide-hairline">
+            {waiting.map((r) => <FixTrack key={r.fix_id} r={r} events={v.events} device />)}
+          </ul>
+        </Panel>
       )}
 
       {/* one lane per computer, each fix a left-to-right track */}
@@ -154,7 +183,8 @@ const tidy = (text: string, device: string) => words(text)
 
 const SHOWN = 3
 
-function FixTrack({ r, events }: { r: FixRow; events: FixView['events'] }) {
+/** One remediation's track; device = also name the computer (the pinned list mixes computers). */
+function FixTrack({ r, events, device }: { r: FixRow; events: FixView['events']; device?: boolean }) {
   const st = stops(r)
   const [all, setAll] = useState(false)
   const mine = events.filter((e) => e.fix_id === r.fix_id).sort((a, b) => b.at.localeCompare(a.at))
@@ -163,7 +193,9 @@ function FixTrack({ r, events }: { r: FixRow; events: FixView['events'] }) {
     <li className="grid grid-cols-1 gap-3 py-4 md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] md:items-center">
       <div className="min-w-0">
         <div className="truncate text-sm font-medium">{ACTION_LABEL[r.action]} {r.app}</div>
-        <div className="truncate text-xs text-ink-3">{isSetting(r) ? 'Security setting (not a vulnerability)' : <>{r.version} · clears {num(r.findings)} findings</>}</div>
+        <div className="truncate text-xs text-ink-3">{device && <>{r.device_name} · </>}{isSetting(r) ? 'Security setting (not a vulnerability)' : <>{r.version} · clears {num(r.findings)} findings</>}</div>
+        <PersonLine r={r} />
+        <RecordLink id={r.fix_id} className="mt-1" />
       </div>
       <div className="min-w-0">
         <ol className="flex items-start">
@@ -179,11 +211,12 @@ function FixTrack({ r, events }: { r: FixRow; events: FixView['events'] }) {
             </li>
           ))}
         </ol>
-        {(r.message || r.status === 'failed') && (
+        {(r.message || r.status === 'failed') && r.status !== 'manual_required' && !r.manual && (
           <p key={r.status} className="mt-2 text-xs text-ink-3 animate-in fade-in duration-300" style={r.status === 'failed' ? { color: statusColor.critical } : undefined}>
             {r.message ?? STATUS[r.status].label}
           </p>
         )}
+        <ManualAction r={r} />
       </div>
       {mine.length > 0 && (
         <div className="md:col-span-2">

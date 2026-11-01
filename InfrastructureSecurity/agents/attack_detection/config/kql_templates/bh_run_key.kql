@@ -1,6 +1,7 @@
 // name: Program set to start automatically (Run key)
 // kind: behaviour
 // technique: T1547.001
+// attack: 7
 DeviceRegistryEvents
 | where Timestamp > ago({{LOOKBACK}}d)
 | where ActionType == "RegistryValueSet"

@@ -1,6 +1,7 @@
 // name: Encoded / hidden PowerShell commands
 // kind: behaviour
 // technique: T1059.001
+// attack: 3
 DeviceProcessEvents
 | where Timestamp > ago({{LOOKBACK}}d)
 | where FileName in~ ("powershell.exe", "pwsh.exe")

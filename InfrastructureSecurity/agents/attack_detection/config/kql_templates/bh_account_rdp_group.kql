@@ -1,0 +1,21 @@
+// name: Account added to the Remote Desktop Users group
+// kind: behaviour
+// technique: T1098
+// attack: 8
+union
+    (DeviceEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "UserAccountAddedToLocalGroup"
+     | extend Fields = parse_json(AdditionalFields)
+     | where tostring(Fields.GroupSid) == "S-1-5-32-555" or tostring(Fields.GroupName) =~ "Remote Desktop Users"
+     | project Timestamp, DeviceId, DeviceName, ActionType, AccountName, AccountSid, Group = tostring(Fields.GroupName),
+               InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine),
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where (FileName in~ ("net.exe", "net1.exe") or ProcessCommandLine has "Add-LocalGroupMember")
+     | where ProcessCommandLine has "Remote Desktop Users"
+     | where ProcessCommandLine has_any ("/add", "Add-LocalGroupMember")
+     | project Timestamp, DeviceId, DeviceName, ActionType = "ProcessCreated", AccountName, AccountSid,
+               Group = "Remote Desktop Users", InitiatingProcessAccountName = AccountName, InitiatingProcessFileName,
+               InitiatingProcessCommandLine = ProcessCommandLine)
+| take 500

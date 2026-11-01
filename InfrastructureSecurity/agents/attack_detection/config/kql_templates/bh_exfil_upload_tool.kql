@@ -1,0 +1,12 @@
+// name: Upload tools running (rclone, MEGAsync, WinSCP, FileZilla)
+// kind: behaviour
+// technique: T1567.002
+// attack: 10
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName in~ ("rclone.exe", "megasync.exe", "megacmd.exe", "mega-cmd.exe", "winscp.exe", "filezilla.exe",
+                      "fzsftp.exe", "pscp.exe", "psftp.exe", "restic.exe", "croc.exe", "gdrive.exe")
+     or ProcessVersionInfoOriginalFileName in~ ("rclone.exe", "MEGAsync.exe", "WinSCP.exe", "filezilla.exe", "pscp")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine, SHA256,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

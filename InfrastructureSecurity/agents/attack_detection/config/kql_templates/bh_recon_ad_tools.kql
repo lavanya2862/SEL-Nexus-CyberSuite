@@ -1,0 +1,14 @@
+// name: Directory-mapping tools (AdFind, SharpHound)
+// kind: behaviour
+// technique: T1087.002
+// attack: 9
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where FileName in~ ("adfind.exe", "sharphound.exe", "adexplorer.exe", "adexplorer64.exe", "ldapdomaindump.exe",
+                      "pingcastle.exe", "adrecon.exe")
+     or ProcessVersionInfoOriginalFileName in~ ("AdFind.exe", "SharpHound.exe", "ADExplorer.exe")
+     or ProcessCommandLine has_any ("Invoke-BloodHound", "SharpHound", "-CollectionMethod", "objectcategory=computer",
+                                    "trustdmp", "dcmodes", "adinfo", "Get-NetDomain", "Get-DomainController")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine, SHA256,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

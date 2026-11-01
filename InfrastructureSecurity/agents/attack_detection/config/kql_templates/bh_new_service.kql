@@ -1,6 +1,7 @@
 // name: New Windows service created from the command line
 // kind: behaviour
 // technique: T1543.003
+// attack: 7
 DeviceProcessEvents
 | where Timestamp > ago({{LOOKBACK}}d)
 | where (FileName =~ "sc.exe" and ProcessCommandLine has "create")

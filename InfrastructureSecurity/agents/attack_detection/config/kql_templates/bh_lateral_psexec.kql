@@ -1,0 +1,16 @@
+// name: PsExec helper service appearing on a machine (PSEXESVC)
+// kind: behaviour
+// technique: T1569.002
+// attack: 5
+union
+    (DeviceProcessEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where InitiatingProcessFileName =~ "psexesvc.exe" or FileName =~ "psexesvc.exe"
+     | project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+               InitiatingProcessFileName, InitiatingProcessCommandLine, RemoteIP = ""),
+    (DeviceFileEvents
+     | where Timestamp > ago({{LOOKBACK}}d)
+     | where ActionType == "FileCreated" and FileName =~ "psexesvc.exe"
+     | project Timestamp, DeviceId, DeviceName, AccountName = RequestAccountName, FileName, ProcessCommandLine = FolderPath,
+               InitiatingProcessFileName, InitiatingProcessCommandLine, RemoteIP = RequestSourceIP)
+| take 500

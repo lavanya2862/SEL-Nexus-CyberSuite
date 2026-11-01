@@ -92,7 +92,7 @@ def _window(store: Store, since, now) -> dict:
     assessed = store.scalar(f"""SELECT COUNT(*) FROM threats t JOIN analysis a USING (threat_id)
                                 WHERE {threat} AND a.ai_status IN ('done', 'skipped')""", args) or 0
     affecting = q(f"""SELECT s.rating FROM threats t JOIN scores s USING (threat_id)
-                      WHERE NOT t.is_test AND t.threat_id IN (SELECT threat_id FROM findings) {cond}""", args)
+                      WHERE NOT t.is_test AND t.threat_id IN (SELECT threat_id FROM findings WHERE kind <> 'behaviour_hit') {cond}""", args)
     urgent = sum(1 for r in affecting if r["rating"] in ("Critical", "High"))
     fixes_needed = store.scalar(f"""SELECT COUNT(DISTINCT e.recommended_update) FROM exposure e JOIN scores s USING (threat_id)
                                     JOIN threats t USING (threat_id)
@@ -143,11 +143,16 @@ def gather(store: Store, settings: Settings | None = None) -> dict:
     threats_collected = w30["threats_collected"]
 
     # ---- posture: what affects our computers right now
-    affecting = q("""SELECT s.rating, t.kind, t.threat_id FROM threats t JOIN scores s USING (threat_id)
-                     WHERE NOT t.is_test AND t.threat_id IN (SELECT threat_id FROM findings)""")
+    # news threats only: the Attack Detection Agent's behaviour hits are on its own pages
+    affecting = q("""SELECT s.rating, t.kind, t.threat_id,
+                            t.threat_id IN (SELECT threat_id FROM findings WHERE kind = 'exposure') AS vuln,
+                            t.threat_id IN (SELECT threat_id FROM findings WHERE kind = 'ioc_hit') AS ioc
+                     FROM threats t JOIN scores s USING (threat_id)
+                     WHERE NOT t.is_test AND t.threat_id IN (SELECT threat_id FROM findings WHERE kind <> 'behaviour_hit')""")
     worst = min((r["rating"] for r in affecting), key=lambda r: RATING_ORDER.get(r, 9), default=None)
     urgent = [r for r in affecting if r["rating"] in ("Critical", "High")]
-    posture = {"rating": worst or "Clear", "urgent": len(urgent), "affecting": len(affecting)}
+    posture = {"rating": worst or "Clear", "urgent": len(urgent), "affecting": len(affecting),
+               "vulnerabilities": sum(1 for r in affecting if r["vuln"]), "indicators": sum(1 for r in affecting if r["ioc"])}
 
     # ---- exposure heatmap: device x app (Defender's full picture)
     matrix = q("""SELECT v.device_name, v.name AS app, COUNT(DISTINCT v.cve_id) AS cves
@@ -206,11 +211,27 @@ def gather(store: Store, settings: Settings | None = None) -> dict:
                          "announced": str(e["published_at"] or "")[:16], "known": str(known.get(cve) or "")[:16]})
 
     def match_of(r: dict, mine: list) -> str | None:
-        """How the threat reaches us: a sign of attack, confirmed by Defender, not in Defender yet, or closed."""
-        if r["hits"] or r["kind"] in ("hunt", "test"):
-            return "sign"
+        """How the threat reaches us: an Attack Detection behaviour hit, a collected indicator seen on a device,
+        confirmed by Defender, not in Defender yet, or closed."""
+        if r["kind"] in ("hunt", "test"):
+            return "behaviour"
+        if r["hits"]:
+            return "indicator"
         kinds = {x["match"] for x in mine}
         return next((name for kind, name in (("cve", "defender"), ("early", "early"), ("closed", "closed")) if kind in kinds), None)
+
+    def headline(mine: list, match: str | None) -> str | None:
+        """"Python 3.8.10.0 on opcc-wks-01: CVE-2026-115557" for a vulnerability match (the news title stays the source)."""
+        want = {"defender": "cve", "early": "early", "closed": "closed"}.get(match or "")
+        hits = [x for x in mine if x["match"] == want]
+        if not hits:
+            return None
+        apps = list(dict.fromkeys(f"{x['app'].replace('_', ' ').title()} {x['version']}".strip() for x in hits))
+        devices = list(dict.fromkeys(x["device"] for x in hits))
+        cves = list(dict.fromkeys(x["cve"] for x in hits))
+        return (f"{', '.join(apps[:2])}{' +' + str(len(apps) - 2) if len(apps) > 2 else ''} on {', '.join(devices[:3])}"
+                f"{' +' + str(len(devices) - 3) if len(devices) > 3 else ''}: {', '.join(cves[:3])}"
+                f"{' +' + str(len(cves) - 3) + ' more' if len(cves) > 3 else ''}")
 
     explorer = []
     for r in rows:
@@ -222,6 +243,7 @@ def gather(store: Store, settings: Settings | None = None) -> dict:
                          "chips": factor_chips(_j(r["factors"])), "action": actions[0] if actions else "",
                          "summary": (r["summary"] or "")[:420], "devices": r["devices"] or "", "hits": r["hits"],
                          "match": match_of(r, mine), **({"on_us": mine} if mine else {})})
+        explorer[-1]["headline"] = headline(mine, explorer[-1]["match"])
     urgent_cards = [e for e in explorer if e["rating"] in ("Critical", "High") and (e["devices"] or e["hits"])]
     top = ([e for e in urgent_cards if not e["test"]][:9] + [e for e in urgent_cards if e["test"]][:3])   # real first
 
@@ -238,6 +260,7 @@ def gather(store: Store, settings: Settings | None = None) -> dict:
                COUNT(DISTINCT CASE WHEN f.kind = 'exposure' THEN f.threat_id END) AS exposed,
                COUNT(DISTINCT CASE WHEN f.kind <> 'exposure' AND NOT f.is_test THEN f.finding_id END) AS hits,
                COUNT(DISTINCT CASE WHEN f.kind <> 'exposure' AND f.is_test THEN f.finding_id END) AS test_hits,
+               COUNT(DISTINCT CASE WHEN f.kind = 'ioc_hit' AND NOT f.is_test THEN f.finding_id END) AS indicators,
                (SELECT COUNT(*) FROM device_vulns v WHERE v.device_id = d.device_id) AS vulns
         FROM devices d LEFT JOIN findings f ON f.device_id = d.device_id GROUP BY ALL ORDER BY exposed DESC""")
     alerts = q("SELECT * FROM alerts ORDER BY created_at DESC LIMIT 12")

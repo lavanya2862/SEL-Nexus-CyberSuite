@@ -1,0 +1,20 @@
+// name: Addresses contacted by only one machine in the whole company
+// kind: behaviour
+// technique: T1071
+// attack: 11
+let recent = DeviceNetworkEvents
+    | where Timestamp > ago({{LOOKBACK}}d)
+    | where ActionType == "ConnectionSuccess" and RemoteIPType == "Public"
+    | where InitiatingProcessFileName !in~ ("chrome.exe", "msedge.exe", "firefox.exe", "iexplore.exe", "opera.exe",
+                                            "brave.exe", "MsSense.exe", "SenseNdr.exe", "MsMpEng.exe", "svchost.exe",
+                                            "OneDrive.exe", "Teams.exe", "ms-teams.exe", "outlook.exe",
+                                            "WindowsAzureGuestAgent.exe", "WaAppAgent.exe")
+    | extend Target = coalesce(RemoteUrl, RemoteIP);
+recent
+| summarize Devices = dcount(DeviceId), Connections = count(), Timestamp = min(Timestamp),
+            take_any(DeviceId, DeviceName, InitiatingProcessFileName, InitiatingProcessAccountName,
+                     InitiatingProcessCommandLine, RemoteIP, RemotePort) by Target
+| where Devices == 1 and Connections >= 10
+| project Timestamp, DeviceId, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName,
+          InitiatingProcessCommandLine, RemoteUrl = Target, RemoteIP, RemotePort, Connections
+| take 500

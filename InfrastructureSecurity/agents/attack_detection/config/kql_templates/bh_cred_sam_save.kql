@@ -1,0 +1,13 @@
+// name: Windows' local password store copied out (reg save SAM, SYSTEM, SECURITY)
+// kind: behaviour
+// technique: T1003.002
+// attack: 2
+DeviceProcessEvents
+| where Timestamp > ago({{LOOKBACK}}d)
+| where (FileName =~ "reg.exe" and ProcessCommandLine has_any ("save", "export")
+         and ProcessCommandLine matches regex @"(?i)(hklm|hkey_local_machine)\\(sam|system|security)\b")
+     or (ProcessCommandLine has_any ("esentutl", "copy", "Copy-Item") and ProcessCommandLine has "HarddiskVolumeShadowCopy"
+         and ProcessCommandLine matches regex @"(?i)\\config\\(sam|system|security)\b")
+| project Timestamp, DeviceId, DeviceName, AccountName, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| take 500

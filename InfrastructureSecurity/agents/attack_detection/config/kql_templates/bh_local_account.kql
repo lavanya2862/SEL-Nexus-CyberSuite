@@ -1,6 +1,7 @@
 // name: New local user account created
 // kind: behaviour
 // technique: T1136.001
+// attack: 8
 DeviceEvents
 | where Timestamp > ago({{LOOKBACK}}d)
 | where ActionType == "UserAccountCreated"

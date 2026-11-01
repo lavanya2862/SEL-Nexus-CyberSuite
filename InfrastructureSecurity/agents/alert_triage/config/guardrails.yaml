@@ -1,4 +1,4 @@
-# UC4 guardrails: fixed safety rules enforced in code, BEFORE and AFTER the AI.
+# Alert Triage guardrails: fixed safety rules enforced in code, BEFORE and AFTER the AI.
 # The AI can only make a verdict MORE cautious; a guardrail can force escalation or block a "close" recommendation.
 # Each rule has an id (used in the verdict's guardrail_triggered field) and the effect it forces.
 

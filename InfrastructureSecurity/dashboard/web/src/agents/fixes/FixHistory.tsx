@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
-import { CheckCircle2, ChevronDown, Search, ShieldCheck, Terminal } from 'lucide-react'
-import { StatusPill } from '@/components/FixLoop'
-import { Card, DTable, Empty, Panel, SevTag, Tag } from '@/components/kit'
-import { METHOD_LABEL, isSetting, useFix, versionOf, type FixRow } from '@/agents/fixes/data'
+import { ChevronDown, ShieldCheck } from 'lucide-react'
+import { Card, DTable, DateFilter, Empty, FilterBar, FilterSearch, Panel, SevTag, Tag, dateChip, inDateRange, type DateRange } from '@/components/kit'
+import { isSetting, useFix } from '@/agents/fixes/data'
+import { FixRegister } from '@/agents/fixes/FixRegister'
 import { useFilters } from '@/lib/filters'
-import { dateTime, num, shortDate, utc } from '@/lib/format'
+import { num, shortDate } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { groupBy, pretty, sumBy, useFixedFindings, useGroupAfter, useVulnData, type FixedFinding } from '@/agents/vulnerability/data'
@@ -26,8 +26,6 @@ export function FixHistory() {
       .sort((a, b) => (b.finished_at ?? b.started_at ?? '').localeCompare(a.finished_at ?? a.started_at ?? '')),
     [fix.data, opco],
   )
-  // Defender's fixed rows per (computer, app, version): links a portal fix to what Defender then stopped reporting
-  const byApp = useMemo(() => groupBy(fixed, (f) => keyOf(f.dev?.name ?? '', f.sw, f.ver)), [fixed])
   const portalKeys = useMemo(() => new Set(runs.filter((r) => r.status === 'verified').map((r) => keyOf(r.device_name, r.software_name, r.version))), [runs])
 
   if (isLoading || error || !data) return <VulnLoading error={error} />
@@ -57,84 +55,11 @@ export function FixHistory() {
         </div>
       </Panel>
 
-      <Card title="Remediations executed by CyberSuite" description="Each remediation executed by CyberSuite: approver, device response and Defender verification">
-        {fix.isLoading ? <div className="h-24 animate-pulse rounded-xl bg-well" />
-          : runs.length ? <div className="flex flex-col gap-3">{runs.map((r) => <RunCard key={r.fix_id} r={r} cleared={byApp[keyOf(r.device_name, r.software_name, r.version)]?.length ?? 0} events={fix.data?.events ?? []} />)}</div>
-          : <Empty text={fix.error ? 'Automated remediation is disabled, so remediations executed by CyberSuite cannot be shown.' : 'No remediations have been executed by CyberSuite yet.'} />}
-      </Card>
+      {fix.isLoading ? <div className="h-24 animate-pulse rounded-xl bg-well" />
+        : fix.data ? <FixRegister rows={fix.data.rows} opco={opco} />
+        : <Empty text="Automated remediation is disabled, so remediations executed by CyberSuite cannot be shown." />}
 
       <DefenderLog fixed={fixed} portalKeys={portalKeys} />
-    </div>
-  )
-}
-
-/* ───────── one portal fix: approved → ran → computer's answer → Defender confirms ───────── */
-
-function RunCard({ r, cleared, events }: { r: FixRow; cleared: number; events: { at: string; fix_id: string | null; text: string }[] }) {
-  const [open, setOpen] = useState(false)
-  const res = r.result
-  const setting = isSetting(r)
-  const before = setting ? '' : versionOf(res?.before) ?? r.version
-  const after = setting ? undefined : versionOf(res?.after)
-  const what = setting ? 'Changed setting:' : r.action === 'respond' ? 'Scanned and cleaned after:' : r.action === 'remove' ? 'Removed' : r.action === 'replace' ? 'Replaced' : 'Updated'
-  const mine = events.filter((e) => e.fix_id === r.fix_id).sort((a, b) => a.at.localeCompare(b.at))
-  const steps: [string, string | null, React.ReactNode][] = [
-    ['Approved', r.approved_at, <>{r.approved_by ? `by ${r.approved_by}` : ''}{r.approved_by && r.method ? ' · ' : ''}{r.method ? METHOD_LABEL[r.method] : ''}</>],
-    ['Executed on device', r.started_at, <>{r.device_name}</>],
-    ['Device response', r.finished_at, r.message ?? (r.status === 'failed' ? 'Remediation failed' : '')],
-    ['Verified by Defender', r.verified_at, r.verified_at
-      ? setting ? <>Defender now reports this setting as compliant</> : <>No longer listed as vulnerable{cleared ? <>: <b>{num(cleared)} vulnerabilities</b> cleared</> : ''}</>
-      : r.status === 'still_there' ? 'Defender still lists it' : setting ? 'Waiting for Defender’s next settings check (usually within a day)' : 'Waiting for Defender’s next scan (2–6 hours)'],
-  ]
-  return (
-    <div className="rounded-xl border border-hairline">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-        <CheckCircle2 className="size-5 shrink-0" style={{ color: r.status === 'verified' ? statusColor.good : r.status === 'failed' ? statusColor.critical : 'var(--ink-3)' }} />
-        <div className="min-w-0 flex-1">
-          <div className="font-medium">
-            {what} {r.app} <span className="tabular text-ink-3">{before}</span>{after && <> → <span className="tabular">{after}</span></>}
-          </div>
-          <div className="text-xs text-ink-3">{r.device_name} · {dateTime(utc(r.finished_at ?? r.started_at))}</div>
-        </div>
-        <StatusPill r={r} />
-      </div>
-      <ol className="grid gap-px border-t border-hairline bg-hairline sm:grid-cols-4">
-        {steps.map(([label, at, text]) => (
-          <li key={label} className="bg-panel px-4 py-3">
-            <div className={cn('text-xs font-semibold', at ? 'text-ink' : 'text-ink-3')}>{at ? '✓ ' : ''}{label}</div>
-            <div className="tabular text-[11px] text-ink-3">{at ? dateTime(utc(at)) : '–'}</div>
-            <div className="mt-1 text-xs leading-relaxed text-ink-2">{text}</div>
-          </li>
-        ))}
-      </ol>
-      {(res?.log?.length || mine.length > 0) && (
-        <div className="border-t border-hairline px-4 py-2.5">
-          <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 text-xs font-medium text-ink-2 hover:text-ink" aria-expanded={open}>
-            <Terminal className="size-3.5" /> {open ? 'Hide' : 'Show'} the full record
-            <ChevronDown className={cn('size-3.5 transition-transform', open && 'rotate-180')} />
-          </button>
-          {open && (
-            <div className="mt-2.5 grid gap-3 lg:grid-cols-2 animate-in fade-in duration-200">
-              {res?.log?.length ? (
-                <div>
-                  <div className="mb-1 text-xs font-semibold text-ink-2">Command output</div>
-                  <pre className="overflow-x-auto rounded-lg bg-well p-3 font-mono text-[11px] leading-relaxed text-ink-2">
-                    {res.log.join('\n')}{res.exit != null ? `\n(exit code ${res.exit}${res.reboot ? ', restart needed' : ''})` : ''}
-                  </pre>
-                </div>
-              ) : null}
-              {mine.length > 0 && (
-                <div>
-                  <div className="mb-1 text-xs font-semibold text-ink-2">Timeline</div>
-                  <ul className="space-y-1 text-xs text-ink-2">
-                    {mine.map((e, i) => <li key={i}><span className="tabular text-ink-3">{dateTime(utc(e.at))}</span> · {e.text}</li>)}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }
@@ -143,20 +68,21 @@ function RunCard({ r, cleared, events }: { r: FixRow; cleared: number; events: {
 
 function DefenderLog({ fixed, portalKeys }: { fixed: FixedFinding[]; portalKeys: Set<string> }) {
   const [q, setQ] = useState('')
+  const [when, setWhen] = useState<DateRange>({ preset: 'any' })
   const ql = q.trim().toLowerCase()
-  const shown = ql ? fixed.filter((f) => [f.cve, f.sw, pretty(f.sw), f.ver, f.dev?.name, f.o].some((s) => (s ?? '').toLowerCase().includes(ql))) : fixed
+  const shown = fixed.filter((f) => (!ql || [f.cve, f.sw, pretty(f.sw), f.ver, f.dev?.name, f.o].some((s) => (s ?? '').toLowerCase().includes(ql)))
+    && inDateRange(f.fixed ? new Date(`${f.fixed.slice(0, 10)}T12:00:00`) : null, when))
   const days = Object.entries(groupBy(shown, (f) => f.fixed)).sort((a, b) => b[0].localeCompare(a[0]))
   return (
     <Card
       title="All findings Defender reported as resolved, by day"
       description="Grouped by application and device. Expand a group to view each vulnerability."
-      action={
-        <label className="flex items-center gap-2 rounded-lg border border-hairline-strong bg-field px-3 py-1.5 text-sm transition-[border-color,box-shadow] focus-within:border-blue/60 focus-within:ring-3 focus-within:ring-blue/15">
-          <Search className="size-3.5 text-ink-3" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="CVE, app or device" className="w-44 bg-transparent outline-none placeholder:text-ink-3" />
-        </label>
-      }
     >
+      <FilterBar className="mb-4" chips={[...(q ? [{ key: 'q', label: `“${q}”`, onRemove: () => setQ('') }] : []), ...dateChip(when, () => setWhen({ preset: 'any' }))]}
+        onClear={() => { setQ(''); setWhen({ preset: 'any' }) }} count={`${num(shown.length)} remediated`}>
+        <FilterSearch value={q} onChange={setQ} placeholder="CVE, app or device" />
+        <DateFilter label="Remediated" value={when} onChange={setWhen} />
+      </FilterBar>
       {days.length ? (
         <div className="flex flex-col gap-5">
           {days.map(([day, fs]) => {

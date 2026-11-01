@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  AlertTriangle, ArrowRight, BellRing, Check, CheckCircle2, ChevronDown, Clock, Download, Hand, Minus, Play, Radar, ShieldAlert, Terminal, WifiOff, X, XCircle,
+  AlertTriangle, ArrowRight, BellRing, Check, CheckCircle2, ChevronDown, Clock, Download, Hand, Minus, Play, Radar, ShieldAlert, WifiOff, X, XCircle,
 } from 'lucide-react'
 import { Panel } from '@/components/kit'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -47,7 +47,7 @@ export function Runs() {
       {/* header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{AGENT_NAME[uc]}</h1>
           <p className="mt-1 text-sm text-ink-3">Run an agent on demand and track each stage in real time. Runs continue in the background if you leave this page.</p>
         </div>
         <div className="flex rounded-xl border border-hairline bg-panel p-1" role="tablist" aria-label="Agent">
@@ -124,10 +124,7 @@ export function Runs() {
       {/* the Fix stage's human approval: the fixes this run proposed, to fix now or save for later */}
       {run?.fix && run.status !== 'running' && <NewFixes fix={run.fix} uc={uc} since={run.started_at} />}
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <LogPanel uc={uc} run={run} live={live} />
-        <History uc={uc} />
-      </div>
+      <History uc={uc} />
     </div>
   )
 }
@@ -297,7 +294,6 @@ function ResultPanel({ run, uc, seconds }: { run: RunState; uc: AgentKey; second
                 {target.label} <ArrowRight className="size-4" />
               </Link>
             )}
-            <Link to="/" className="inline-flex items-center gap-2 rounded-xl border border-hairline px-4 py-2.5 text-sm font-medium hover:bg-well">Open the Summary</Link>
             <ReportButton run={run} />
           </div>
         </div>
@@ -309,19 +305,19 @@ function ResultPanel({ run, uc, seconds }: { run: RunState; uc: AgentKey; second
           </div>
         )}
 
-        {run.facts.length > 0 && (
+        {good && run.facts.length > 0 && (
           <div className="card-row mt-5 gap-3 [--card-min:150px]">
             {run.facts.map((f, i) => (
               <div key={f.label} className="rounded-xl border border-hairline p-4 animate-in fade-in slide-in-from-bottom-1 fill-mode-both duration-500" style={{ animationDelay: `${i * 70}ms` }}>
                 <div className="tabular text-2xl leading-none tracking-tight">{f.value}</div>
                 <div className="mt-2 text-sm font-medium">{f.label}</div>
-                {f.hint && <div className="mt-0.5 text-xs text-ink-3">{f.hint}</div>}
+                {f.hint && <div className="mt-0.5 text-xs text-ink-3">{uc === 'threat_intel' ? f.hint.replace(', listed below', '') : f.hint}</div>}
               </div>
             ))}
           </div>
         )}
 
-        {good && !!run.findings?.length && <Findings items={run.findings} />}
+        {good && uc !== 'threat_intel' && !!run.findings?.length && <Findings items={run.findings} />}
       </div>
     </Panel>
   )
@@ -366,11 +362,13 @@ const RATING_COLOR: Record<string, string> = {
 
 /** The run's new threats, signs of attack and alerts by name: what it is, why it matters, where, and what to do */
 function Findings({ items }: { items: RunFinding[] }) {
+  const visible = items.filter((f) => f.kind !== 'threat')
+  if (!visible.length) return null
   return (
     <div className="mt-6">
       <h3 className="text-sm font-semibold tracking-tight">Found in this run</h3>
       <ul className="mt-3 flex flex-col divide-y divide-hairline rounded-xl border border-hairline">
-        {items.map((f) => {
+        {visible.map((f) => {
           const K = FINDING_KIND[f.kind]
           return (
             <li key={`${f.kind}:${f.id}`}>
@@ -400,103 +398,6 @@ function Findings({ items }: { items: RunFinding[] }) {
   )
 }
 
-/* ───────── live log ───────── */
-
-type LogFilter = 'all' | 'steps' | 'problems'
-const STEP_RE = /Step \w+ (ok|failed|skipped)|vulnerability\.pipeline:|Daily run finished|Run started/
-const PROBLEM_RE = /WARNING|ERROR|FAILED|Traceback|failed|Error/
-/** The pipelines' internal step names, as people read them in the live log */
-const STEP_LABEL: Record<string, string> = {
-  collect: 'Collect threat intelligence', inventory: 'Defender inventory', derive: 'Match new CVEs', nvd_details: 'CVE details (NVD)',
-  epss: 'Exploit probability (EPSS)', products: 'Product matching', analyse: 'Threat analysis', exposure: 'Exposure assessment',
-  score: 'Risk scoring', rescore: 'Risk scoring', correlate: 'Evidence correlation', fix_advice: 'Remediation steps',
-  resolve: 'Resolution steps', alerts: 'Alerts', report: 'Report', dashboard: 'CyberSuite data', metrics: 'Metrics',
-  fix_plan: 'Remediation plan', hunt: 'Threat hunts', feedback: 'Analyst feedback', ingest: 'Incident ingestion',
-  triage: 'Triage', auto_resolve: 'Automated handling', respond: 'Response actions', defender_view: 'Defender view',
-  writeback: 'Defender comments', actions: 'Actions', ledger: 'Lab ledger', accuracy: 'Accuracy', export: 'Export',
-}
-/** One log line in plain words: step names spelled out, local folders reduced to the file name */
-const readable = (s: string) => s
-  .replace(/[A-Z]:(?:\\{1,2}[^\\'",}\s]+)+/g, (p) => p.split(/\\+/).pop() ?? p)
-  .replace(/\bStep (\w+) (ok|failed|skipped)\b/, (_, k: string, st: string) => `${STEP_LABEL[k] ?? k}: ${st === 'ok' ? 'completed' : st}`)
-  .replace(/^(\s+)(\w+)(\s+)(ok|failed|skipped)(\s)/, (all, a: string, k: string, b: string, st: string, c: string) => (STEP_LABEL[k] ? `${a}${STEP_LABEL[k]}${b}${st}${c}` : all))
-
-function LogPanel({ uc, run, live }: { uc: AgentKey; run: RunState | null; live: boolean }) {
-  const [lines, setLines] = useState<string[]>([])
-  const [filter, setFilter] = useState<LogFilter>('all')
-  const [follow, setFollow] = useState(true)
-  const next = useRef(0)
-  const runId = useRef<string | null>(null)
-  const box = useRef<HTMLDivElement>(null)
-
-  useQuery({
-    queryKey: ['run-log', uc, run?.run_id],
-    enabled: !!run,
-    refetchInterval: live ? 1000 : false,
-    queryFn: async () => {
-      if (runId.current !== run?.run_id) {
-        runId.current = run?.run_id ?? null
-        next.current = 0
-        setLines([])
-      }
-      const res = await fetch(`/api/runs/${uc}/log?after=${next.current}${run ? `&run=${run.run_id}` : ''}`)
-      const data = await res.json()
-      if (data.lines?.length) {
-        next.current = data.next
-        setLines((cur) => [...cur, ...data.lines].slice(-3000))
-      }
-      return data.next ?? 0
-    },
-  })
-
-  const shown = useMemo(() => lines.filter((l) => filter === 'all' || (filter === 'steps' ? STEP_RE.test(l) : PROBLEM_RE.test(l))), [lines, filter])
-  useEffect(() => {
-    if (follow && box.current) box.current.scrollTop = box.current.scrollHeight
-  }, [shown, follow])
-
-  return (
-    <Panel className="flex min-w-0 flex-col overflow-hidden xl:col-span-8">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline px-5 py-3.5">
-        <div className="flex items-center gap-2">
-          <Terminal className="size-4 text-ink-3" />
-          <h3 className="font-semibold tracking-tight">Live log</h3>
-          <span className="tabular text-xs text-ink-3">{lines.length} lines{live ? ' · updating' : ''}</span>
-        </div>
-        <div className="flex items-center gap-2 text-xs">
-          {(['all', 'steps', 'problems'] as const).map((f) => (
-            <button key={f} onClick={() => setFilter(f)} className={cn('rounded-full border px-3 py-1', filter === f ? 'pill-on' : 'border-hairline hover:bg-well')}>
-              {f === 'steps' ? 'Steps only' : f === 'problems' ? 'Problems' : 'All'}
-            </button>
-          ))}
-          <label className="ml-1 flex cursor-pointer items-center gap-1.5 text-ink-2">
-            <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="size-3.5 accent-[var(--sky)]" /> Follow
-          </label>
-        </div>
-      </div>
-      <div ref={box} className="h-[420px] overflow-auto bg-[#0f1115] px-4 py-3 font-mono text-[12px] leading-[1.65] text-[#c9ced6]">
-        {!run && <div className="text-[#7d8590]">No runs yet. Start an agent to stream its output here.</div>}
-        {shown.map((l, i) => <LogLine key={i} line={l} />)}
-        {live && <div className="mt-1 flex items-center gap-2 text-[#7d8590]"><span className="size-1.5 animate-pulse rounded-full bg-[#58a6ff]" /> waiting for the next line…</div>}
-      </div>
-    </Panel>
-  )
-}
-
-function LogLine({ line }: { line: string }) {
-  const m = line.match(/^(\d{4}-\d{2}-\d{2} )?(\d{2}:\d{2}:\d{2})(?:[,.]\d+)? (\w+) ([\w.]+): (.*)$/)
-  if (!m) return <div className="whitespace-pre-wrap break-words text-[#8b949e]">{readable(line)}</div>
-  const [, , time, level, source, msg] = m
-  const step = /Step \w+ ok/.test(msg)
-  const color = level === 'ERROR' || /failed/.test(msg) ? '#ff7b72' : level === 'WARNING' ? '#e3b341' : step ? '#7ee787' : '#c9ced6'
-  return (
-    <div className="whitespace-pre-wrap break-words">
-      <span className="text-[#6e7681]">{time}</span>{' '}
-      <span className="text-[#79c0ff]">{source.replace(/^uc\d\./, '')}</span>{' '}
-      <span style={{ color }}>{step ? '✓ ' : ''}{readable(msg)}</span>
-    </div>
-  )
-}
-
 /* ───────── recent runs ───────── */
 
 function History({ uc }: { uc: AgentKey }) {
@@ -509,7 +410,7 @@ function History({ uc }: { uc: AgentKey }) {
   const icon = { ok: CheckCircle2, partial: AlertTriangle, skipped: AlertTriangle, failed: XCircle, running: Clock } as const
   const color = { ok: statusColor.good, partial: statusColor.warning, skipped: statusColor.warning, failed: statusColor.critical, running: 'var(--sky)' } as const
   return (
-    <Panel className="flex flex-col p-5 xl:col-span-4">
+    <Panel className="flex flex-col p-5">
       <h3 className="font-semibold tracking-tight">Recent runs from CyberSuite</h3>
       <p className="mt-1 text-xs text-ink-3">Scheduled runs are listed in each agent’s own log.</p>
       <ul className="mt-4 flex flex-col divide-y divide-hairline">

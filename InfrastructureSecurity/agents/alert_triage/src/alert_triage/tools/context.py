@@ -80,7 +80,7 @@ def gather(packet: dict, settings: Settings, defender=None) -> dict:
         devices.append(info)
 
     from alert_triage.fixlink import fixes_for
-    threat_intel = fixes_for(settings.threat_intel_dir, [d["name"] for d in devices])
+    fixes = fixes_for(settings.threat_intel_dir, [d["name"] for d in devices])
     return {
         "devices": devices,
         "fixes": {"available": fixes["available"], "open": fixes.get("open", 0),
