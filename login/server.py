@@ -59,12 +59,12 @@ def load_settings() -> dict:
                                        if d.strip()),
         "modules": [
             {"id": "infrastructure_security", "name": "Infrastructure Security",
-             "description": "Threat intelligence, vulnerability management and alert triage across endpoints and "
-                            "servers, powered by Microsoft Defender.",
+             "description": "Autonomous defense combining active threat hunting, Agentic vulnerability remediation, "
+                            "and rapid incident containment with human oversight.",
              "url": env.get("INFRA_SEC_URL", env.get("INFRA_VULN_URL", env.get("DEFENDER_INFRA_URL", "http://127.0.0.1:8800"))).rstrip("/")},
             {"id": "application_security", "name": "Application Security",
-             "description": "Continuous code scanning with AI-assisted remediation, validated before every pull "
-                            "request.",
+             "description": "Multi-scanner vulnerability detection, Agentic branch remediation, and automated test "
+                            "validation with human-approved pull requests.",
              "url": env.get("APP_SEC_URL", env.get("APP_VULN_URL", "http://127.0.0.1:8500")).rstrip("/")},
         ],
     }

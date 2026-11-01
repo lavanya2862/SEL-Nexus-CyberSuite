@@ -1,45 +1,91 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Sign in · SEL Nexus CyberSuite</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231d5cff'/%3E%3Cpath d='M23 17c0 4-2.8 6-6.1 7.2a.8.8 0 0 1-.5 0C13 23 10 21 10 17v-5.6a.8.8 0 0 1 .8-.8c1.6 0 3.6-1 5-2.2a.9.9 0 0 1 1.2 0c1.4 1.2 3.4 2.2 5 2.2a.8.8 0 0 1 .8.8z' fill='none' stroke='white' stroke-width='1.8'/%3E%3C/svg%3E">
+  <link rel="icon"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231d5cff'/%3E%3Cpath d='M23 17c0 4-2.8 6-6.1 7.2a.8.8 0 0 1-.5 0C13 23 10 21 10 17v-5.6a.8.8 0 0 1 .8-.8c1.6 0 3.6-1 5-2.2a.9.9 0 0 1 1.2 0c1.4 1.2 3.4 2.2 5 2.2a.8.8 0 0 1 .8.8z' fill='none' stroke='white' stroke-width='1.8'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/static/login.css">
 </head>
+
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
-    <symbol id="i-server" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01M6 18h.01"/></symbol>
-    <symbol id="i-code" viewBox="0 0 24 24"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></symbol>
-    <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
-    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
-    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></symbol>
-    <symbol id="i-logout" viewBox="0 0 24 24"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></symbol>
-    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
-    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
-    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
-    <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24">
+      <path
+        d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+      <path d="m9 12 2 2 4-4" />
+    </symbol>
+    <symbol id="i-server" viewBox="0 0 24 24">
+      <rect width="20" height="8" x="2" y="2" rx="2" />
+      <rect width="20" height="8" x="2" y="14" rx="2" />
+      <path d="M6 6h.01M6 18h.01" />
+    </symbol>
+    <symbol id="i-code" viewBox="0 0 24 24">
+      <path d="m18 16 4-4-4-4" />
+      <path d="m6 8-4 4 4 4" />
+      <path d="m14.5 4-5 16" />
+    </symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24">
+      <path
+        d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z" />
+      <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" />
+      <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" />
+    </symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24">
+      <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+      <circle cx="12" cy="12" r="3" />
+    </symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24">
+      <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
+      <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+      <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
+      <path d="m2 2 20 20" />
+    </symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24">
+      <path d="m16 17 5-5-5-5" />
+      <path d="M21 12H9" />
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    </symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24">
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24">
+      <path d="m6 9 6 6 6-6" />
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24">
+      <path d="M20 6 9 17l-5-5" />
+    </symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 8v4M12 16h.01" />
+    </symbol>
   </svg>
 
   <header class="top">
     <div class="wordmark" aria-label="SEL Nexus CyberSuite">
-      <span class="tile tile-brand"><svg class="ico"><use href="#i-shield"/></svg></span>
+      <span class="tile tile-brand"><svg class="ico">
+          <use href="#i-shield" />
+        </svg></span>
       <span class="wm-text"><span class="wm-sel">SEL NEXUS</span><span class="wm-suite">CyberSuite</span></span>
     </div>
     <div class="who" id="who" hidden>
       <span class="who-name" id="who-name"></span>
-      <button type="button" class="link-btn" id="signout"><svg class="ico"><use href="#i-logout"/></svg>Sign out</button>
+      <button type="button" class="link-btn" id="signout"><svg class="ico">
+          <use href="#i-logout" />
+        </svg>Sign out</button>
     </div>
   </header>
 
   <!-- Signed out: headline + sign-in / sign-up card over the animated security backdrop -->
   <div class="layout" id="view-auth" hidden>
     <section class="hero">
-      <p class="eyebrow">Enterprise security platform</p>
       <h2>Secure every layer of the enterprise.<span>From infrastructure to code.</span></h2>
-      <p class="hero-lead">Detect, prioritise and remediate risk across every operating company from one secure workspace, with AI-assisted remediation and human approval at every step.</p>
+      <p class="hero-lead">Identify, prioritise and mitigate security risks across the entire organisation through a
+        unified, secure workspace, powered by Agentic remediation and human oversight at every step.</p>
       <ul class="areas" id="areas"></ul>
     </section>
 
@@ -51,22 +97,36 @@
             <h1>Sign in</h1>
             <p class="lead">Use your work account to access SEL Nexus CyberSuite.</p>
             <label class="field"><span>Work email</span>
-              <input type="email" name="email" autocomplete="username" inputmode="email" placeholder="name@company.com" required autofocus></label>
+              <input type="email" name="email" autocomplete="username" inputmode="email" placeholder="name@company.com"
+                required autofocus></label>
             <label class="field"><span>Password</span>
-              <span class="pw"><input type="password" name="password" autocomplete="current-password" placeholder="Enter your password" required>
-                <button type="button" class="pw-toggle" aria-label="Show password" aria-pressed="false"><svg class="ico"><use href="#i-eye"/></svg></button></span></label>
+              <span class="pw"><input type="password" name="password" autocomplete="current-password"
+                  placeholder="Enter your password" required>
+                <button type="button" class="pw-toggle" aria-label="Show password" aria-pressed="false"><svg
+                    class="ico">
+                    <use href="#i-eye" />
+                  </svg></button></span></label>
             <div class="field"><span id="login-domain-label">Security domain</span>
               <div class="picker" id="login-domain">
-                <button type="button" class="picker-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="login-domain-list" aria-labelledby="login-domain-label login-domain-value" aria-describedby="login-domain-note">
-                  <span class="picker-icons" aria-hidden="true"></span><span class="picker-value" id="login-domain-value" data-placeholder="Select a domain"></span>
-                  <svg class="ico chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+                <button type="button" class="picker-trigger" aria-haspopup="listbox" aria-expanded="false"
+                  aria-controls="login-domain-list" aria-labelledby="login-domain-label login-domain-value"
+                  aria-describedby="login-domain-note">
+                  <span class="picker-icons" aria-hidden="true"></span><span class="picker-value"
+                    id="login-domain-value" data-placeholder="Select a domain"></span>
+                  <svg class="ico chevron" aria-hidden="true">
+                    <use href="#i-chevron" />
+                  </svg>
                 </button>
-                <div class="picker-panel" id="login-domain-list" role="listbox" tabindex="-1" aria-labelledby="login-domain-label" hidden></div>
+                <div class="picker-panel" id="login-domain-list" role="listbox" tabindex="-1"
+                  aria-labelledby="login-domain-label" hidden></div>
               </div>
-              <small class="hint" id="login-domain-note"></small></div>
+              <small class="hint" id="login-domain-note"></small>
+            </div>
             <div class="error" role="alert" hidden></div>
-            <button type="submit" class="btn" data-busy="Signing in…">Sign in<svg class="ico"><use href="#i-arrow"/></svg></button>
-            <p class="switch" data-signup-only>Don’t have an account? <a href="#signup">Create one</a></p>
+            <button type="submit" class="btn" data-busy="Signing in…">Sign in<svg class="ico">
+                <use href="#i-arrow" />
+              </svg></button>
+            <p class="switch" data-signup-only>Don’t have an account? <a href="#signup">Sign up</a></p>
             <p class="switch" data-signup-closed hidden>Need access? Contact your CyberSuite administrator.</p>
           </form>
 
@@ -74,24 +134,39 @@
             <h1>Create your account</h1>
             <p class="lead">One account gives you access to every security domain you need.</p>
             <label class="field"><span>Full name</span>
-              <input type="text" name="name" autocomplete="name" placeholder="First and last name" required maxlength="80"></label>
+              <input type="text" name="name" autocomplete="name" placeholder="First and last name" required
+                maxlength="80"></label>
             <label class="field"><span>Work email</span>
-              <input type="email" name="email" autocomplete="username" inputmode="email" placeholder="name@company.com" required></label>
+              <input type="email" name="email" autocomplete="username" inputmode="email" placeholder="name@company.com"
+                required></label>
             <label class="field"><span>Password</span>
-              <span class="pw"><input type="password" name="password" autocomplete="new-password" placeholder="Create a password" required aria-describedby="pw-rule">
-                <button type="button" class="pw-toggle" aria-label="Show password" aria-pressed="false"><svg class="ico"><use href="#i-eye"/></svg></button></span>
+              <span class="pw"><input type="password" name="password" autocomplete="new-password"
+                  placeholder="Create a password" required aria-describedby="pw-rule">
+                <button type="button" class="pw-toggle" aria-label="Show password" aria-pressed="false"><svg
+                    class="ico">
+                    <use href="#i-eye" />
+                  </svg></button></span>
               <small class="hint" id="pw-rule"></small></label>
             <div class="field"><span id="signup-domain-label">Domain access</span>
               <div class="picker" id="signup-domain">
-                <button type="button" class="picker-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="signup-domain-list" aria-labelledby="signup-domain-label signup-domain-value" aria-describedby="signup-domain-note">
-                  <span class="picker-icons" aria-hidden="true"></span><span class="picker-value" id="signup-domain-value" data-placeholder="Select the domains you need"></span>
-                  <svg class="ico chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+                <button type="button" class="picker-trigger" aria-haspopup="listbox" aria-expanded="false"
+                  aria-controls="signup-domain-list" aria-labelledby="signup-domain-label signup-domain-value"
+                  aria-describedby="signup-domain-note">
+                  <span class="picker-icons" aria-hidden="true"></span><span class="picker-value"
+                    id="signup-domain-value" data-placeholder="Select the domains you need"></span>
+                  <svg class="ico chevron" aria-hidden="true">
+                    <use href="#i-chevron" />
+                  </svg>
                 </button>
-                <div class="picker-panel" id="signup-domain-list" role="listbox" tabindex="-1" aria-labelledby="signup-domain-label" hidden></div>
+                <div class="picker-panel" id="signup-domain-list" role="listbox" tabindex="-1"
+                  aria-labelledby="signup-domain-label" hidden></div>
               </div>
-              <small class="hint" id="signup-domain-note"></small></div>
+              <small class="hint" id="signup-domain-note"></small>
+            </div>
             <div class="error" role="alert" hidden></div>
-            <button type="submit" class="btn" data-busy="Creating your account…">Create account<svg class="ico"><use href="#i-arrow"/></svg></button>
+            <button type="submit" class="btn" data-busy="Creating your account…">Create account<svg class="ico">
+                <use href="#i-arrow" />
+              </svg></button>
             <p class="switch">Already have an account? <a href="#">Sign in</a></p>
           </form>
         </div>
@@ -111,4 +186,5 @@
 
   <script src="/static/login.js"></script>
 </body>
+
 </html>

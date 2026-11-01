@@ -121,7 +121,7 @@ function RunHeader({ job, report }: { job: Job; report?: Report }) {
             {s.branch && <span>Remediation branch <span className="font-mono text-ink-2">{s.branch}</span></span>}
             <span title={stamp(job.created_at)}>Initiated {ago(job.started_at ?? job.created_at)}{job.started_by && <> by <span className="text-ink-2">{personLabel(job.started_by)}</span></>}</span>
             {s.approved_by && <span title={stamp(s.approved_by.at)}>Approved by <span className="text-ink-2">{personLabel(s.approved_by)}</span> · {stamp(s.approved_by.at)}</span>}
-            {report && <span>took {dur(report.duration_seconds)}</span>}
+            {report && <span>Completed in {dur(report.duration_seconds)}</span>}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -135,7 +135,7 @@ function RunHeader({ job, report }: { job: Job; report?: Report }) {
       {!done && (
         <div>
           <div className="h-1.5 overflow-hidden rounded-full bg-well"><div className="h-full rounded-full bg-blue transition-[width] duration-500" style={{ width: `${job.progress}%` }} /></div>
-          <p className="mt-1.5 text-xs text-ink-3">{job.stage} · {job.progress}% · this page updates by itself</p>
+          <p className="mt-1.5 text-xs text-ink-3">{job.stage} · {job.progress}% · Updates automatically</p>
         </div>
       )}
       {!mine && (
@@ -258,8 +258,8 @@ function remediationFunnel(findings: Finding[]) {
     [count((f) => f.fix_status === 'not_attempted'), 'below the severity threshold'],
     [count(tests), 'in test code'],
     [count(vendored), 'in third-party library code'],
-    [count((f) => f.fix_status === 'skipped' && note(f).includes('budget')), 'over the per-scan limit'],
-    [count((f) => f.fix_status === 'skipped' && /ai model|llm|turned off/.test(note(f))), 'waiting for an AI model'],
+    [count((f) => f.fix_status === 'skipped' && note(f).includes('budget')), 'Exceeded scan limit'],
+    [count((f) => f.fix_status === 'skipped' && /ai model|llm|turned off/.test(note(f))), 'AI model not configured'],
   ] as [number, string][]).filter(([n]) => n > 0).map(([n, why]) => `${n} ${why}`)
   return { funnel, gaps }
 }
@@ -281,7 +281,7 @@ function SummaryTab({ job, report: r, findings, agents }: { job: Job; report: Re
             <div className="flex items-center gap-4">
               <div className="relative size-[150px] shrink-0">
                 <Chart height={150} build={() => ({ tooltip: { trigger: 'item', formatter: '{b}: {c}' }, series: [{ type: 'pie', radius: ['68%', '92%'], padAngle: 2, label: { show: false }, data: sev }] })} />
-                <div className="pointer-events-none absolute inset-0 grid place-items-center text-center"><div><div className="tabular text-2xl font-semibold">{findings.length}</div><div className="text-xs text-ink-3">issues</div></div></div>
+                <div className="pointer-events-none absolute inset-0 grid place-items-center text-center"><div><div className="tabular text-2xl font-semibold">{findings.length}</div><div className="text-xs text-ink-3">findings</div></div></div>
               </div>
               <ul className="flex flex-1 flex-col gap-2 text-sm">{sev.map((x) => <li key={x.name} className="flex items-center gap-2"><span className="size-2.5 rounded-full" style={{ background: x.itemStyle.color }} /><span className="flex-1 text-ink-2">{x.name}</span><b className="tabular font-medium">{x.value}</b></li>)}</ul>
             </div>

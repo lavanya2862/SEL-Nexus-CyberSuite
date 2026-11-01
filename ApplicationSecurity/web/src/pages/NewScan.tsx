@@ -79,7 +79,7 @@ export function NewScan() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Switch on={autoFix} set={setAutoFix} title="Automated remediation" text="The Remediation Agent remediates findings on an isolated branch." />
               <Switch on={llm} set={setUseLlm} disabled={!c?.llm.enabled} title="AI-assisted remediation"
-                text={c?.llm.enabled ? `Uses the organisation’s model (${c.llm.model}).` : 'Ask your administrator to configure the organisation’s AI model.'} />
+                text={c?.llm.enabled ? `Uses the organisation’s model (${c.llm.model}).` : 'AI model is not configured. Contact your admin to enable it.'} />
               <Switch on={pr} set={setCreatePr} disabled={!c?.github_token_configured} title="Raise the pull request automatically"
                 text={c?.github_token_configured ? 'When off, remediations wait for approval in Approvals. Scans that require review are raised as draft pull requests.' : <>Requires a GitHub token. Configure one in <Link to="/settings" className="text-sky underline">Settings</Link>.</>} />
               <Switch on={github} set={setGhTests} disabled={!c?.github_token_configured} title="CI test validation on GitHub Actions"
@@ -102,7 +102,7 @@ export function NewScan() {
               <Btn type="submit" disabled={busy || !repo.trim()} className="h-11 px-5 text-[15px]">
                 {busy ? <><Loader2 className="size-4 animate-spin" /> Initiating…</> : <>Start scan <ArrowRight className="size-4" /></>}
               </Btn>
-              <span className="text-xs text-ink-3">You will be taken to the live scan view.</span>
+              <span className="text-xs text-ink-3">Opening live scan view…</span>
             </div>
           </form>
         </Panel>
@@ -127,7 +127,7 @@ export function NewScan() {
             </ol>
           </Card>
           {c && !sc.codeql?.available && <Notice tone="warn" title="CodeQL is not installed in this environment">Code analysis falls back to Semgrep, Bandit and the built-in SAST rules. Run <code className="font-mono">scripts/install-codeql.ps1</code> to install it.</Notice>}
-          {c && !c.llm.enabled && <Notice tone="warn" title="AI-assisted remediation is unavailable">No AI model is configured on this server. Dependency upgrades and rule-based remediations still apply. Ask your administrator to configure the organisation’s AI model.</Notice>}
+          {c && !c.llm.enabled && <Notice tone="warn" title="AI-assisted remediation is unavailable">No AI model is configured on this server. Dependency upgrades and rule-based remediations still apply. AI model is not configured. Contact your admin to enable it.</Notice>}
           {c && !c.github_token_configured && <Notice tone="warn" title="Remediations cannot be pushed to GitHub">No GitHub token is configured. The patch remains available for download. <Link to="/settings" className="text-sky underline">Configure a token in Settings</Link>.</Notice>}
         </div>
       </div>

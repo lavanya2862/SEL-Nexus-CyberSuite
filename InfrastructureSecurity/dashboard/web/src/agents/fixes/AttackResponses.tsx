@@ -70,7 +70,7 @@ export function AttackResponses() {
             For every detection the <span className="inline-flex items-center gap-1.5 font-medium"><span className={cn('size-2 rounded-full', AGENT_DOT.attack_detection)} />{AGENT_NAME.attack_detection}</span> finds,
             it proposes a standard response: <b>update Defender, scan and remove any threats found</b> on the affected device, repeating with a full scan until Defender lists no active threat.{' '}
             {v.attack_auto_fix
-              ? <>Auto-fix is <b>on</b>: at the end of each run the agent approves and runs every response nobody has decided on, and retries the ones not clean yet. <b>Defer</b> keeps one out of auto-fix; <b>Auto-fix</b> on a card runs it now.</>
+              ? <>Auto-fix is <b>on</b>: at the end of each run the agent approves and runs every response awaiting review, and retries pending items. <b>Defer</b> keeps one out of auto-fix; <b>Auto-fix</b> on a card runs it now.</>
               : <>Nothing runs until you select Approve and then Execute remediation.</>}
           </p>
           <p className="mt-1.5 text-xs text-ink-3">

@@ -17,7 +17,7 @@
       body: JSON.stringify(body),
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || `Something went wrong (error ${res.status}). Please try again.`)
+    if (!res.ok) throw new Error(data.error || `Unable to sign in (error ${res.status}). Please try again or contact support.`)
     return data
   }
 
@@ -70,9 +70,8 @@
       el.setAttribute('role', 'option')
       if (m.disabled) el.setAttribute('aria-disabled', 'true')
       el.innerHTML = `<span class="${tileClass(m.id)}"><svg class="ico"><use href="#${iconOf(m.id)}"/></svg></span>` +
-        `<span class="opt-text"><b></b><small></small></span><span class="mark ${multiple ? 'mark-box' : 'mark-dot'}"><svg class="ico"><use href="#i-check"/></svg></span>`
+        `<span class="opt-text"><b></b>${m.disabled ? '<small>Not yet available on this server.</small>' : ''}</span><span class="mark ${multiple ? 'mark-box' : 'mark-dot'}"><svg class="ico"><use href="#i-check"/></svg></span>`
       el.querySelector('b').textContent = m.name
-      el.querySelector('small').textContent = m.disabled ? 'Not yet available on this server.' : m.description
       el.addEventListener('mousedown', (e) => e.preventDefault()) // keep the keyboard focus on the list
       el.addEventListener('mousemove', () => setActive(i))
       el.addEventListener('click', () => pick(i))
@@ -270,7 +269,7 @@
       card.className = m.url ? 'module' : 'module off'
       if (m.url) { card.type = 'button'; card.addEventListener('click', () => (here ? enter(user) : switchTo(user, m.id))) }
       card.innerHTML = `<span class="${tileClass(m.id)}"><svg class="ico"><use href="#${iconOf(m.id)}"/></svg></span><h2></h2><p></p>` +
-        (!m.url ? '<span class="soon">Not yet available</span>'
+        (!m.url ? '<span class="soon">Not connected</span>'
           : here ? '<span class="here">Current domain · Open</span>' : '<span class="go">Open <svg class="ico"><use href="#i-arrow"/></svg></span>')
       card.querySelector('h2').textContent = m.name
       card.querySelector('p').textContent = m.description

@@ -115,7 +115,7 @@ export function Assistant() {
           <div ref={listRef} className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
             {llm && !llm.enabled ? (
               <div className="rounded-xl bg-well px-3.5 py-3 text-sm text-ink-2">
-                <b className="text-ink">The Security Assistant is unavailable.</b> It uses the organisation’s AI model, which is not configured on this server. Ask your administrator to configure the organisation’s AI model.
+                <b className="text-ink">The Security Assistant is unavailable.</b> The organisation’s AI model is not configured. Contact your admin to enable it.
               </div>
             ) : (
               <Bubble from="bot">{INTRO[ctx.type]}</Bubble>

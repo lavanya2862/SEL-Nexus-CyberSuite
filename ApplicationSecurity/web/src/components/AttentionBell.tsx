@@ -19,7 +19,7 @@ export function AttentionBell() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="relative grid size-9 place-items-center rounded-lg hover:bg-well" aria-label={total ? `${total} things need your attention` : 'Needs your attention'}>
+        <button className="relative grid size-9 place-items-center rounded-lg hover:bg-well" aria-label={total ? `${total} items need your attention` : 'Needs your attention'}>
           <Bell className="size-[18px]" />
           {total > 0 && <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-signal ring-2 ring-panel" aria-hidden />}
         </button>

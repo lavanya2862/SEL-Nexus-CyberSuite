@@ -129,7 +129,7 @@ const SORTERS: Record<SortKey, (a: VRow, b: VRow) => number> = {
 }
 
 const PAGE = 50
-const WHEN: [string, string][] = [['', 'Found: any time'], ['7', 'Found: last 7 days'], ['30', 'Found: last 30 days'], ['90', 'Found: last 90 days'], ['pick', 'Found: pick dates…']]
+const WHEN: [string, string][] = [['', 'Found: any time'], ['7', 'Found: last 7 days'], ['30', 'Found: last 30 days'], ['90', 'Found: last 90 days'], ['pick', 'Found: custom dates…']]
 const isoDaysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10)
 
 export function VulnList({ app, software, data, fixRows, engine, startAgent, startDevice, onClose, prev, next }: {

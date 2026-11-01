@@ -18,15 +18,15 @@ export class CognitoError extends Error {
 }
 
 const FRIENDLY: Record<string, string> = {
-  NotAuthorizedException: 'Wrong email or password.',
-  UserNotFoundException: 'Wrong email or password.',
+  NotAuthorizedException: 'Invalid email or password.',
+  UserNotFoundException: 'Invalid email or password.',
   UsernameExistsException: 'An account with this email already exists. Sign in instead.',
   InvalidPasswordException: '',            // Cognito's own message names the missing rule
-  CodeMismatchException: 'That code is not right. Check the email and try again.',
-  ExpiredCodeException: 'That code has expired. Ask for a new one.',
-  LimitExceededException: 'Too many tries. Wait a few minutes and try again.',
-  TooManyRequestsException: 'Too many tries. Wait a few minutes and try again.',
-  TooManyFailedAttemptsException: 'Too many tries. Wait a few minutes and try again.',
+  CodeMismatchException: 'Incorrect code. Please check your email and try again.',
+  ExpiredCodeException: 'Verification code has expired. Please request a new one.',
+  LimitExceededException: 'Too many attempts. Please wait a few minutes and try again.',
+  TooManyRequestsException: 'Too many attempts. Please wait a few minutes and try again.',
+  TooManyFailedAttemptsException: 'Too many attempts. Please wait a few minutes and try again.',
   InvalidParameterException: '',
   UserNotConfirmedException: 'Confirm your email address first.',
 }

@@ -110,7 +110,7 @@ export function Timeline({ s }: { s: Story }) {
   const steps: Step[] = [
     { label: 'Announced', when: s.announced, note: 'by the vendor / NVD' },
     ...(s.behind ? [defender, identified] : [identified, defender]),
-    s.fixed ? { label: 'Remediated', when: s.fixed, note: 'gone from Defender', tone: 'good' } : { label: 'Remediated', when: null, note: 'not yet', tone: 'muted' },
+    s.fixed ? { label: 'Remediated', when: s.fixed, note: 'Resolved in Defender', tone: 'good' } : { label: 'Remediated', when: null, note: 'not yet', tone: 'muted' },
   ]
   return (
     <div className="rounded-xl bg-well px-4 py-3">
