@@ -165,6 +165,8 @@ class Settings:
         for path in (self.raw_dir, self.cache_dir / "ti", self.packets_dir, self.verdicts_dir, self.feedback_dir,
                      self.reports_dir, self.export_dir, self.inbox_dir / "guide", self.inbox_dir / "ledger",
                      self.log_dir):
+            if path.is_file():
+                path.unlink()
             path.mkdir(parents=True, exist_ok=True)
 
     # ---------- what is available ----------
