@@ -19,7 +19,7 @@ export function Vulnerabilities() {
   const repos = new Set(all.map((f) => f.repo)).size
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Vulnerabilities" description="All vulnerabilities identified by the Analysis Agent in the latest scan of each repository, ordered by risk. Select one for details, the affected code and the remediation applied." />
+      <PageHeader title="Vulnerabilities" description="All vulnerabilities identified by the Analysis Agent in the latest scan of each repository." />
       <AnalysisFound all={all} />
       <div className="card-row gap-4 [--card-min:150px]">
         <HeroTile hue="blue" label="Vulnerabilities identified" value={all.length} hint={`in ${repos} ${repos === 1 ? 'repository' : 'repositories'}`} />

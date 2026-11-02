@@ -34,7 +34,7 @@ export function Approvals() {
             <Panel key={j.id} className="flex flex-col gap-4 p-6">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-base font-semibold">{j.repo}</h3>
-                <VerdictTag v={s.validation_status} />
+                <StatusTag tone="info" label="Pending Approval" />
                 <span className="text-xs text-ink-3">Scanned {ago(j.finished_at)}</span>
                 <span className="flex-1" />
                 <Link to={`/runs/${j.id}`} className="text-sm font-medium text-sky hover:underline">Open scan →</Link>
@@ -67,9 +67,9 @@ export function Approvals() {
         }) : <Empty text="No remediations are pending your approval." />}
       </section>
 
-      <Card title={`Pull requests raised · ${prs.length}`} description="Raised after approval. Complete code review and merge on GitHub.">
+      <Card title={`Pull requests raised · ${prs.length}`} description="Complete code review and merge on GitHub.">
         {prs.length ? (
-          <DTable head={[['Repository'], ['Pull request'], ['Type'], ['Validation'], ['Remediations', 'right'], ['When']]}>
+          <DTable head={[['Repository'], ['Pull request'], ['Type'], ['Validation'], ['Remediations', 'right'], ['Last scan']]}>
             {prs.map((j) => (
               <tr key={j.id}>
                 <td className="font-medium"><Link to={`/runs/${j.id}`} className="hover:underline">{j.repo}</Link></td>
@@ -96,8 +96,7 @@ function DraftReview({ job: j, busy, onReviewed }: {
     <Panel className="flex flex-col gap-4 p-6">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-base font-semibold">{j.repo}</h3>
-        <VerdictTag v={s.validation_status} />
-        <StatusTag tone="warn" label="Draft PR raised automatically" />
+        <StatusTag tone="info" label="Pending Review" />
         <span className="text-xs text-ink-3">Scanned {ago(j.finished_at)}</span>
         <span className="flex-1" />
         <Link to={`/runs/${j.id}`} className="text-sm font-medium text-sky hover:underline">Open scan →</Link>

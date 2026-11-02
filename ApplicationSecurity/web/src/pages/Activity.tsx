@@ -20,18 +20,18 @@ export function Activity() {
   const items = log.data?.items ?? []
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Activity log" description="A record of who initiated each scan, approved its remediations, raised the pull request and ran CI test validation, with name, email, date and time. Newest first." />
+      <PageHeader title="Activity log" description="Comprehensive audit trail of security scan triggers, remediation approvals, pull request creations, and CI test validations with authenticated identity and timestamps." />
       <Panel className="flex flex-col gap-3 p-6">
         <div className="flex flex-wrap items-center gap-2">
           <Select label="Action" value={action} onChange={setAction}>
-            <option value="">All actions</option>
+            <option value="">Actions</option>
             {Object.entries(ACTIVITY).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </Select>
           <Search value={text} onChange={setText} placeholder="Filter by person, email or repository…" />
           {log.data && <span className="text-xs text-ink-3">{log.data.total > items.length ? `latest ${items.length} of ${log.data.total}` : `${log.data.total} entries`}</span>}
         </div>
         {log.isLoading ? <Loading /> : log.error ? <ErrorBox error={log.error} /> : !items.length ? <Empty text={action || q ? 'No activity matches these filters.' : 'No activity recorded yet. Scans and approvals appear here as soon as someone performs them.'} /> : (
-          <DTable head={[['When'], ['Who'], ['Action'], ['Repository'], ['Details']]} minWidth={980} maxHeight={720}>
+          <DTable head={[['Timestamp'], ['Initiated By'], ['Action'], ['Repository'], ['Details']]} minWidth={980} maxHeight={720}>
             {items.map((e) => {
               const a = ACTIVITY[e.action] ?? { label: e.action, tone: 'idle' as const }
               const url = e.detail.match(/https?:\/\/\S+/)?.[0]
@@ -41,7 +41,7 @@ export function Activity() {
                   <td className="max-w-[240px]"><Who p={{ email: e.email, name: e.name }} /></td>
                   <td className="whitespace-nowrap"><StatusTag tone={a.tone} label={a.label} /></td>
                   <td>
-                    {e.repo ? <div className="font-medium">{e.repo}</div> : <span className="text-ink-3">–</span>}
+                    {e.repo ? <div className="font-medium" title={e.repo}>{e.repo}</div> : <span className="text-ink-3">–</span>}
                     {e.job_id && <Link to={`/runs/${e.job_id}`} className="text-xs text-sky hover:underline">open scan</Link>}
                   </td>
                   <td className="max-w-[360px] text-xs text-ink-2">

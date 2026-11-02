@@ -66,27 +66,27 @@ export function FixesNeeded() {
 
           <Card title="Vulnerabilities" description="Ordered by risk. Select a row for the vulnerability details, affected code and recommended action.">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <Select label="Repository" value={repo} onChange={setRepo}><option value="">All repositories</option>{repos.map((r) => <option key={r} value={r}>{r}</option>)}</Select>
-              <Select label="Severity" value={sev} onChange={setSev}><option value="">All severities</option>{SEVERITIES.map((s) => <option key={s} value={s}>{sevLabel(s)}</option>)}</Select>
+              <Select label="Repository" value={repo} onChange={setRepo}><option value="">Repositories</option>{repos.map((r) => <option key={r} value={r}>{r}</option>)}</Select>
+              <Select label="Severity" value={sev} onChange={setSev}><option value="">Severities</option>{SEVERITIES.map((s) => <option key={s} value={s}>{sevLabel(s)}</option>)}</Select>
               <Search value={q} onChange={setQ} placeholder="Search by vulnerability or location…" />
               {reason && <button onClick={() => setReason('')} className="rounded-full border border-hairline px-3 py-1 text-xs text-ink-2 hover:bg-well">Root cause: {reason} ✕</button>}
             </div>
             {rows.length ? (
               <>
-                <DTable head={[['Risk'], ['Severity'], ['Vulnerability'], ['Repository'], ['Location'], ['Root cause'], ['Recommended action']]} minWidth={1100} maxHeight={720}>
-                  {rows.slice(0, 400).map((f) => (
+                <DTable head={[['Risk score'], ['Severity'], ['Vulnerability'], ['Repository'], ['Location'], ['Root cause'], ['Recommended action']]} minWidth={1180} maxHeight={720}>
+                  {rows.map((f) => (
                     <tr key={`${f.job_id}:${f.finding_id}`} className="cursor-pointer hover:bg-well/60" onClick={() => openFinding(f.job_id, f.finding_id)}>
                       <td><RiskScore score={f.score} /></td>
                       <td><SevTag sev={f.severity} /></td>
                       <td className="max-w-[320px] font-medium">{f.title}</td>
-                      <td className="text-xs text-ink-2">{f.repo}</td>
+                      <td className="min-w-[180px] whitespace-nowrap text-xs font-medium text-ink-2" title={f.repo}>{f.repo}</td>
                       <td className="min-w-[160px] max-w-[260px] font-mono [overflow-wrap:anywhere] text-xs text-ink-2">{f.location}</td>
                       <td><StatusTag tone={hueOf(f.reason_key) === 'red' ? 'bad' : hueOf(f.reason_key) === 'blue' ? 'idle' : 'warn'} label={f.reason} /></td>
                       <td className="max-w-[300px] text-xs text-ink-2">{f.action}</td>
                     </tr>
                   ))}
                 </DTable>
-                <p className="mt-2 text-xs text-ink-3">{rows.length > 400 ? `Showing 400 of ${num(rows.length)}.` : `${num(rows.length)} vulnerabilit${rows.length === 1 ? 'y' : 'ies'}.`}</p>
+                <p className="mt-2 text-xs text-ink-3">{num(rows.length)} vulnerabilit{rows.length === 1 ? 'y' : 'ies'}</p>
               </>
             ) : <Empty text="No vulnerabilities match the selected filters." />}
           </Card>

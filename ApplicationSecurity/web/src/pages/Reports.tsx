@@ -18,7 +18,7 @@ export function Reports() {
       </div>
       <Panel className="p-6">
         {jobs.isLoading ? <Loading /> : jobs.error ? <ErrorBox error={jobs.error} /> : jobs.data?.items.length ? (
-          <DTable head={[['Repository'], ['Finished'], ['Validation'], ['Findings', 'right'], ['Remediations', 'right'], ['PDF reports'], ['Machine-readable'], ['']]} minWidth={1180}>
+          <DTable head={[['Repository'], ['Date completed'], ['Validation'], ['Findings', 'right'], ['Remediations', 'right'], ['PDF reports'], ['Machine-readables'], ['']]} minWidth={1180}>
             {jobs.data.items.map((j) => {
               const s = j.summary ?? {}
               return (

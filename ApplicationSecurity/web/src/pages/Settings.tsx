@@ -18,9 +18,7 @@ export function SettingsPage() {
   if (s.isLoading) return <Loading />
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Settings" description={s.data?.per_user
-        ? <>Connect your GitHub account so the agents can access your repositories, push remediation branches and raise pull requests for the scans you initiate. Your token is personal and used only for your scans{s.data.user && <> (signed in as <span className="font-mono">{s.data.user}</span>)</>}.</>
-        : 'Connect GitHub so the agents can access repositories, push remediation branches and raise pull requests. The token is stored on this server only.'} />
+      <PageHeader title="Settings" description="Connect your GitHub account so the agents can access your repositories, push remediation branches and raise pull requests for the scans you initiate." />
       {s.error ? <KeyOnly error={s.error as ApiError} /> : s.data && <Forms view={s.data} />}
     </div>
   )

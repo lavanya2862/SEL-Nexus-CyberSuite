@@ -449,7 +449,7 @@ def _resolve_plan(open_: list[Finding]) -> list:
         rows.append([str(i), Paragraph(f"<b>{_x(a.action)}</b><br/>{_x(a.how)}", S["td"]),
                      Paragraph(f"<b>{len(items)}</b> ({_x(sev)})<br/>{_x(where, 160)}", S["td"]),
                      _p(_who(items[0], a), limit=120)])
-    return [_table(["#", "What to do", "Findings", "Who can do it"], rows, [0.04, 0.54, 0.24, 0.18], right=(0,))]
+    return [_table(["S.No", "What to do", "Findings", "Who can do it"], rows, [0.06, 0.52, 0.24, 0.18], right=(0,))]
 
 
 def _accounting(findings: list[Finding]) -> list:
@@ -524,7 +524,7 @@ def render_report_pdf(report: RemediationReport, findings: list[Finding]) -> byt
                                        "off for this scan, so only rule-based fixes were made") + ".", "body"),
               Spacer(1, 4)]
     if report.fixes:
-        story.append(_table(["#", "Change", "Made by", "Targets", "Rescan", "Validation"],
+        story.append(_table(["S.No", "Change", "Made by", "Targets", "Rescan", "Validation"],
                             [[str(i), _p(fx.summary, limit=170), _p(_made_by(fx, report)),
                               f"{len(fx.finding_ids)} finding{'s' if len(fx.finding_ids) != 1 else ''}",
                               {True: "gone", False: "still reported", None: "-"}[fx.verified],

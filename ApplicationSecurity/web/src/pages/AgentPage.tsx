@@ -34,7 +34,7 @@ function AgentView({ id }: { id: AgentId }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title={meta.name} description={`${meta.short}. Review its inputs, outputs and conclusions for any scan.`} />
+      <PageHeader title={meta.name} description={meta.short} />
 
       <Panel className="flex flex-col gap-4 p-6">
         <div className="flex items-center gap-3">
@@ -55,19 +55,22 @@ function AgentView({ id }: { id: AgentId }) {
       </Panel>
 
       <section className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-lg font-semibold tracking-tight">Results by scan</h2>
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-lg font-semibold tracking-tight">Results by scan</h2>
           {choices.length > 0 && (
             <Choice field label="Select a scan" value={pick ?? ''} onChange={setPick} className="ml-auto h-9 w-auto max-w-full"
               options={choices.map((j) => ({ value: j.id, label: `${j.repo} · ${JOB_STATUS[j.status]?.label ?? j.status} · ${ago(j.created_at)}` }))} />
           )}
+          </div>
+          <p className="mt-1 text-sm text-ink-3">Review its inputs, outputs and conclusions for any scan.</p>
         </div>
         {choices.length ? (pick && <RunResults id={id} jobId={pick} />) : <Empty text="No scans have been run yet."><LinkBtn to="/scan" kind="primary">Start a scan</LinkBtn></Empty>}
       </section>
 
       <Card title="Recent scans" description="Key outputs and the principal conclusion from each completed scan. Select a row to open the scan.">
         {hist.data.runs.length ? (
-          <DTable head={[['Repository'], ['When'], ['Status'], ['Key outputs'], ['Principal conclusion']]} minWidth={900}>
+          <DTable head={[['Repository'], ['Last scan'], ['Status'], ['Key outputs'], ['Principal conclusion']]} minWidth={900}>
             {hist.data.runs.map((h) => (
               <tr key={h.job_id} className="cursor-pointer hover:bg-well/60" onClick={() => navigate(`/runs/${h.job_id}/${id}`)}>
                 <td className="font-medium">{h.repo}</td>
@@ -108,7 +111,7 @@ function AgentDetail({ id, job }: { id: AgentId; job: Job }) {
     return (
       <Card title="Highest-risk findings" description="Ranked by risk score. Select a row for full details." action={link('findings', `All ${f.length} findings`)}>
         {f.length ? (
-          <DTable head={[['Risk'], ['Severity'], ['Finding'], ['Detected by'], ['Remediation']]}>
+          <DTable head={[['Risk score'], ['Severity'], ['Finding'], ['Detected by'], ['Remediation']]}>
             {f.slice(0, 10).map((x) => (
               <tr key={x.finding_id} className="cursor-pointer hover:bg-well/60" onClick={() => openFinding(job.id, x.finding_id)}>
                 <td><RiskScore score={x.priority_score} /></td><td><SevTag sev={x.severity} /></td>
@@ -125,9 +128,9 @@ function AgentDetail({ id, job }: { id: AgentId; job: Job }) {
   if (!rep) return null
   if (id === 'remediation') {
     return (
-      <Card title="Remediations applied" description="For each remediation: the vulnerability identified by the Analysis Agent, the change made by the Remediation Agent (one commit on the remediation branch), and the Validation Agent's verdict." action={link('remediation', 'View all diffs')}>
+      <Card title="Remediations applied" description="Detailed breakdown of detected vulnerabilities, applied remediation commits on the target branch, and corresponding validation verdicts." action={link('remediation', 'View all diffs')}>
         {rep.fixes.length ? (
-          <DTable head={[['#'], ['Vulnerability'], ['Remediation applied'], ['Confirmation scan'], ['Validation']]} minWidth={980}>
+          <DTable head={[['S.No'], ['Vulnerability'], ['Remediation applied'], ['Confirmation scan'], ['Validation']]} minWidth={980}>
             {rep.fixes.map((x, i) => {
               const [title, extra] = splitFixTitle(x.summary)
               const p = problemOf(x, findings.data ?? [])
@@ -168,7 +171,7 @@ function AgentDetail({ id, job }: { id: AgentId; job: Job }) {
               <tr key={i}>
                 <td><StatusTag tone={tone[c.status]} label={c.status} /></td>
                 <td><div className="font-medium">{c.name}</div><div className="text-xs text-ink-3">{c.category}</div></td>
-                <td className="text-xs">{c.fix_index != null ? `#${c.fix_index + 1}` : 'Entire scan'}</td>
+                <td className="text-xs">{c.fix_index != null ? `Remediation ${c.fix_index + 1}` : 'Entire scan'}</td>
                 <td className="max-w-[460px] text-xs text-ink-2">{c.detail}</td>
               </tr>
             ))}

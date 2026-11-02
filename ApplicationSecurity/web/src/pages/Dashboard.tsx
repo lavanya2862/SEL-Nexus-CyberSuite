@@ -36,7 +36,6 @@ export function Dashboard() {
 
 const FIXED = new Set(['verified', 'fixed'])
 const isFixed = (f: Finding) => FIXED.has(f.fix_status)
-const shortRepo = (repo?: string) => (repo ?? '').split('/').pop() ?? ''
 /** Readable names for the scanners' categories (the rest: dashes and underscores become spaces). */
 const KIND_NAME: Record<string, string> = {
   dependency_vulnerability: 'Vulnerable dependency', xss: 'Cross-site scripting', 'sql-injection': 'SQL injection', ssrf: 'Server-side request forgery',
@@ -177,12 +176,12 @@ function FiltersButton({ repos, findings, repo, setRepo }: { repos: Repository[]
           {repo !== 'all' ? <span className="tabular grid size-4 place-items-center rounded-full btn-blue text-[10px] text-white">1</span> : null}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-72">
+      <DropdownMenuContent align="end" className="w-max min-w-[280px] max-w-[90vw]">
         <DropdownMenuLabel>Repository</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={repo} onValueChange={setRepo}>
-          <DropdownMenuRadioItem value="all">All repositories</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="all"><span className="whitespace-nowrap">All repositories</span></DropdownMenuRadioItem>
           {repos.map((r) => (
-            <DropdownMenuRadioItem key={r.repo} value={r.repo}><span className="truncate">{r.repo}</span><span className="ml-auto pl-2 text-xs text-ink-3">{num(count(r.repo))}</span></DropdownMenuRadioItem>
+            <DropdownMenuRadioItem key={r.repo} value={r.repo}><span className="whitespace-nowrap">{r.repo}</span><span className="ml-auto pl-3 text-xs text-ink-3">{num(count(r.repo))}</span></DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
@@ -208,19 +207,20 @@ function DecisionStrip({ n }: { n: number }) {
 function UrgentCard({ v }: { v: View }) {
   const total = v.rows.length
   const pct = total ? (v.urgent.length / total) * 100 : 0
+  const rest = 100 - pct
   return (
     <Link to="/vulnerabilities" className="glass-card card-hero flex flex-col rounded-[20px] p-6">
       <div className="flex items-start justify-between">
         <h3 className="flex items-center gap-1.5 text-sm">Critical and high findings <InfoTip text="The proportion of findings in the latest scan of each repository rated critical or high severity. These are remediated first. The chip shows the count." /></h3>
-        <Chip>{num(v.urgent.length)}</Chip>
+        <Chip>{num(v.urgent.length)} urgent</Chip>
       </div>
-      <div className="mt-2 text-[34px] font-normal leading-none tracking-tight tabular">
-        {pct.toFixed(1)}% <span className="text-xl font-normal text-ink-2">({num(v.urgent.length)})</span>
-      </div>
+      <div className="mt-2 text-[34px] font-normal leading-none tracking-tight tabular">{pct.toFixed(1)}%</div>
       <div className="mt-auto pt-7">
         <div className="relative">
-          <div className="mb-2 text-xs text-ink-3">Medium, low and unrated</div>
+          <div className="mb-2 text-center text-xs text-ink-3">Medium, low and unrated</div>
           <div className="h-[3px] rounded-full" style={{ background: 'linear-gradient(90deg, rgb(255 255 255 / 0.55), #ffd166 75%, var(--signal))' }} />
+          <div className="absolute top-6 h-3 w-px bg-ink" style={{ left: `${rest}%` }} />
+          <div className="tabular mt-3 text-right text-xs font-medium" style={{ paddingRight: `${Math.max(0, pct - 6)}%` }}>{rest.toFixed(1)}%</div>
         </div>
       </div>
     </Link>
@@ -355,7 +355,7 @@ function RisksView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
             </div>
             <div className="mt-3 flex items-center justify-between gap-2 text-sm">
               <SevTag sev={f.severity} />
-              <span className="truncate text-xs text-ink-3" title={f.repo}>{shortRepo(f.repo)}</span>
+              <span className="truncate text-xs text-ink-3" title={f.repo}>{f.repo}</span>
             </div>
             <div className="mt-3 border-t border-hairline pt-3"><FixStatusTag s={f.fix_status} /></div>
           </button>
@@ -364,7 +364,7 @@ function RisksView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
     )
   return (
     <>
-      <DTable head={[['Risk'], ['Severity'], ['Vulnerability'], ['Repository'], ['Agent status']]} minWidth={680}>
+      <DTable head={[['Risk score'], ['Severity'], ['Vulnerability'], ['Repository'], ['Agent status']]} minWidth={840}>
         {v.topRisks.map((f) => (
           <tr key={`${f.job_id}:${f.finding_id}`} className="cursor-pointer hover:bg-well/60" onClick={() => open(f)}>
             <td><RiskScore score={f.priority_score} /></td>
@@ -373,7 +373,7 @@ function RisksView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
               <div className="line-clamp-2 font-medium leading-snug [text-wrap:pretty]" title={f.title}>{f.title}</div>
               <div className="truncate font-mono text-xs text-ink-3" title={where(f)}>{where(f)}</div>
             </td>
-            <td className="max-w-[150px] truncate text-xs text-ink-2" title={f.repo}>{shortRepo(f.repo)}</td>
+            <td className="min-w-[170px] whitespace-nowrap text-xs text-ink-2 font-medium" title={f.repo}>{f.repo}</td>
             <td><FixStatusTag s={f.fix_status} /></td>
           </tr>
         ))}
@@ -415,7 +415,7 @@ function NeededView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
             <td><SevTag sev={f.severity} /></td>
             <td className="max-w-[300px]">
               <div className="line-clamp-2 font-medium leading-snug" title={f.title}>{f.title}</div>
-              <div className="truncate font-mono text-xs text-ink-3" title={`${f.repo} · ${f.location}`}>{shortRepo(f.repo)} · {f.location}</div>
+              <div className="truncate font-mono text-xs text-ink-3" title={`${f.repo} · ${f.location}`}>{f.repo} · {f.location}</div>
             </td>
             <td><StatusTag tone="warn" label={f.reason} /></td>
             <td className="max-w-[260px] text-xs text-ink-2">{f.action}</td>

@@ -11,8 +11,9 @@ import type { Finding, Job, Person } from '@/lib/types'
 /** A person: name, with their email underneath. Scans from before sign-ins were recorded have nobody. */
 export function Who({ p, compact }: { p?: Person | null; compact?: boolean }) {
   if (!p || (!p.name && !p.email)) return <span className="text-ink-3" title="Started before the activity log existed">–</span>
+  const full = p.name && p.email && p.name !== p.email ? `${p.name} (${p.email})` : (p.name || p.email || '')
   return (
-    <div className="min-w-0">
+    <div className="min-w-0" title={full}>
       <div className={compact ? 'truncate text-xs text-ink-2' : 'truncate font-medium'}>{p.name || p.email}</div>
       {p.email && p.name && p.name !== p.email && <div className="truncate text-xs text-ink-3">{p.email}</div>}
     </div>
@@ -23,19 +24,15 @@ export function RunsTable({ items, empty = 'No scans have been run yet.' }: { it
   const navigate = useNavigate()
   if (!items.length) return <Empty text={empty} />
   return (
-    <DTable head={[['Repository'], ['Status'], ['Step'], ['Findings', 'right'], ['Remediations', 'right'], ['Validation'], ['Pull request'], ['Initiated by'], ['Initiated']]} minWidth={1040}>
+    <DTable head={[['Repository'], ['Status'], ['Findings', 'right'], ['Remediations', 'right'], ['Validation'], ['Pull request'], ['Initiated by'], ['Initiated']]} minWidth={960}>
       {items.map((j) => {
         const s = j.summary ?? {}
         return (
           <tr key={j.id} className="cursor-pointer hover:bg-well/60" onClick={(e) => { if (!(e.target as HTMLElement).closest('a')) navigate(`/runs/${j.id}`) }}>
-            <td><div className="font-medium">{j.repo}</div>{j.ref && <div className="font-mono text-xs text-ink-3">{j.ref}</div>}</td>
+            <td><div className="font-medium" title={j.repo}>{j.repo}</div>{j.ref && <div className="font-mono text-xs text-ink-3" title={j.ref}>{j.ref}</div>}</td>
             <td><JobStatusTag job={j} /></td>
-            <td className="text-xs text-ink-2">{j.status === 'running' ? `${j.stage} · ${j.progress}%` : j.status === 'completed' ? 'done' : j.stage}</td>
-            <td className="tabular text-right">
-              {s.findings ?? '–'}
-              {s.severity_counts && <div className="text-xs text-ink-3">{s.severity_counts.critical ?? 0} crit · {s.severity_counts.high ?? 0} high</div>}
-            </td>
-            <td className="tabular text-right">{s.fixes_applied ?? '–'}{s.verified_fixed != null && <div className="text-xs text-ink-3">{s.verified_fixed} confirmed</div>}</td>
+            <td className="tabular text-right font-medium">{s.findings ?? '–'}</td>
+            <td className="tabular text-right font-medium">{s.fixes_applied ?? '–'}</td>
             <td><VerdictTag v={s.validation_status} /></td>
             <td>
               {s.pull_request_url ? (
@@ -64,27 +61,26 @@ export function FindingsTable({ items, jobId, showRepo, extra }: { items: Findin
   const rows = items.filter((x) => (!f.repo || x.repo === f.repo) && (!f.sev || x.severity === f.sev) && (!f.type || findingType(x) === f.type)
     && (!f.status || x.fix_status === f.status) && (!f.scanner || [x.scanner, ...(x.also_reported_by ?? [])].includes(f.scanner))
     && (!q || [x.title, x.file_path, x.package_name, x.rule_id, x.advisory_id, ...(x.aliases ?? []), x.category].join(' ').toLowerCase().includes(q)))
-  const shown = rows.slice(0, 400)
+  const shown = rows
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         {showRepo && repos.length > 1 && (
-          <Select label="Repository" value={f.repo} onChange={set('repo')}><option value="">All repositories</option>{repos.map((r) => <option key={r} value={r}>{r}</option>)}</Select>
+          <Select label="Repository" value={f.repo} onChange={set('repo')}><option value="">Repositories</option>{repos.map((r) => <option key={r} value={r}>{r}</option>)}</Select>
         )}
-        <Select label="Severity" value={f.sev} onChange={set('sev')}><option value="">All severities</option>{SEVERITIES.map((s) => <option key={s} value={s}>{sevLabel(s)}</option>)}</Select>
-        <Select label="Type" value={f.type} onChange={set('type')}><option value="">All types</option>{FINDING_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select>
-        <Select label="Remediation status" value={f.status} onChange={set('status')}><option value="">Any remediation status</option>{Object.entries(FIX_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>
-        <Select label="Scanner" value={f.scanner} onChange={set('scanner')}><option value="">All scanners</option>{scanners.map((s) => <option key={s} value={s}>{s}</option>)}</Select>
+        <Select label="Severity" value={f.sev} onChange={set('sev')}><option value="">Severities</option>{SEVERITIES.map((s) => <option key={s} value={s}>{sevLabel(s)}</option>)}</Select>
+        <Select label="Type" value={f.type} onChange={set('type')}><option value="">Types</option>{FINDING_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select>
+        <Select label="Remediation status" value={f.status} onChange={set('status')}><option value="">Remediation status</option>{Object.entries(FIX_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>
+        <Select label="Scanner" value={f.scanner} onChange={set('scanner')}><option value="">Scanners</option>{scanners.map((s) => <option key={s} value={s}>{s}</option>)}</Select>
         <Search value={f.q} onChange={set('q')} placeholder="Search by title, file, package or CVE…" />
         {extra}
       </div>
       {rows.length ? (
         <>
-          <DTable head={[['#'], ['Risk'], ['Severity'], ['Finding'], ...(showRepo ? [['Repository'] as [string]] : []), ['Location'], ['Detected by'], ['Remediation']]} minWidth={showRepo ? 1040 : 920} maxHeight={720}>
+          <DTable head={[['Risk score'], ['Severity'], ['Finding'], ...(showRepo ? [['Repository'] as [string]] : []), ['Location'], ['Detected by'], ['Remediation']]} minWidth={showRepo ? 1160 : 920} maxHeight={720}>
             {shown.map((x) => (
               <tr key={`${x.job_id ?? jobId}:${x.finding_id}`} className="cursor-pointer hover:bg-well/60" onClick={() => openFinding(x.job_id ?? jobId!, x.finding_id)}>
-                <td className="tabular text-ink-3">{x.priority_rank ?? ''}</td>
                 <td><RiskScore score={x.priority_score} /></td>
                 <td><SevTag sev={x.severity} /></td>
                 <td className="max-w-[420px]">
@@ -92,14 +88,14 @@ export function FindingsTable({ items, jobId, showRepo, extra }: { items: Findin
                   <div className="text-xs text-ink-3">{FINDING_TYPES.find(([k]) => k === findingType(x))?.[1]} · {x.category.replace(/_/g, ' ')}{x.advisory_id ? ` · ${x.advisory_id}` : x.rule_id ? ` · ${x.rule_id}` : ''}</div>
                   {x.package_name && <div className="font-mono text-xs text-ink-2">{x.package_name}@{x.installed_version} {x.fixed_version ? `→ ${x.fixed_version}` : <span className="text-ink-3">(no fix yet)</span>}</div>}
                 </td>
-                {showRepo && <td className="text-xs text-ink-2">{x.repo}</td>}
+                {showRepo && <td className="min-w-[180px] whitespace-nowrap text-xs font-medium text-ink-2" title={x.repo}>{x.repo}</td>}
                 <td className="min-w-[160px] max-w-[280px] font-mono text-xs text-ink-2 [overflow-wrap:anywhere]">{where(x)}</td>
                 <td className="text-xs text-ink-2">{detectedBy(x)}</td>
                 <td><FixStatusTag s={x.fix_status} /></td>
               </tr>
             ))}
           </DTable>
-          <p className="text-xs text-ink-3">{rows.length > 400 ? `Showing 400 of ${rows.length}. ` : `${rows.length} of ${items.length} findings. `}Click a row for the full details, the code and the fix.</p>
+          <p className="text-xs text-ink-3">{rows.length} of {items.length} findings</p>
         </>
       ) : <Empty text={items.length ? 'No findings match the selected filters.' : 'No findings were identified in this repository.'} />}
     </div>

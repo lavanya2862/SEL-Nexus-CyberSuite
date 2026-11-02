@@ -80,7 +80,7 @@ class RemediationAgent:
                 f.fix_note = attempt.detail[:1000]
             if not attempt.manual:
                 ctx.log(f"{', '.join(ids)[:120]}: fix failed — {attempt.detail[:300]}", "warning")
-                ctx.step(self.stage_id, f"✗ {findings[0].title[:80] if findings else 'fix'}", "failed",
+                ctx.step(self.stage_id, f"{findings[0].title[:80] if findings else 'fix'}", "failed",
                          attempt.detail[:400])
             return None
         message = (f"fix(security): {attempt.summary[:150]}\n\n{attempt.detail[:1500]}\n\n"
@@ -244,7 +244,7 @@ class RemediationAgent:
         skipped = sum(1 for f in ctx.selected if f.fix_status == "skipped")
         if manual:
             ctx.step(self.stage_id, f"{manual} finding(s) need manual remediation", "warning",
-                     "See the fix note on each finding (e.g. no upstream patch, transitive dependency, secret rotation).")
+                     "Review the remediation guidance on each finding for recommended manual actions (such as upstream package updates, architectural changes, or secret rotation).")
         if skipped and not rep.llm_enabled:
             ctx.step(self.stage_id, f"{skipped} code finding(s) waiting for a Remediation Agent code fix", "warning",
                      "The organisation's AI model is not configured on this server; once it is, re-run the scan.")

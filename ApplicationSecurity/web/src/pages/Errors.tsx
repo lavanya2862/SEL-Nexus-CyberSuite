@@ -13,7 +13,7 @@ export function Errors() {
   const { config_errors: setup, errors } = att.data
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Errors" description="Configuration, scanner and scan execution issues, each with its recommended resolution. Vulnerabilities are listed under Results." />
+      <PageHeader title="Errors" description="System configuration, security scanner, and pipeline execution diagnostics with corrective remediation guidance." />
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold tracking-tight">Configuration <span className="text-ink-3">· {setup.length}</span></h2>
         {setup.length ? setup.map((e, i) => <ErrorCard key={i} e={e} />) : <Empty text="Configuration is complete. The AI model, GitHub token and scanners are all operational." />}

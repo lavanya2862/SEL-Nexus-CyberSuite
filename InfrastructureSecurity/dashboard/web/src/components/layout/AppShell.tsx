@@ -100,7 +100,7 @@ export function AppShell() {
             className="hidden h-9 items-center gap-2 rounded-lg border border-hairline-strong bg-[var(--panel-glass)] px-3 text-sm font-medium text-ink transition-colors hover:bg-well sm:flex"
           >
             {anyRunning ? <span className="size-2 animate-pulse rounded-full bg-sky" /> : <Play className="size-3.5 fill-sky text-sky" />}
-            {anyRunning ? 'Assessment running…' : 'Run assessment'}
+            {anyRunning ? 'Agents working…' : 'Run agents'}
           </button>
           <NotificationBell />
           <Tooltip>

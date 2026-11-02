@@ -23,8 +23,8 @@ import { useToast } from '@/lib/toast'
 import type { AgentId, AgentView, Finding, Job, Report } from '@/lib/types'
 
 type Tab = 'summary' | AgentId | 'tests' | 'findings' | 'logs'
-const TABS: [Tab, string][] = [['summary', 'Summary'], ['analysis', '① Analysis'], ['remediation', '② Remediation'], ['validation', '③ Validation'],
-  ['reporting', '④ Reporting'], ['tests', '⑤ CI tests'], ['findings', 'All findings'], ['logs', 'Activity log']]
+const TABS: [Tab, string][] = [['summary', 'Summary'], ['analysis', 'Analysis'], ['remediation', 'Remediation'], ['validation', 'Validation'],
+  ['reporting', 'Reporting'], ['tests', 'CI tests'], ['findings', 'All findings'], ['logs', 'Activity log']]
 
 export function RunDetail() {
   const { id, tab } = useParams()
@@ -70,13 +70,13 @@ function RunView({ job, urlTab }: { job: Job; urlTab?: Tab }) {
       <RunHeader job={job} report={report.data} />
       {completed && agents.data?.story && <Panel className="p-6"><StoryCard story={agents.data.story} job={job} /></Panel>}
       <Card title="Pipeline" description="The six stages of this scan. Select a stage to view its activity.">
-        <PipelineFlow stages={stages} selected={selected} onSelect={setPicked} />
+        <PipelineFlow stages={stages} selected={selected} onSelect={setPicked} branch={job.ref || (job.summary?.branch ? job.summary.branch : undefined)} />
         <StageDetail stage={stages.find((s) => s.id === selected)} />
       </Card>
       <ApprovalBox job={job} />
 
       <div className="flex flex-col gap-5">
-        <Tabs<Tab> tabs={tabs} value={tab} onChange={(t) => navigate(`/runs/${job.id}/${t}`, { replace: true })} />
+        <Tabs<Tab> tabs={tabs} value={tab} onChange={(t) => navigate(`/runs/${job.id}/${t}`, { replace: true, preventScrollReset: true })} />
         {completed && (report.error || findings.error) ? <ErrorBox error={report.error ?? findings.error} />
           : tab === 'logs' ? <LogTab job={job} />
           : tab === 'tests' ? <TestsTab job={job} />
@@ -287,7 +287,7 @@ function SummaryTab({ job, report: r, findings, agents }: { job: Job; report: Re
             </div>
           ) : <p className="text-sm text-ink-3">No findings were identified in this repository.</p>}
         </Card>
-        <Card title="Remediation funnel" description="Findings carried through each stage; every number counts findings.">
+        <Card title="Remediation funnel" description="Findings carried through each stage.">
           <div className="flex flex-col gap-2.5">
             {funnel.map(([l, n]) => (
               <div key={l} className="grid grid-cols-[150px_1fr_40px] items-center gap-3 text-sm">
@@ -314,9 +314,11 @@ function Verdict({ report: r }: { report: Report }) {
   const checks = r.validation_checks ?? []
   const c = (st: string) => checks.filter((x) => x.status === st).length
   const text: Record<string, [string, string]> = {
-    passed: ['All validation checks passed', 'The remediations compile, introduce no security regressions and are verified by the confirmation scan.'],
-    flagged: ['Review required', 'One or more checks failed. The changes will be raised as a draft pull request.'],
-    not_run: ['Not validated', 'There were no remediations to validate.'],
+    passed: ['All validation checks passed', 'All proposed code changes successfully compiled, maintained existing security controls without regressions, and were confirmed resolved in automated verification scans.'],
+    flagged: ['Review required', 'One or more automated validation checks flagged potential issues. A draft pull request will be generated to facilitate technical review and verification.'],
+    not_run: ['Not validated', 'Automated validation was not required as no code remediations were generated for this scan.'],
+    failed: ['Validation checks failed', 'Automated checks detected build or security failures. Code changes require developer review.'],
+    warning: ['Validation completed with warnings', 'Remediations passed core safety checks but flagged advisory notices for reviewer consideration.'],
   }
   const [title, body] = text[r.validation_status] ?? [r.validation_status, '']
   return (
@@ -371,7 +373,7 @@ function AnalysisExtra({ job, report: r, findings }: { job: Job; report: Report;
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
       <Card title="Highest-risk findings" action={<Btn kind="quiet" onClick={() => navigate(`/runs/${job.id}/findings`, { replace: true })}>All {findings.length} findings</Btn>}>
         {findings.length ? (
-          <DTable head={[['Risk'], ['Severity'], ['Finding'], ['Remediation']]} minWidth={520}>
+          <DTable head={[['Risk score'], ['Severity'], ['Finding'], ['Remediation']]} minWidth={520}>
             {findings.slice(0, 10).map((f) => (
               <tr key={f.finding_id} className="cursor-pointer hover:bg-well/60" onClick={() => openFinding(job.id, f.finding_id)}>
                 <td><RiskScore score={f.priority_score} /></td><td><SevTag sev={f.severity} /></td>
@@ -480,7 +482,7 @@ function ValidationExtra({ report: r }: { report: Report }) {
                 <td><StatusTag tone={tone[c.status]} label={c.status} /></td>
                 <td className="font-medium">{c.name}</td>
                 <td className="text-xs text-ink-2">{c.category}</td>
-                <td className="text-xs">{c.fix_index != null ? <>#{c.fix_index + 1} <span className="text-ink-3">{(r.fixes[c.fix_index]?.summary ?? '').slice(0, 60)}</span></> : <span className="text-ink-3">Entire scan</span>}</td>
+                <td className="text-xs">{c.fix_index != null ? <>Remediation {c.fix_index + 1} <span className="text-ink-3">{(r.fixes[c.fix_index]?.summary ?? '').slice(0, 60)}</span></> : <span className="text-ink-3">Entire scan</span>}</td>
                 <td className="max-w-[420px] text-xs text-ink-2">{c.detail}</td>
               </tr>
             ))}
@@ -493,16 +495,21 @@ function ValidationExtra({ report: r }: { report: Report }) {
 
 function ReportingExtra({ job }: { job: Job }) {
   const md = useQuery({ queryKey: ['job', job.id, 'report.md', job.summary?.approval_status], queryFn: () => api<string>(artifactUrl(job.id, 'report.md', false)) })
+  const cleanMd = (md.data ?? '')
+    .replace('| Stage | Component |', '| Stage | Agent |')
+    .replace(/\|\s*#\s*\|\s*Method\s*\|/g, '| S.No | Method |')
+    .replace(/\n*_\d+ more findings are in findings\.json \/ findings\.sarif\._\n*/g, '\n\n')
+
   return (
     <div className="flex flex-col gap-5">
-      <Card title="Downloads" description="PDF reports for stakeholders. findings.sarif imports into GitHub code scanning; fixes.patch applies with git apply.">
+      <Card title="Deliverables" description="PDF assessment reports for stakeholders and machine-readable exports for security tooling.">
         <div className="flex flex-wrap items-center gap-2">
           {PDF_FILES.map(([n]) => <LinkBtn key={n} href={artifactUrl(job.id, n)} kind="primary"><Download className="size-3.5" /> {n}</LinkBtn>)}
           <span className="mx-1 h-6 w-px bg-hairline-strong" />
           {TOOL_FILES.map(([n]) => <LinkBtn key={n} href={artifactUrl(job.id, n)}><Download className="size-3.5" /> {n}</LinkBtn>)}
         </div>
       </Card>
-      <Panel className="p-6">{md.isLoading ? <Loading text="Loading report…" /> : md.error ? <ErrorBox error={md.error} /> : <Markdown text={md.data ?? ''} />}</Panel>
+      <Panel className="p-6">{md.isLoading ? <Loading text="Loading report…" /> : md.error ? <ErrorBox error={md.error} /> : <Markdown text={cleanMd} />}</Panel>
     </div>
   )
 }

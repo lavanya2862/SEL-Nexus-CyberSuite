@@ -136,7 +136,7 @@ def analysis_view(job: dict, report: dict | None, findings: list[dict]) -> dict:
                    _kv("In remediation scope", m.get("selected", r.get("findings_selected", "–")))]
         if findings:
             top = findings[0]
-            outputs.append(_kv("Top risk", f"{_short(top.get('title'), 60)} ({top.get('priority_score')})", "bad"))
+            outputs.append(_kv("Top risk", f"{top.get('title')} ({top.get('priority_score')})", "bad"))
         raw, uniq = m.get("raw_results") or 0, m.get("unique") or len(findings)
         if raw and raw > uniq:
             learnings.append(_l(f"{raw} raw scanner results were consolidated into {uniq} unique findings; "

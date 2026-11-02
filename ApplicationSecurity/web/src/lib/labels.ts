@@ -30,7 +30,7 @@ export const STAGES: { id: string; name: string; short: string; agent: string | 
   { id: 'validation', name: 'Testing & Validation', short: 'Validate', agent: 'Validation Agent', icon: ShieldCheck,
     description: 'Verifies each remediation through syntax checks, a security-regression guard, the project’s test suite and a confirmation scan.' },
   { id: 'reporting', name: 'Reporting', short: 'Report', agent: 'Reporting Agent', icon: FileText,
-    description: 'Produces the assessment report, the SARIF file, a diff for each remediation and the final validation verdict.' },
+    description: 'Generates comprehensive assessment reports, SARIF exports, remediation code diffs, and the final validation verdict.' },
   { id: 'approval', name: 'Human Approval & PR', short: 'Approve', agent: null, icon: GitPullRequestArrow,
     description: 'An authorised reviewer approves the remediations; the branch is then pushed and a pull request raised.' },
 ]

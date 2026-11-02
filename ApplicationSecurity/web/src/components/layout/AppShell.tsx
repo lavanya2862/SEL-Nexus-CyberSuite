@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   ChevronRight, CircleAlert, CirclePlus, FileText, FolderGit2, Grip, HelpCircle, LayoutGrid, LogOut, Menu, Moon,
@@ -109,8 +109,16 @@ export function AppShell() {
     .filter((to) => (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(to + '/')))
     .sort((a, b) => b.length - a.length)[0]
 
-  // A new page always opens at the top.
+  // A new page always opens at the top, except when switching sub-tabs within the same scan.
+  const prevPathRef = useRef(pathname)
   useEffect(() => {
+    const prev = prevPathRef.current
+    prevPathRef.current = pathname
+    const match1 = prev.match(/^\/runs\/([^\/]+)/)
+    const match2 = pathname.match(/^\/runs\/([^\/]+)/)
+    if (match1 && match2 && match1[1] === match2[1]) {
+      return
+    }
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
   }, [pathname])
 
@@ -157,7 +165,7 @@ export function AppShell() {
         <aside
           className={cn(
             'nav-surface sticky ml-3 mt-3 hidden shrink-0 flex-col overflow-hidden rounded-[20px] border border-hairline shadow-[0_1px_2px_rgb(0_0_0/0.04),0_10px_28px_-14px_rgb(0_0_0/0.18)] transition-[width] duration-200 lg:flex',
-            collapsed ? 'w-16' : 'w-64',
+            collapsed ? 'w-16' : 'w-72',
             'top-[68px] h-[calc(100svh-80px)]',
           )}
         >

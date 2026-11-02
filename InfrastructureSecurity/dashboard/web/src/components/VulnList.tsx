@@ -132,7 +132,6 @@ const SORTERS: Record<SortKey, (a: VRow, b: VRow) => number> = {
 
 const PAGE = 50
 
-
 export function VulnList({ app, software, data, fixRows, engine, startAgent, startDevice, onClose, prev, next }: {
   app: VulnFixApp; software: string; data: VulnData; fixRows: FixRow[]; engine: boolean; startAgent?: 'vulnerability' | 'threat_intel' | null
   /** open on one computer (a run page's card) */

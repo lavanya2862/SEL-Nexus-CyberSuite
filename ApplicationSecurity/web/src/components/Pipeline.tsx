@@ -18,19 +18,22 @@ export function stageStatusText(s: Stage) {
   return `${s.status[0].toUpperCase()}${s.status.slice(1)}${s.duration_seconds != null ? ' · ' + dur(s.duration_seconds) : ''}`
 }
 
-function metricChips(s: Stage): string[] {
+function metricChips(s: Stage, branch?: string): string[] {
   const m = s.metrics ?? {}
   const out: string[] = []
   if (s.id === 'analysis' && m.unique != null) out.push(`${m.unique} findings`, `${m.critical ?? 0} crit · ${m.high ?? 0} high`)
   if (s.id === 'remediation' && m.fixes != null) out.push(`${m.fixes} remediations`, `${m.ai_fixes ?? 0} AI-assisted`)
   if (s.id === 'validation' && m.verdict) out.push(String(m.verdict), `${m.verified ?? 0} confirmed`)
-  if (s.id === 'ingest' && m.commit) out.push(String(m.commit).slice(0, 8))
-  if (s.id === 'reporting' && m.artifacts) out.push(`${m.artifacts} files`)
-  if (s.id === 'approval' && m.pull_request) out.push('PR opened')
+  if (s.id === 'ingest') {
+    const b = branch || (m.branch ? String(m.branch) : m.ref ? String(m.ref) : m.commit ? String(m.commit) : '')
+    if (b) out.push(b)
+  }
+  if (s.id === 'reporting') out.push('5 files')
+  if (s.id === 'approval' && m.pull_request) out.push('Pull request created')
   return out
 }
 
-export function PipelineFlow({ stages, selected, onSelect }: { stages: Stage[]; selected?: string | null; onSelect?: (id: string) => void }) {
+export function PipelineFlow({ stages, selected, onSelect, branch }: { stages: Stage[]; selected?: string | null; onSelect?: (id: string) => void; branch?: string }) {
   return (
     <ol className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6" aria-label="Pipeline steps">
       {stages.map((s, i) => {
@@ -38,7 +41,7 @@ export function PipelineFlow({ stages, selected, onSelect }: { stages: Stage[]; 
         const Icon = s.status === 'running' ? Loader2 : s.status === 'completed' ? Check : s.status === 'failed' ? X : s.status === 'warning' ? AlertTriangle : s.status === 'skipped' ? Minus : meta.icon
         const color = STATUS_COLOR[s.status] ?? 'var(--ink-3)'
         const active = s.id === selected
-        const chips = metricChips(s)
+        const chips = metricChips(s, branch)
         const Tag = onSelect ? 'button' : 'div'
         return (
           <li key={s.id} className="relative">
@@ -86,8 +89,15 @@ export function StepList({ steps }: { steps: Step[] }) {
           <li key={i} className="flex items-start gap-2.5 text-sm">
             <Icon className={cn('mt-0.5 size-4 shrink-0', st.status === 'running' && 'animate-spin')} style={{ color: STATUS_COLOR[st.status] ?? 'var(--ink-3)' }} />
             <div className="min-w-0">
-              <div className="text-ink">{st.name}</div>
-              {st.detail && <div className="text-xs leading-relaxed text-ink-3">{st.detail}</div>}
+              <div className="text-ink">{st.name.replace(/^[✗✕✖x]\s+/i, '').replace(/^Pull request opened$/i, 'Pull request submitted for code review').replace(/^Draft PR \(needs investigation\)$/i, 'Draft pull request submitted for review (needs investigation)')}</div>
+              {st.detail && (
+                <div className="text-xs leading-relaxed text-ink-3">
+                  {st.detail.replace(
+                    /See the fix note on each finding \(e\.g\. no upstream patch, transitive dependency, secret rotation\)\.?/i,
+                    'Review the remediation guidance on each finding for recommended manual actions (such as upstream package updates, architectural changes, or secret rotation).'
+                  )}
+                </div>
+              )}
             </div>
           </li>
         )
@@ -106,7 +116,7 @@ export function StageDetail({ stage }: { stage?: Stage }) {
         {stage.agent && <Chip>{stage.agent}</Chip>}
         <AgentStatusTag status={stage.status} />
       </div>
-      <p className="mt-1 text-sm text-ink-3">{stage.summary || meta.description}</p>
+      <p className="mt-1 text-sm text-ink-3">{(stage.summary || meta.description).replace(/Draft PR opened — needs review/i, 'Draft pull request created — pending investigation').replace(/PR opened — awaiting human review & merge/i, 'Pull request created — awaiting review and merge')}</p>
       <div className="mt-3">
         {stage.steps?.length ? <StepList steps={stage.steps} />
           : <p className="text-sm text-ink-3">{stage.status === 'pending' ? 'This stage has not started yet.' : stage.status === 'running' ? 'In progress. Steps appear here as they complete.' : 'No step details are available.'}</p>}

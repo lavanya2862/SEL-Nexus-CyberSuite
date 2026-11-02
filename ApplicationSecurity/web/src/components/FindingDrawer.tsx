@@ -94,7 +94,7 @@ function Body({ jobId, findingId, closeFinding }: { jobId: string; findingId: st
           </Notice>
           {fix && (
             <div className="mt-3 rounded-xl border border-hairline p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-3">Remediation #{idx + 1} · applied by the Remediation Agent</div>
+              <div className="break-words text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-3">Remediation {idx + 1} · Remediation Agent</div>
               <div className="mt-1 text-sm font-semibold">{fix.summary}</div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                 <StatusTag tone="info" label={METHOD[fix.method]?.label ?? fix.method} />

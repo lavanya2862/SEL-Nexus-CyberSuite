@@ -99,8 +99,8 @@ class RepositoryPipeline:
         ctx.step("ingest", "Detect languages & manifests",
                  detail=f"{langs}; {ctx.info.lines_of_code:,} lines of code; "
                         f"manifests: {', '.join(ctx.info.manifests[:8]) or 'none'}")
-        ctx.finish_stage("ingest", "completed", f"{self.repo.full_name}@{sha[:8]} · {langs}",
-                         commit=sha[:12], files_languages=sum(ctx.info.languages.values()))
+        ctx.finish_stage("ingest", "completed", f"{self.repo.full_name}@{ref or sha[:8]} · {langs}",
+                         commit=sha[:12], branch=ref or (meta.default_branch if meta else 'main'), files_languages=sum(ctx.info.languages.values()))
 
     # -- Human Approval & PR ------------------------------------------------------------------
     def _approval(self) -> None:
@@ -142,11 +142,11 @@ class RepositoryPipeline:
             url, draft = open_pull_request(self.repo, ctx.src, rep, ctx.default_branch, ctx.log)
             rep.pull_request_url, rep.pull_request_draft, rep.approval_status = url, draft, "pr_opened"
             ctx.step("approval", "Branch pushed", detail=rep.branch)
-            ctx.step("approval", "Draft PR (needs investigation)" if draft else "Pull request opened",
+            ctx.step("approval", "Draft pull request submitted for review (needs investigation)" if draft else "Pull request submitted for code review",
                      "warning" if draft else "completed", url)
             ctx.finish_stage("approval", "warning" if flagged else "completed",
-                             ("Draft PR opened — needs review" if flagged
-                              else "PR opened — awaiting human review & merge"), pull_request=url)
+                             ("Draft pull request created — pending investigation" if flagged
+                              else "Pull request created — awaiting review and merge"), pull_request=url)
         except RepoAccessError as exc:
             rep.approval_status = "failed"
             rep.notes.append(f"Could not open pull request: {exc}")

@@ -284,20 +284,20 @@ export function Choice({ value, onChange, options, label, field, placeholder, cl
       <DropdownMenuTrigger asChild>
         <button type="button" aria-label={label}
           className={cn('flex min-w-0 items-center gap-2 rounded-[10px] border bg-field px-3 text-left text-sm transition-[border-color,box-shadow] hover:border-blue/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-blue/15 data-[state=open]:border-blue/60 data-[state=open]:ring-3 data-[state=open]:ring-blue/15',
-            field ? 'h-10 w-full border-hairline-strong text-ink' : 'h-9 w-auto max-w-[260px]',
+            field ? 'h-10 w-full border-hairline-strong text-ink' : 'h-9 w-auto min-w-[130px] max-w-none',
             !field && (on ? 'border-blue/60 text-ink' : 'border-hairline-strong text-ink-2'), className)}>
-          <span className={cn('min-w-0 flex-1 truncate', !cur && 'text-ink-3')}>{cur?.label ?? placeholder ?? value}</span>
+          <span className={cn('min-w-0 flex-1 whitespace-nowrap', !cur && 'text-ink-3')} title={typeof cur?.label === 'string' ? cur.label : undefined}>{cur?.label ?? placeholder ?? value}</span>
           <ChevronDown className="size-4 shrink-0 text-ink-3" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start"
-        className="max-h-80 min-w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto rounded-xl border border-hairline bg-panel p-1.5 shadow-xl">
+        className="max-h-80 w-max min-w-[max(220px,var(--radix-dropdown-menu-trigger-width))] max-w-[90vw] overflow-y-auto rounded-xl border border-hairline bg-panel p-1.5 shadow-xl">
         <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
           {options.map((o) => (
             <DropdownMenuRadioItem key={o.value} value={o.value}
               className="gap-2 rounded-lg py-2 pl-2.5 text-ink-2 focus:bg-well focus:text-ink data-[state=checked]:font-medium data-[state=checked]:text-ink">
               <span className="min-w-0 flex-1">
-                <span className="block truncate">{o.label}</span>
+                <span className="block whitespace-nowrap">{o.label}</span>
                 {o.hint && <span className="block text-xs font-normal text-ink-3">{o.hint}</span>}
               </span>
             </DropdownMenuRadioItem>

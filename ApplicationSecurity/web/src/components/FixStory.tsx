@@ -97,7 +97,7 @@ export function FixStory({ fix, findings, onOpenFinding, compact }: {
           </div>
         )}
       </Step>
-      <Step icon={Wrench} tone="var(--blue)" label="Remediation · applied by the Remediation Agent">
+      <Step icon={Wrench} tone="var(--blue)" label="Remediation · Remediation Agent">
         <div className="font-semibold leading-snug">{title}</div>
         {extra && <div className="text-xs text-ink-3">{extra}</div>}
         {fix.explanation ? <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{compact ? plain(fix.explanation, 220) : fix.explanation}</p>
@@ -109,7 +109,7 @@ export function FixStory({ fix, findings, onOpenFinding, compact }: {
           <span className="break-all font-mono text-ink-3">{fix.files.join(', ')}</span>
         </div>
       </Step>
-      <Step icon={ShieldCheck} tone="var(--teal)" label="Verification · by the Validation Agent">
+      <Step icon={ShieldCheck} tone="var(--teal)" label="Verification · Validation Agent">
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           {fix.verified === true ? <StatusTag tone="good" label="Confirmation scan: resolved" />
             : fix.verified === false ? <StatusTag tone="warn" label="Confirmation scan: still reported" /> : <StatusTag tone="idle" label="Not verified by scan" />}

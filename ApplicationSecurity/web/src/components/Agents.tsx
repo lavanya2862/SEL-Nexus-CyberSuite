@@ -25,13 +25,23 @@ export function AgentTile({ id, size = 'md' }: { id: AgentId; size?: 'sm' | 'md'
 
 function KVList({ items }: { items: KV[] }) {
   return (
-    <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5 text-sm">
-      {items.map((i) => (
-        <div key={i.label} className="contents">
-          <dt className="truncate text-ink-3" title={i.label}>{i.label}</dt>
-          <dd className="tabular text-right font-medium" style={{ color: i.tone === 'good' ? statusColor.good : i.tone === 'warn' ? statusColor.warning : i.tone === 'bad' ? statusColor.critical : undefined }}>{i.value}</dd>
-        </div>
-      ))}
+    <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2 text-sm">
+      {items.map((i) => {
+        const isLong = String(i.value).length > 25
+        return isLong ? (
+          <div key={i.label} className="col-span-2 flex flex-col gap-1 border-t border-hairline/60 pt-2 first:border-0 first:pt-0">
+            <dt className="text-xs font-medium text-ink-3" title={i.label}>{i.label}</dt>
+            <dd className="break-words text-left font-medium leading-snug" style={{ color: i.tone === 'good' ? statusColor.good : i.tone === 'warn' ? statusColor.warning : i.tone === 'bad' ? statusColor.critical : undefined }}>
+              {i.value}
+            </dd>
+          </div>
+        ) : (
+          <div key={i.label} className="contents">
+            <dt className="break-words text-ink-3" title={i.label}>{i.label}</dt>
+            <dd className="tabular text-right font-medium" style={{ color: i.tone === 'good' ? statusColor.good : i.tone === 'warn' ? statusColor.warning : i.tone === 'bad' ? statusColor.critical : undefined }}>{i.value}</dd>
+          </div>
+        )
+      })}
     </dl>
   )
 }
@@ -112,7 +122,7 @@ export function AgentPanel({ view, job }: { view: AgentView; job?: Job }) {
 
       {view.steps.length > 0 && (
         <details className="group rounded-xl border border-hairline p-4">
-          <summary className="cursor-pointer text-sm font-medium text-ink-2">How it worked: {view.steps.length} step(s)</summary>
+          <summary className="cursor-pointer text-sm font-medium text-ink-2">Execution details ({view.steps.length} steps)</summary>
           <div className="mt-3"><StepList steps={view.steps} /></div>
         </details>
       )}

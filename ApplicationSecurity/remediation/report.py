@@ -48,7 +48,7 @@ def render_markdown(report: RemediationReport, findings: list[Finding], max_rows
              f"- Approval: **{report.approval_status.replace('_', ' ')}**" +
              (f" — {'draft ' if report.pull_request_draft else ''}PR {report.pull_request_url}"
               if report.pull_request_url else ""), "",
-             "## Pipeline", "", "| Stage | Component | Status | Duration | Result |", "|---|---|---|---:|---|"]
+             "## Pipeline", "", "| Stage | Agent | Status | Duration | Result |", "|---|---|---|---:|---|"]
     for st in report.stages:
         dur = f"{st.duration_seconds:.1f}s" if st.duration_seconds is not None else "–"
         lines.append(f"| {st.name} | {st.agent or '–'} | {st.status} | {dur} | {_md_escape(st.summary, 120)} |")
@@ -59,7 +59,7 @@ def render_markdown(report: RemediationReport, findings: list[Finding], max_rows
     if not report.fixes:
         lines.append("No automatic fixes were applied.")
     else:
-        lines += ["| # | Method | Change | Files | Risk | Verified | Validation | Status |",
+        lines += ["| S.No | Method | Change | Files | Risk | Verified | Validation | Status |",
                   "|---:|---|---|---|---|---|---|---|"]
         for i, fix in enumerate(report.fixes, 1):
             verified = {True: "✅", False: "⚠️ still reported", None: "–"}[fix.verified]
@@ -79,8 +79,7 @@ def render_markdown(report: RemediationReport, findings: list[Finding], max_rows
                      (f" → `{_md_escape(f.fixed_version, 20)}`" if f.fixed_version else " (no fix)")
         scanners = ", ".join([f.scanner, *f.also_reported_by])
         lines.append(f"| {_ICON.get(f.severity, '')} {f.severity} | {title} | {_location(f)} | {scanners} | {f.fix_status} |")
-    if len(findings) > max_rows:
-        lines.append(f"\n_{len(findings) - max_rows} more findings are in findings.json / findings.sarif._")
+    # Truncation message removed per user request
     if report.notes:
         lines += ["", "## Notes", ""] + [f"- {n}" for n in report.notes]
     lines += ["", "---", "Automated changes must be reviewed by a human before merging. "
@@ -97,7 +96,7 @@ def render_pr_body(report: RemediationReport) -> str:
     if report.validation_status == "flagged":
         lines += ["> [!WARNING]", "> This change set needs review: a Testing & Validation Agent check failed. It is opened as a draft "
                   "for investigation and must not be merged until the failed checks below are resolved.", ""]
-    lines += ["### Changes", "", "| # | Method | Change | Risk | Rescan | Validation |", "|---:|---|---|---|---|---|"]
+    lines += ["### Changes", "", "| S.No | Method | Change | Risk | Rescan | Validation |", "|---:|---|---|---|---|---|"]
     for i, fix in enumerate(report.fixes, 1):
         if fix.status != "applied":
             continue
