@@ -31,7 +31,6 @@ export function NewScan() {
   const [createPr, setCreatePr] = useState<boolean | null>(null)
   const [ghTests, setGhTests] = useState<boolean | null>(null)
   const [maxF, setMaxF] = useState('')
-  const [onFlag, setOnFlag] = useState('draft')
   const [scanners, setScanners] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -43,7 +42,7 @@ export function NewScan() {
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setBusy(true)
-    const options: Record<string, unknown> = { min_severity: minSev, auto_fix: autoFix, use_llm: llm, create_pr: pr, pr_on_flagged: onFlag,
+    const options: Record<string, unknown> = { min_severity: minSev, auto_fix: autoFix, use_llm: llm, create_pr: pr, pr_on_flagged: 'draft',
       github_tests: github && !!c?.github_token_configured }
     if (ref.trim()) options.ref = ref.trim()
     if (maxF) options.max_findings = Number(maxF)
@@ -81,7 +80,7 @@ export function NewScan() {
               <Switch on={llm} set={setUseLlm} disabled={!c?.llm.enabled} title="AI-assisted remediation"
                 text={c?.llm.enabled ? `Uses the organisation’s model (${c.llm.model}).` : 'AI model is not configured. Contact your admin to enable it.'} />
               <Switch on={pr} set={setCreatePr} disabled={!c?.github_token_configured} title="Raise the pull request automatically"
-                text={c?.github_token_configured ? 'When off, remediations wait for approval in Approvals. Scans that require review are raised as draft pull requests.' : <>Requires a GitHub token. Configure one in <Link to="/settings" className="text-sky underline">Settings</Link>.</>} />
+                text={c?.github_token_configured ? 'When off, remediations wait for approval in approvals. Scans that require review are raised as draft pull requests.' : <>Requires a GitHub token. Configure one in <Link to="/settings" className="text-sky underline">Settings</Link>.</>} />
               <Switch on={github} set={setGhTests} disabled={!c?.github_token_configured} title="CI test validation on GitHub Actions"
                 text={c?.github_token_configured ? 'After the scan, the full test suite runs on GitHub Actions. The Remediation Agent resolves failing tests and re-runs them, up to 3 times.' : <>Requires a GitHub token. Configure one in <Link to="/settings" className="text-sky underline">Settings</Link>.</>} />
             </div>
@@ -89,12 +88,6 @@ export function NewScan() {
               <summary className="cursor-pointer text-sm font-medium text-ink-2">Advanced options</summary>
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Maximum AI-assisted remediations (optional)"><input type="number" min={1} max={200} value={maxF} onChange={(e) => setMaxF(e.target.value)} placeholder="All findings in scope" className={inputCls} /></Field>
-                <Field label="When validation requires review">
-                  <Choice field label="When validation requires review" value={onFlag} onChange={setOnFlag} options={[
-                    { value: 'draft', label: 'Raise a draft pull request for investigation' },
-                    { value: 'skip', label: 'Hold until manually approved' },
-                  ]} />
-                </Field>
                 <Field label="Scanners (comma-separated)"><input value={scanners} onChange={(e) => setScanners(e.target.value)} placeholder="All available scanners" className={inputCls} /></Field>
               </div>
             </details>
@@ -108,12 +101,12 @@ export function NewScan() {
         </Panel>
 
         <div className="flex flex-col gap-5">
-          <Card title="Assessment workflow" description="Based on the current configuration of this environment:">
+          <Card title="Assessment Pipeline">
             <ol className="flex flex-col gap-3">
               <Step id="analysis" title="Analysis Agent" text={`${sc.codeql?.available ? 'CodeQL' : 'Built-in SAST rules'}, ${sc.trivy?.available ? 'Trivy' : 'OSV'} and supporting scanners; findings are consolidated and prioritised by risk.`} />
               <Step id="remediation" title="Remediation Agent" text={c?.llm.enabled ? 'Dependency upgrades, rule-based and AI-assisted remediations, one commit per remediation.' : 'Dependency upgrades and rule-based remediations (AI-assisted remediation requires an AI model).'} />
               <Step id="validation" title="Validation Agent" text="Syntax checks, a security-regression guard and a confirmation scan." />
-              <Step id="reporting" title="Reporting Agent" text="Assessment report, SARIF file, a diff per remediation and the validation verdict." />
+              <Step id="reporting" title="Reporting Agent" text="Generates consolidated assessment reports, SARIF exports, remediation code diffs, and validation verdicts." />
               {github && (
                 <li className="flex items-start gap-3">
                   <span className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-well text-sky"><FlaskConical className="size-4" /></span>

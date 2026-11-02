@@ -16,7 +16,7 @@ import { Chart } from '@/components/Chart'
 import { Chip, DTable, Empty, ErrorBox, FixStatusTag, InfoTip, LinkBtn, Panel, RiskScore, SevTag, StatusTag, Tabs, VerdictTag, sevColor } from '@/components/kit'
 import { useAgentHistory, useAttention, useDashboard, useRepositories, useVulnerabilities } from '@/lib/api'
 import { ago, num, shortDate } from '@/lib/format'
-import { AGENTS, AGENT_IDS, AGENT_STATUS, FINDING_TYPES, findingType, plural, sevLabel, where } from '@/lib/labels'
+import { AGENTS, AGENT_IDS, AGENT_STATUS, findingType, plural, sevLabel, where } from '@/lib/labels'
 import { usePanels } from '@/lib/panels'
 import { chartTokens, statusColor, useTheme } from '@/lib/theme'
 import type { AgentId, Attention, Dashboard as DashboardData, Finding, Learning, NeededFix, Repository } from '@/lib/types'
@@ -45,7 +45,6 @@ const KIND_NAME: Record<string, string> = {
   'information-exposure': 'Information exposure', 'code-injection': 'Code injection', misconfiguration: 'Misconfiguration', secret: 'Exposed secret',
 }
 const kindName = (c: string) => KIND_NAME[c] ?? (c.charAt(0).toUpperCase() + c.slice(1)).replace(/[-_]/g, ' ')
-const repoCount = (n: number) => `${num(n)} ${n === 1 ? 'repository' : 'repositories'}`
 
 /** Findings per scan over time: each repository's latest count on every day any repository was scanned. */
 function findingsTrend(repos: Repository[]) {
@@ -87,7 +86,7 @@ type Section = 'summary' | WorkTab | 'agents'
 const SECTIONS: [Section, string][] = [['summary', 'Summary'], ['risks', 'Top risks'], ['needed', 'Manual remediation'], ['repos', 'Repositories'], ['agents', 'Agents']]
 const SECTION_TARGET: Record<Section, string> = { summary: 'top', risks: 'work', needed: 'work', repos: 'work', agents: 'agents' }
 
-function DashboardView({ d, att, findings, repos }: { d: DashboardData; att?: Attention; findings: Finding[]; repos: Repository[] }) {
+function DashboardView({ d: _d, att, findings, repos }: { d: DashboardData; att?: Attention; findings: Finding[]; repos: Repository[] }) {
   const [repo, setRepo] = useState('all')
   const [section, setSection] = useState<Section>('summary')
   const [workTab, setWorkTab] = useState<WorkTab>('risks')
@@ -102,9 +101,6 @@ function DashboardView({ d, att, findings, repos }: { d: DashboardData; att?: At
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Application security overview</h1>
-          <p className="mt-1 text-sm text-ink-3">
-            {repo === 'all' ? `All ${repoCount(d.repositories)}` : repo} · vulnerabilities detected, remediated and validated by the four security agents
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {AGENT_IDS.map((id) => <AgentPill key={id} id={id} repo={repo} />)}
@@ -135,9 +131,6 @@ function DashboardView({ d, att, findings, repos }: { d: DashboardData; att?: At
         {AGENT_IDS.map((id) => <AgentOverview key={id} id={id} v={v} />)}
       </div>
 
-      <p className="pb-2 text-center text-xs text-ink-3">
-        {plural(d.runs, 'scan')} · {num(d.pull_requests)} pull request{d.pull_requests === 1 ? '' : 's'} opened
-      </p>
     </div>
   )
 }
@@ -166,7 +159,10 @@ function AgentPill({ id, repo }: { id: AgentId; repo: string }) {
           <span className="text-ink-3">{st.label}{last ? ` · ${ago(last.when)}` : ''}</span>
         </Link>
       </TooltipTrigger>
-      <TooltipContent className="max-w-64">{AGENTS[id].name}: {AGENTS[id].short.toLowerCase()}.{last ? ` Last scan: ${last.repo}.` : ''}</TooltipContent>
+      <TooltipContent className="max-w-64">
+        <div>{AGENTS[id].name}: {AGENTS[id].short.toLowerCase()}.</div>
+        {last ? <div className="mt-1 text-ink-3">Last scan: {last.repo}</div> : null}
+      </TooltipContent>
     </Tooltip>
   )
 }
@@ -212,20 +208,19 @@ function DecisionStrip({ n }: { n: number }) {
 function UrgentCard({ v }: { v: View }) {
   const total = v.rows.length
   const pct = total ? (v.urgent.length / total) * 100 : 0
-  const rest = 100 - pct
   return (
     <Link to="/vulnerabilities" className="glass-card card-hero flex flex-col rounded-[20px] p-6">
       <div className="flex items-start justify-between">
         <h3 className="flex items-center gap-1.5 text-sm">Critical and high findings <InfoTip text="The proportion of findings in the latest scan of each repository rated critical or high severity. These are remediated first. The chip shows the count." /></h3>
         <Chip>{num(v.urgent.length)}</Chip>
       </div>
-      <div className="mt-2 text-[34px] font-normal leading-none tracking-tight tabular">{pct.toFixed(1)}%</div>
+      <div className="mt-2 text-[34px] font-normal leading-none tracking-tight tabular">
+        {pct.toFixed(1)}% <span className="text-xl font-normal text-ink-2">({num(v.urgent.length)})</span>
+      </div>
       <div className="mt-auto pt-7">
         <div className="relative">
-          <div className="mb-2 text-center text-xs text-ink-3">Medium, low and unrated</div>
+          <div className="mb-2 text-xs text-ink-3">Medium, low and unrated</div>
           <div className="h-[3px] rounded-full" style={{ background: 'linear-gradient(90deg, rgb(255 255 255 / 0.55), #ffd166 75%, var(--signal))' }} />
-          <div className="absolute top-6 h-3 w-px bg-ink" style={{ left: `${rest}%` }} />
-          <div className="tabular mt-3 text-right text-xs font-medium" style={{ paddingRight: `${Math.max(0, pct - 6)}%` }}>{rest.toFixed(1)}%</div>
         </div>
       </div>
     </Link>
@@ -249,7 +244,7 @@ function FixedCard({ v }: { v: View }) {
           <div className="mt-2 text-xs text-ink-3">{fixed ? `${num(v.confirmed)} verified by the Validation Agent` : 'No remediations yet'}</div>
           <ul className="mt-4 flex flex-col gap-1.5 text-xs text-ink-2">
             <li className="flex items-center gap-1.5"><span className="size-1.5 rounded-full" style={{ background: statusColor.good }} />{pct}% of all findings remediated</li>
-            <li className="flex items-center gap-1.5"><span className="size-1.5 rounded-full" style={{ background: chartTokens[theme].axis }} />{100 - pct}% outstanding</li>
+            <li className="flex items-center gap-1.5"><span className="size-1.5 rounded-full" style={{ background: chartTokens[theme].axis }} />{100 - pct}% remaining</li>
           </ul>
         </div>
         <div className="size-[92px] shrink-0">
@@ -278,7 +273,7 @@ function TrendCard({ v }: { v: View }) {
     <Panel className="flex flex-col p-6 md:col-span-2 xl:col-span-1">
       <div className="flex items-start justify-between">
         <h3 className="flex items-center gap-1.5 text-sm">Vulnerabilities identified <InfoTip text="Findings from the latest scan of each repository, aggregated for each day on which a scan ran." /></h3>
-        <Chip>{delta >= 0 ? '+' : '−'}{num(Math.abs(delta))} since {v.trend.at(-2) ? shortDate(v.trend.at(-2)!.date) : '–'}</Chip>
+        <Chip>{delta >= 0 ? '+' : '−'}{num(Math.abs(delta))} since last run</Chip>
       </div>
       <div className="mt-2 text-[34px] leading-none tracking-tight tabular">{num(last)}</div>
       <div className="-mx-2 mt-auto">
@@ -501,7 +496,6 @@ function RankingPanel({ v }: { v: View }) {
   const max = kinds[0]?.n ?? 1
   const repos = v.repos.map((r) => ({ repo: r.repo, rows: v.rows.filter((f) => f.repo === r.repo) })).sort((a, b) => b.rows.length - a.rows.length)
   const repoMax = Math.max(...repos.map((r) => r.rows.length), 1)
-  const types = FINDING_TYPES.map(([k, l]) => [l, v.rows.filter((f) => findingType(f) === k).length] as const).filter(([, n]) => n)
   return (
     <Panel className="p-6">
       <Tabs value={tab} onChange={setTab} tabs={[['kinds', 'By category'], ['repos', 'By repository']]} />
@@ -526,7 +520,6 @@ function RankingPanel({ v }: { v: View }) {
           <p className="mt-5 flex items-center gap-1.5 text-xs text-ink-3">
             <AlertTriangle className="size-3" style={{ color: statusColor.critical }} /> Includes critical or high findings
           </p>
-          {types.length > 0 && <p className="mt-2 text-xs text-ink-3">{types.map(([l, n]) => `${num(n)} ${l.toLowerCase()}`).join(' · ')}</p>}
         </>
       ) : (
         <>
@@ -578,14 +571,14 @@ const LEARN = {
 /** What each agent delivers across the findings on this page (the same numbers for every repository filter). */
 function agentStats(id: AgentId, v: View): [string, string][] {
   const types = (k: string) => v.rows.filter((f) => findingType(f) === k).length
-  if (id === 'analysis') return [[num(v.rows.length), 'vulnerabilities identified'], [num(v.urgent.length), 'critical or high'], [num(types('dependency')), 'in dependencies']]
+  if (id === 'analysis') return [[num(v.rows.length), 'Vulnerabilities identified'], [num(v.urgent.length), 'Critical or high'], [num(types('dependency')), 'In dependencies']]
   if (id === 'remediation') {
     const commits = v.repos.reduce((a, r) => a + (r.latest_completed?.summary?.fixes_applied ?? 0), 0)
-    return [[num(v.fixed.length), 'vulnerabilities remediated'], [num(commits), 'remediation commits'], [num(v.needed.length), 'require manual remediation']]
+    return [[num(v.fixed.length), 'Vulnerabilities remediated'], [num(commits), 'Remediation commits'], [num(v.needed.length), 'Require manual remediation']]
   }
-  if (id === 'validation') return [[num(v.confirmed), 'remediations verified'], [num(v.fixed.length - v.confirmed), 'pending verification'], [num(v.approvals.length), 'change sets awaiting approval']]
+  if (id === 'validation') return [[num(v.confirmed), 'Remediations verified'], [num(v.fixed.length - v.confirmed), 'Pending verification'], [num(v.approvals.length), 'Change sets awaiting approval']]
   const reported = v.repos.filter((r) => r.latest_completed).length
-  return [[num(reported), reported === 1 ? 'repository reported' : 'repositories reported'], [num(v.approvals.length), 'awaiting approval'], [num(v.repos.filter((r) => r.latest_completed?.summary?.pull_request_url).length), 'pull requests raised']]
+  return [[num(reported), reported === 1 ? 'Repository reported' : 'Repositories reported'], [num(v.approvals.length), 'Awaiting approval'], [num(v.repos.filter((r) => r.latest_completed?.summary?.pull_request_url).length), 'Pull requests raised']]
 }
 
 const AGENT_OPEN: Record<AgentId, [string, string]> = {
@@ -609,7 +602,6 @@ function AgentOverview({ id, v }: { id: AgentId; v: View }) {
         <div className="flex items-center gap-3">
           <AgentTile id={id} />
           <div>
-            <div className="text-xs font-medium text-ink-3">Agent {a.n}</div>
             <h3 className="text-lg font-semibold tracking-tight">{a.name}</h3>
           </div>
         </div>

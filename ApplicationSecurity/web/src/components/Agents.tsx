@@ -48,7 +48,6 @@ export function AgentCard({ id, view, to }: { id: AgentId; view?: AgentView | nu
       <div className="flex items-center gap-3">
         <AgentTile id={id} size="sm" />
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-3">Agent {a.n}</div>
           <div className="truncate font-semibold">{a.name}</div>
         </div>
         {view && <AgentStatusTag status={view.status} />}
