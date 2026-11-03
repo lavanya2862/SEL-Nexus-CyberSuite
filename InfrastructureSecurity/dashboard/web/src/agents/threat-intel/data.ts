@@ -31,7 +31,7 @@ export interface Hit {
   resolution?: Resolution | null
 }
 /** How to resolve a sign of attack: written by AI and checked by Threat Intel, or standard steps when the AI was unavailable */
-export interface Resolution { what_happened: string; steps: string[]; done_when: string; source: 'ai' | 'standard'; model: string | null }
+export interface Resolution { title?: string | null; why_it_matters?: string | null; what_happened: string; steps: string[]; done_when: string; source: 'ai' | 'standard'; model: string | null }
 export interface Hunt { name: string; origin: string; technique: string | null; status: string; row_count: number; error: string | null }
 export interface Feed { feed: string; last_run_at: string | null; last_success_at: string | null; last_status: string; last_count: number; last_error: string | null }
 export interface Alert { alert_id: string; threat_id: string; rating: Rating; title: string; message: string; is_test: boolean; created_at: string; delivered: string }

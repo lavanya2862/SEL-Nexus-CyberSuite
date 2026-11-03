@@ -98,9 +98,6 @@ function HomeView({ s }: { s: Summary }) {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Summary</h1>
-          <p className="mt-1 text-sm text-ink-3">
-            {v.opco === 'all' ? 'All VMs' : v.opco} · Defender vulnerabilities, threat intelligence, attack detection and triage
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* same order as the menu: vulnerability management (Vulnerability), threat news (Threat Intel), attack detection, alert triage (Alert Triage) */}
@@ -284,7 +281,6 @@ function AppsCard({ v }: { v: View }) {
   return (
     <Panel className="p-6">
       <h3 className="font-semibold">Most vulnerable apps</h3>
-      <p className="mt-1 text-sm text-ink-3">Which apps cause the most vulnerabilities?</p>
       <ul className="mt-5 flex flex-col gap-3.5">
         {top.map((a, i) => (
           <li key={a.app} className="grid grid-cols-[112px_1fr] items-center gap-3 text-xs">
@@ -308,7 +304,6 @@ function VmCard({ s, v }: { s: Summary; v: View }) {
   return (
     <Panel className="p-6">
       <h3 className="font-semibold">Findings on each VM</h3>
-      <p className="mt-1 text-sm text-ink-3">How severe is each VM's exposure?</p>
       <ul className="mt-6 flex flex-col gap-6">
         {opcos.map((o) => {
           const rows = s.vulnerability.opco.filter((r) => r.opco === o.opco)
@@ -451,9 +446,9 @@ function ThreatIntelPanel({ s }: { s: Summary }) {
     <Panel className="flex flex-col gap-5 p-6">
       <PipelineHeader tag="Agent" tone="bg-violet" title="Threat Intel Agent" h={s.health.find((h) => h.key === 'threat_intel')} />
       <div className="grid grid-cols-3 gap-4 border-y border-hairline py-4">
-        <Stat value={num(u.new_threats)} label="threats collected (30 days)" />
-        <Stat value={num(u.affecting)} label="applicable to managed devices" />
-        <Stat value={num(u.urgent)} label="high priority, remediate first" />
+        <Stat value={num(u.new_threats)} label="Threats collected (30 days)" />
+        <Stat value={num(u.affecting)} label="Applicable to managed devices" />
+        <Stat value={num(u.urgent)} label="High priority, remediate first" />
       </div>
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -475,7 +470,7 @@ function ThreatIntelPanel({ s }: { s: Summary }) {
           })}
         />
       </div>
-      <PipelineActions to="/threat-intel" uc="threat_intel" open="Open threat intelligence" />
+      <PipelineActions to="/threat-intel" uc="threat_intel" open="Open Threat Intelligence" />
     </Panel>
   )
 }
@@ -492,9 +487,9 @@ function VulnPanel({ s }: { s: Summary }) {
     <Panel className="flex flex-col gap-5 p-6">
       <PipelineHeader tag="Agent" tone="bg-sky" title="Vulnerability Agent" h={h} />
       <div className="grid grid-cols-3 gap-4 border-y border-hairline py-4">
-        <Stat value={num(h?.vulnerabilities ?? h?.rows)} label="findings in Defender" />
-        <Stat value={`${Math.round((h?.coverage ?? 0) * 100)}%`} label="coverage, nothing missing" />
-        <Stat value={num(s.vulnerability.totals.cves)} label="unique CVEs" />
+        <Stat value={num(h?.vulnerabilities ?? h?.rows)} label="Findings in Defender" />
+        <Stat value={`${Math.round((h?.coverage ?? 0) * 100)}%`} label="Coverage, nothing missing" />
+        <Stat value={num(s.vulnerability.totals.cves)} label="Unique CVEs" />
       </div>
       <div>
         <div className="flex items-center justify-between">
@@ -522,7 +517,7 @@ function VulnPanel({ s }: { s: Summary }) {
         </ul>
       </div>
       <div className="mt-auto">
-        <PipelineActions to="/vulnerabilities" uc="vulnerability" open="Open vulnerabilities" />
+        <PipelineActions to="/vulnerabilities" uc="vulnerability" open="Open Vulnerabilities" />
       </div>
     </Panel>
   )
@@ -537,9 +532,9 @@ function TriagePanel({ s }: { s: Summary }) {
       <div className="grid grid-cols-1 gap-5">
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-3 gap-4 border-y border-hairline py-4">
-            <Stat value={num(u.incidents)} label="incidents triaged" />
-            <Stat value={num(u.escalate)} label="escalated" />
-            <Stat value={num(u.awaiting_review)} label="need your decision" />
+            <Stat value={num(u.incidents)} label="Incidents triaged" />
+            <Stat value={num(u.escalate)} label="Escalated" />
+            <Stat value={num(u.awaiting_review)} label="Need your decision" />
           </div>
           <div>
             <div className="flex h-2 overflow-hidden rounded-full bg-well">
@@ -570,7 +565,7 @@ function TriagePanel({ s }: { s: Summary }) {
         </div>
       </div>
       <div className="mt-auto">
-        <PipelineActions to="/alert-triage" uc="alert_triage" open="Open alert triage" />
+        <PipelineActions to="/alert-triage" uc="alert_triage" open="Open Alert Triage" />
       </div>
     </Panel>
   )
@@ -601,10 +596,10 @@ function AttackPanel() {
       <div className="grid grid-cols-3 gap-4 border-y border-hairline py-4">
         <div>
           <div className="tabular text-2xl leading-none tracking-tight" style={{ color: tone }}>{num(hits.length + caught.length)}</div>
-          <div className="mt-1.5 text-xs text-ink-3">detections</div>
+          <div className="mt-1.5 text-xs text-ink-3">Detections</div>
         </div>
-        <Stat value={num(hits.length)} label={`found by agent hunts${computers ? `, on ${computers} device${computers === 1 ? '' : 's'}` : ''}`} />
-        <Stat value={num(caught.length)} label="detected by Microsoft" />
+        <Stat value={num(hits.length)} label={`Found by agent hunts${computers ? `, on ${computers} device${computers === 1 ? '' : 's'}` : ''}`} />
+        <Stat value={num(caught.length)} label="Detected by Microsoft" />
       </div>
       <div>
         <h4 className="text-sm font-medium">Latest detections</h4>
@@ -623,7 +618,7 @@ function AttackPanel() {
         ) : <p className="mt-2 text-sm text-ink-3">{data ? 'No detections found.' : 'Not checked yet.'}</p>}
       </div>
       <div className="mt-auto">
-        <PipelineActions to="/attack-detection" uc="attack_detection" open="Open attack detection" />
+        <PipelineActions to="/attack-detection" uc="attack_detection" open="Open Attack Detection" />
       </div>
     </Panel>
   )

@@ -45,6 +45,7 @@ RESOLVE_SYSTEM = f"""You are a senior incident responder. An Advanced Hunting qu
 found ONE sign of attacker behaviour on a managed device. Write the response steps for the SOC analyst handling it.
 Rules:
 - {RESOLVE_UNTRUSTED}
+- Never refer to attacks by number (no "attack 12") and never name people; name the behaviour, software and CVEs from the evidence.
 - Order the steps: contain first (e.g. isolate the device in Microsoft Defender), then investigate (ask the user,
   check the process and its parent, collect an investigation package), then clean up (antivirus scan, remove the
   file, block the indicator), then recover and prevent (reset the account's password, release the device).

@@ -96,6 +96,7 @@ function FixRecord({ id, onClose }: { id: string; onClose: () => void }) {
           <DialogSection title="Summary">
             <dl className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3">
               <Fact label="Status">{STATUS[r.status]?.label ?? r.status}</Fact>
+              {r.message && ['gone', 'done', 'failed', 'awaiting_vendor', 'still_there'].includes(r.status) && <div className="col-span-full"><Fact label="Result">{r.message}</Fact></div>}
               <Fact label="Found by">{found.length ? found.join(', ') : '–'}</Fact>
               <Fact label="Vulnerabilities it clears">{setting ? 'Security setting' : `${num(r.findings)}${r.cves ? ` (${num(r.cves)} CVEs)` : ''}`}</Fact>
               <Fact label="Approved">{r.approved_by ? `${r.approved_by} · ${when(r.approved_at)}` : '–'}{r.method ? ` · ${METHOD_LABEL[r.method]}` : ''}</Fact>
@@ -170,7 +171,8 @@ function FixRecord({ id, onClose }: { id: string; onClose: () => void }) {
               <dl className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3">
                 {d.allowed.winget && <Fact label="winget package">{d.allowed.winget}</Fact>}
                 {d.allowed.choco && <Fact label="Chocolatey package">{d.allowed.choco}{d.allowed.allow_choco === false ? ' (Chocolatey off at approval)' : ''}</Fact>}
-                {d.allowed.kind && <Fact label="Setting">{d.allowed.kind} · {d.allowed.target} = {d.allowed.value}</Fact>}
+                {d.allowed.kind === 'scan_clean' && <Fact label="Response">Update Microsoft Defender's signatures, run a Defender scan and remove the active threats it finds</Fact>}
+                {d.allowed.kind && d.allowed.kind !== 'scan_clean' && <Fact label="Setting">{d.allowed.kind === 'asr' ? 'Attack surface reduction rule' : d.allowed.kind === 'defender' ? 'Defender Antivirus option' : 'Registry value'} · {d.allowed.target} = {d.allowed.value}</Fact>}
                 {d.allowed.check?.length ? <Fact label="Apps it looks for">{d.allowed.check.join(', ')}</Fact> : null}
                 {d.allowed.remove?.length ? <Fact label="Apps it may remove">{d.allowed.remove.join(', ')}</Fact> : null}
                 {d.allowed.procs?.length ? <Fact label="Processes it closes first">{d.allowed.procs.join(', ')}</Fact> : null}

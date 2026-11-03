@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  ArrowRight, BellRing, Bot, CheckCircle2, ChevronRight, CircleDot, ExternalLink, Play, Radar, Scale, Search, Siren, SlidersHorizontal,
-  UserCheck, Wrench,
+  ArrowRight, CheckCircle2, ChevronRight, CircleDot, ExternalLink, Play, Radar, Scale, Siren, SlidersHorizontal,
+  UserCheck,
 } from 'lucide-react'
 import { Chart, axisStyle } from '@/components/Chart'
 import { DetailDialog } from '@/components/DetailDialog'
@@ -67,7 +67,7 @@ function Header({ lastRun }: { lastRun: string | null }) {
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Alert triage</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-3">Agent-assisted triage of Microsoft Defender and Sentinel incidents: classification, severity and recommended response</p>
+        <p className="mt-1 max-w-3xl text-sm text-ink-3">Agent-assisted triage of Microsoft Defender and Sentinel incidents</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-xs text-ink-3">Last checked {ago(iso(lastRun))}</span>
@@ -113,7 +113,7 @@ function Overview({ rows, who, filter, onPick }: { rows: QueueRow[]; who: (r: Qu
       <Kpis rows={rows} filter={filter} onPick={onPick} />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <Card className="xl:col-span-5" title="Classification" description="Final classification per incident: the analyst's or Defender's when made, otherwise the agent's verdict">
+        <Card className="xl:col-span-5" title="Incident Classification" description="Final incident classification based on analyst feedback, Defender verdicts, or the agent's assessment when neither is available.">
           <Chart height={240} build={(tk) => ({
             grid: { left: 8, right: 32, top: 4, bottom: 4, containLabel: true },
             tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
@@ -124,7 +124,7 @@ function Overview({ rows, who, filter, onPick }: { rows: QueueRow[]; who: (r: Qu
               data: [...VERDICT_ORDER].reverse().map((v) => ({ value: rows.filter((r) => outcome(r) === v).length, itemStyle: { color: VERDICT[v].color } })) }],
           })} />
         </Card>
-        <Card className="xl:col-span-7" title="Incidents over time" description="Incidents triaged per day, last 14 days, by source">
+        <Card className="xl:col-span-7" title="Incidents over time" description="Incidents processed each day, categorized by source over the last 14 days.">
           <Chart height={240} build={(tk) => {
             const days = Array.from({ length: 14 }, (_, i) => new Date(Date.now() - (13 - i) * 86400000).toISOString().slice(0, 10))
             const sources = [...bySource.keys()]
@@ -143,8 +143,6 @@ function Overview({ rows, who, filter, onPick }: { rows: QueueRow[]; who: (r: Qu
         </Card>
       </div>
 
-      <HowItWorks />
-      <WhereItFits />
     </div>
   )
 }
@@ -188,32 +186,7 @@ function Kpis({ rows, filter, onPick }: { rows: QueueRow[]; filter: Filter; onPi
   )
 }
 
-const STEPS = [
-  { icon: Siren, title: 'Defender or Sentinel raises it', text: 'A new or changed incident' },
-  { icon: Search, title: 'Evidence', text: 'Searches around the time, threat intel, past cases' },
-  { icon: Scale, title: 'Microsoft severity respected', text: 'Never closed if Microsoft rated it high or malicious' },
-  { icon: Bot, title: 'Agent verdict, validated', text: 'Every claim must match the evidence' },
-  { icon: UserCheck, title: 'Act', text: 'Clear verdicts are escalated or closed; analysts decide the rest' },
-]
 
-function HowItWorks() {
-  return (
-    <Panel className="px-5 py-4">
-      <h2 className="mb-3 text-[15px] font-semibold tracking-[-0.01em]">How each incident is handled</h2>
-      <ol className="card-row gap-x-5 gap-y-3 [--card-min:145px]">
-        {STEPS.map((s, i) => (
-          <li key={s.title} className="flex items-start gap-3">
-            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-well"><s.icon className="size-4 text-ink-2" /></span>
-            <span className="min-w-0">
-              <span className="block text-sm font-medium"><span className="tabular text-ink-3">{i + 1}.</span> {s.title}</span>
-              <span className="block text-xs leading-snug text-ink-3">{s.text}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
-    </Panel>
-  )
-}
 
 export function VerdictPill({ verdict, large }: { verdict: string; large?: boolean }) {
   const m = verdictMeta(verdict)
@@ -356,25 +329,4 @@ function IncidentDialog({ r, who, onClose }: { r: QueueRow; who: Who; onClose: (
   )
 }
 
-function WhereItFits() {
-  return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      {([
-        [Wrench, 'Remediation', 'Prevent', 'Remediate vulnerable applications, unsupported software and weak settings. Planned work: days.', '/fixes'],
-        [Radar, 'Attack detection', 'Hunt proactively', 'Identify attackers who gained access without triggering an alert.', '/attack-detection'],
-        [BellRing, 'Triage', 'Respond', 'Defender has raised an incident: classify and respond. High-severity incidents: respond within minutes.', null],
-      ] as const).map(([Icon, title, role, text, to]) => (
-        <Panel key={title} className="flex flex-col gap-2 p-5">
-          <div className="flex items-center gap-2">
-            <Icon className="size-4 text-ink-2" />
-            <span className="font-medium">{title}</span>
-            <span className="ml-auto rounded-md bg-well px-2 py-0.5 text-[11px] text-ink-2">{role}</span>
-          </div>
-          <p className="text-sm leading-relaxed text-ink-3">{text}</p>
-          {to ? <Link to={to} className="mt-auto inline-flex items-center gap-1 text-sm font-medium hover:underline">Open <ArrowRight className="size-3.5" /></Link>
-            : <span className="mt-auto text-sm text-ink-3">You are here</span>}
-        </Panel>
-      ))}
-    </div>
-  )
-}
+

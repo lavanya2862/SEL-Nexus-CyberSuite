@@ -3,6 +3,8 @@
 // technique: T1074.001
 // attack: 10
 DeviceFileEvents
+// Microsoft Edge updates itself: its updater unpacks archives and renames many files in its own folders
+| where InitiatingProcessFileName !~ "MicrosoftEdgeUpdate.exe" and not(InitiatingProcessFolderPath has @"\Microsoft\EdgeUpdate" or InitiatingProcessFolderPath has @"\Microsoft\Edge\")
 | where Timestamp > ago({{LOOKBACK}}d)
 | where ActionType in ("FileCreated", "FileModified", "FileRenamed")
 | where FileName matches regex @"(?i)\.(7z|zip|rar|tar|gz|tgz|cab|001)$"

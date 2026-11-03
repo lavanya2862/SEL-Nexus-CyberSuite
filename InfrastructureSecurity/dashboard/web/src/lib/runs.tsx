@@ -66,36 +66,36 @@ export type Runs = Record<AgentKey, RunState | null>
 // What each run will do, shown before the first run (mirrors src/portal/runs.py).
 export const PLANNED_STEPS: Record<AgentKey, { label: string; description: string }[]> = {
   vulnerability: [
-    { label: 'Extract', description: 'Ingest every vulnerability from Microsoft Defender' },
-    { label: 'Validate', description: "Store today's snapshot and verify completeness" },
-    { label: 'Score and report', description: 'Score each finding and compute report metrics' },
-    { label: 'Remediation agent', description: "The agent writes remediation steps for every finding" },
-    { label: 'Remediation', description: 'Propose new remediations from this run for your approval below' },
+    { label: 'Defender Data Acquisition', description: 'Retrieves vulnerability data and incremental updates from Microsoft Defender.' },
+    { label: 'Data Validation', description: 'Validates snapshot completeness and data integrity.' },
+    { label: 'Vulnerability Prioritization & Reporting', description: 'Prioritizes vulnerabilities and generates analytical reports.' },
+    { label: 'Remediation Drafting', description: 'Drafts actionable remediation steps for identified vulnerabilities.' },
+    { label: 'Remediation Execution', description: 'Executes approved remediation actions.' },
   ],
   threat_intel: [
-    { label: 'Collect and analyse threat intelligence', description: 'New threats from 10 public feeds; the agent analyses each one and its likelihood of exploitation' },
-    { label: 'Assess exposure', description: 'Check whether the targeted software is present on managed devices' },
-    { label: 'Write remediation steps', description: "The agent writes remediation steps for each applicable threat, validated against Defender data" },
-    { label: 'Publish the report', description: 'Applicable threats, remediation guidance, alerts and the report' },
-    { label: 'Remediation', description: 'Propose new remediations from this run for your approval below' },
+    { label: 'Intelligence Gathering', description: 'Collects and analyses threat intelligence from multiple public sources.' },
+    { label: 'Threat Assessment', description: 'Checks identified threats against managed device software to determine applicability and risk.' },
+    { label: 'Remediation Guidance', description: 'Generates actionable remediation recommendations for identified vulnerabilities.' },
+    { label: 'Security Reporting', description: 'Generates security reports, updates dashboards, and distributes relevant alerts.' },
+    { label: 'Remediation Approval', description: 'Presents proposed remediation actions for analyst review, approval, or deferral.' },
   ],
   attack_detection: [
-    { label: 'Hunt across managed devices', description: 'Search Microsoft Defender (last 30 days) for indicators from threat intelligence and known attacker techniques' },
-    { label: 'Correlate the evidence', description: 'Signed-in users and Defender context; earlier detections are kept, new ones added' },
-    { label: 'Write resolution steps', description: 'The agent writes resolution steps for each new detection, validated against the evidence' },
-    { label: 'Publish', description: 'Update the Attack detection page and raise alerts' },
-    { label: 'Remediation', description: 'Propose a Defender scan-and-clean for every new detection, for your approval below' },
+    { label: 'Device Activity Hunting', description: 'Retrieves managed devices from Microsoft Defender and searches the last 30 days of activity for techniques associated with 12 known attacks.' },
+    { label: 'Evidence Correlation', description: 'Links hunting findings to managed devices, signed-in users, Defender alerts, and activity timelines to establish investigation context.' },
+    { label: 'Remediation Drafting', description: 'Generates evidence-backed remediation steps for newly identified detections, including host isolation, malware scanning, and account resets.' },
+    { label: 'Results & Report Publishing', description: 'Updates the Attack Detection dashboard, publishes analytical reports, and distributes alerts for identified attacks.' },
+    { label: 'Remediation Execution', description: 'Prepares Defender scan-and-clean actions for detected attacks and executes approved actions when automated remediation is enabled.' },
   ],
   alert_triage: [
-    { label: 'Ingest new incidents', description: 'New or changed incidents from Microsoft Defender and Sentinel' },
-    { label: 'Classify each incident', description: 'The agent reviews the evidence and classifies it: true positive, false positive or needs review' },
-    { label: 'Respond', description: 'Close false positives, escalate true positives, request Defender scans and clean-up' },
-    { label: 'Publish the triage queue', description: 'Results available for review on the Alert triage page' },
+    { label: 'Incident Retrieval', description: 'Retrieves new and updated incidents from Microsoft Defender and Microsoft Sentinel.' },
+    { label: 'Incident Classification', description: 'Analyzes incident evidence and classifies potential threats to determine the required response.' },
+    { label: 'Incident Response', description: 'Executes response actions, escalates confirmed threats, and initiates Defender scans or cleanup when enabled.' },
+    { label: 'Results & Report Publishing', description: 'Publishes incident classification results, triage metrics, and reports to the Alert Triage dashboard.' },
   ],
 }
 
 // What people see instead of 'Threat Intel/Vulnerability/Alert Triage' (the same names as the side menu)
-export const AGENT_LABEL: Record<AgentKey, string> = { threat_intel: 'Threats', vulnerability: 'Vulnerabilities', alert_triage: 'Alert triage', attack_detection: 'Attack detection' }
+export const AGENT_LABEL: Record<AgentKey, string> = { threat_intel: 'Threats', vulnerability: 'Vulnerabilities', alert_triage: 'Alert Triage', attack_detection: 'Attack Detection' }
 // The four agents (each does one job end to end)
 export const AGENT_SHORT: Record<AgentKey, string> = { threat_intel: 'Threat Intel', vulnerability: 'Vulnerability', alert_triage: 'Alert Triage', attack_detection: 'Attack Detection' }   // under an 'Agents' heading
 export const AGENT_NAME: Record<AgentKey, string> = { threat_intel: 'Threat Intel Agent', vulnerability: 'Vulnerability Agent', alert_triage: 'Alert Triage Agent', attack_detection: 'Attack Detection Agent' }

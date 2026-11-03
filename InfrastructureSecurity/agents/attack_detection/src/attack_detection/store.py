@@ -131,6 +131,9 @@ class Store:
         self.con.execute(SCHEMA)
         # when a threat was FIRST assessed (analysed_at changes when a source updates its text)
         self.con.execute("ALTER TABLE analysis ADD COLUMN IF NOT EXISTS first_assessed_at TIMESTAMP")
+        # the AI's own headline and risk for each sign of attack (added Nov 2026; older rows are re-asked once)
+        self.con.execute("ALTER TABLE resolutions ADD COLUMN IF NOT EXISTS title VARCHAR")
+        self.con.execute("ALTER TABLE resolutions ADD COLUMN IF NOT EXISTS why_it_matters VARCHAR")
 
     def close(self) -> None:
         self.con.close()

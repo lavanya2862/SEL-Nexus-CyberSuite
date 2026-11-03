@@ -6,11 +6,11 @@ export type Verdict = 'likely_true_positive' | 'needs_investigation' | 'likely_f
 
 // Microsoft Defender's own classification words (same as Alert Triage's labels.py) + a plain-English help line + colour.
 export const VERDICT: Record<Verdict, { label: string; short: string; color: string; help: string }> = {
-  likely_true_positive: { label: 'True positive', short: 'True positive', color: statusColor.critical, help: 'Confirmed malicious activity: the evidence indicates a genuine attack. Respond immediately.' },
-  needs_investigation: { label: 'Needs review', short: 'Needs review', color: statusColor.warning, help: 'The agent could not classify it, or Microsoft rated it too severe for automated closure.' },
-  likely_false_positive: { label: 'False positive', short: 'False positive', color: 'var(--sky)', help: 'Benign: the alert was a false detection or the activity was authorised.' },
+  likely_true_positive: { label: 'True Positive', short: 'True Positive', color: statusColor.critical, help: 'Confirmed malicious activity: the evidence indicates a genuine attack. Respond immediately.' },
+  needs_investigation: { label: 'Needs Review', short: 'Needs Review', color: statusColor.warning, help: 'The agent could not classify it, or Microsoft rated it too severe for automated closure.' },
+  likely_false_positive: { label: 'False Positive', short: 'False Positive', color: 'var(--sky)', help: 'Benign: the alert was a false detection or the activity was authorised.' },
   // older verdicts only: harmless activity is now filed as a false positive
-  benign_positive: { label: 'False positive', short: 'False positive', color: 'var(--sky)', help: 'Benign: the alert was a false detection or the activity was authorised.' },
+  benign_positive: { label: 'False Positive', short: 'False Positive', color: 'var(--sky)', help: 'Benign: the alert was a false detection or the activity was authorised.' },
 }
 export const VERDICT_ORDER: Verdict[] = ['likely_true_positive', 'likely_false_positive', 'needs_investigation']
 export const verdictMeta = (v: string) => VERDICT[v as Verdict] ?? { label: v || '–', short: v || '–', color: 'var(--ink-3)', help: '' }

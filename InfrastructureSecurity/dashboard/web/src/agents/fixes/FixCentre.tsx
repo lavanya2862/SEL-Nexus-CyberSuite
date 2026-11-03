@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   AlertTriangle, Bot, Check, ChevronDown, ChevronRight, Copy, Monitor, ExternalLink, ListChecks, Loader2, Play, ShieldCheck, ShoppingBasket,
-  SlidersHorizontal, Sparkles, Undo2, UserCog, UserRound, Wrench, X, Zap,
+  SlidersHorizontal, Undo2, UserCog, UserRound, Wrench, X, Zap,
 } from 'lucide-react'
 import { ConfirmDialog, StatusPill } from '@/components/FixLoop'
 import {
@@ -26,7 +26,7 @@ import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { AGENT_NAME } from '@/lib/runs'
 import { useThreatMatchCounts } from '@/agents/threat-intel/data'
-import { daysBetween, fixKind, nearEos, pastEos, useVulnData, useVulnView, vmDetails, vmKey, type FixKind, type VulnFixApp, type VulnFixSetting, type VmDetail } from '@/agents/vulnerability/data'
+import { daysBetween, fixKind, nearEos, pastEos, useVulnData, vmDetails, vmKey, type FixKind, type VulnFixApp, type VulnFixSetting, type VmDetail } from '@/agents/vulnerability/data'
 import { GettingReady, useAutoStart } from '@/lib/services'
 import { VulnLoading } from '@/agents/vulnerability/common'
 
@@ -54,10 +54,6 @@ const KINDS: [FixKind, string, string][] = [
   ['upgrade', 'Software upgrade', 'At or near end of support: the vendor no longer issues security updates, so upgrade to a supported version'],
   ['none', 'Attention required', 'No security update available: apply compensating controls until the vendor releases one'],
 ]
-const KIND_PHRASE: Record<FixKind, [string, string]> = {
-  update: ['software update', 'software updates'], os: ['OS security update', 'OS security updates'],
-  upgrade: ['software upgrade', 'software upgrades'], none: ['app needing attention', 'apps needing attention'],
-}
 
 /** Act › Fix: what to update and why (Vulnerability advice), and "fix it for me" on every computer (Threat Intel fix engine). */
 export function FixCentre() {
@@ -69,7 +65,7 @@ export function FixCentre() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Remediation</h1>
-          <p className="mt-1 text-sm text-ink-3">Remediate vulnerabilities and harden security settings through updates, upgrades and configuration changes, manually or with automated remediation</p>
+          <p className="mt-1 text-sm text-ink-3">Remediate vulnerabilities and strengthen security through software updates, upgrades, configuration changes, and automated remediation.</p>
         </div>
       </div>
       <Tabs<View> tabs={VIEWS} value={view} onChange={(t) => navigate(t === 'cards' ? '/fixes' : `/fixes/${t}`)} />
@@ -101,15 +97,15 @@ function FixCards() {
   const [state, setState] = useState(['manual_required', 'awaiting_vendor', 'info'].includes(params.get('status') ?? '') ? params.get('status')! : 'all')
   const [showDone, setShowDone] = useState(false)
   const agentFilter = useAgentFilter()
-  const rows = useVulnView(data).rows
-  const vulns = rows.length                               // the same count the Vulnerabilities page shows
-  const noPatch = rows.filter((f) => f.ua === 0).length
   const v = fix.data
   const down = fix.error instanceof FixDown
   const auto = useAutoStart(down, 'fix')
   const rowsBySoftware = useMemo(() => {
     const m = new Map<string, FixRow[]>()
-    for (const r of v?.rows ?? []) m.set(r.software_name, [...(m.get(r.software_name) ?? []), r])
+    for (const r of v?.rows ?? []) {
+      const sw = r.software_name.toLowerCase()
+      m.set(sw, [...(m.get(sw) ?? []), r])
+    }
     return m
   }, [v])
 
@@ -121,7 +117,7 @@ function FixCards() {
     const out: Unit[] = []
     for (const a of data.fixes.apps) {
       const sw = softwareOf(a), seen = new Set<string>()
-      for (const r of rowsBySoftware.get(sw) ?? []) {
+      for (const r of rowsBySoftware.get(sw.toLowerCase()) ?? []) {
         const k = vmKey(r.device_name, sw, r.version)
         if (isSetting(r) || r.action === 'respond' || seen.has(k)) continue
         seen.add(k)
@@ -196,7 +192,6 @@ function FixCards() {
   // the summary follows the filters: what these cards' remediations clear, in all and from threat intel
   const shownVulns = inVm.reduce((n, u) => n + (u.d?.cves.length ?? 0), 0)
   const shownNoPatch = inVm.reduce((n, u) => n + (u.d?.cves.filter((c) => c.nofix).length ?? 0), 0)
-  const shownNews = inVm.reduce((n, u) => n + (newsOn(u) ?? 0), 0)
   // per computer + app: every version with a card, so a card can name the other versions it does not change
   const versionsOn = new Map<string, string[]>()
   for (const u of units) if (!done(u)) versionsOn.set(`${u.device}|${softwareOf(u.a)}`, [...(versionsOn.get(`${u.device}|${softwareOf(u.a)}`) ?? []), u.version])
@@ -221,9 +216,9 @@ function FixCards() {
     { value: 'threat_intel', label: AGENT_NAME.threat_intel, count: agentCounts.threat_intel, dot: 'var(--violet)' }]
   const kindOptions = [{ value: 'all', label: 'All types', count: inVm.length }, ...KINDS.map(([k, l]) => ({ value: k, label: l, count: ofKind(k) }))]
   const stateOptions = [{ value: 'all', label: 'All statuses', count: inKind.length },
-    { value: 'manual_required', label: 'Waiting for a person', count: inKind.filter((u) => u.r?.status === 'manual_required').length, dot: statusColor.critical },
+    { value: 'manual_required', label: 'Awaiting manual remediation', count: inKind.filter((u) => u.r?.status === 'manual_required').length, dot: statusColor.critical },
     { value: 'awaiting_vendor', label: 'Awaiting vendor package', count: inKind.filter((u) => u.r?.status === 'awaiting_vendor').length, dot: '#b37400' },
-    { value: 'info', label: 'No automatic fix', count: inKind.filter((u) => u.r?.status === 'info').length, dot: 'var(--ink-3)' }]
+    { value: 'info', label: 'Manual remediation', count: inKind.filter((u) => u.r?.status === 'info').length, dot: 'var(--ink-3)' }]
   const levelOptions = [{ value: '0', label: 'All priorities', count: inKind.length },
     ...([1, 2, 3] as const).map((l) => ({ value: String(l), label: LEVEL[l].label, count: count(l), dot: LEVEL[l].color }))]
   const chips: ActiveFilter[] = [
@@ -259,18 +254,45 @@ function FixCards() {
   const closeList = () => { const n = new URLSearchParams(params); n.delete('vulns'); n.delete('vm'); setParams(n, { replace: true }) }
   const listAt = listApp ? apps.indexOf(listApp) : -1
   const step = (a: VulnFixApp | undefined) => (a ? { name: a.app, go: () => showList(a, undefined, true) } : undefined)
-  const card = (u: Unit, i: number) => (
-    <ExpandableCard key={u.key} id={anchors.has(u.key) ? `fix-${softwareOf(u.a)}` : undefined} highlight={highlighted === u.a}
-      accent={LEVEL[u.a.urgency.level].color} title={`${u.a.app} ${u.version}`.trim()} subtitle={[u.device, u.opco].filter(Boolean).join(' · ')}
-      eyebrow={<><span className="font-medium" style={{ color: LEVEL[u.a.urgency.level].color }}>{LEVEL[u.a.urgency.level].label} priority</span><span className="text-ink-3">{KINDS.find(([k]) => k === fixKind(u.a))?.[1]}</span></>}
-      summary={<UnitSummary u={u} today={today} />}
-      actions={u.r && v ? <QuickActions rows={[u.r]} busy={act.isPending} onApprove={approve} onWithdraw={withdraw} onSave={(ids) => act.mutate({ action: 'save', ids })} onHandOver={handOver} /> : null}>
-      <VmCard u={u} rank={i + 1} today={today} engine={!!v} busy={act.isPending} highlight={false} anchor={false}
-        onApprove={approve} onWithdraw={withdraw} onList={() => showList(u.a, u.device)} fresh={!!u.r && agentFilter.isNew(u.r)}
-        news={newsOn(u) ?? (u.r?.threats?.length ? newsOf(u.a) : 0)} agent={agentFilter.agent}
-        otherVersions={(versionsOn.get(`${u.device}|${softwareOf(u.a)}`) ?? []).filter((x) => x !== u.version)} />
-    </ExpandableCard>
-  )
+  const card = (u: Unit, i: number) => {
+    const r: FixRow = u.r ?? ({
+      fix_id: u.key,
+      device_name: u.device,
+      software_name: softwareOf(u.a),
+      version: u.version,
+      app: u.a.app,
+      action: (u.a.fix.action === 'upgrade' ? 'upgrade' : 'replace') as 'upgrade' | 'replace',
+      status: 'info' as const,
+      findings: u.d?.cves.length ?? 0,
+      cves: u.d?.cves.length ?? 0,
+      stage: u.a.urgency.level,
+      threats: [],
+      opco: u.opco,
+      winget_id: '',
+      max_epss: 0,
+      note: '',
+      method: null,
+      approved_by: null,
+      approved_at: null,
+      started_at: null,
+      finished_at: null,
+      verified_at: null,
+      message: null,
+    } as FixRow)
+    const unitWithRow = { ...u, r }
+    return (
+      <ExpandableCard key={u.key} id={anchors.has(u.key) ? `fix-${softwareOf(u.a)}` : undefined} highlight={highlighted === u.a}
+        accent={LEVEL[u.a.urgency.level].color} title={`${u.a.app} ${u.version}`.trim()} subtitle={[u.device, u.opco && u.opco !== u.device ? u.opco : null].filter(Boolean).join(' · ')}
+        eyebrow={<><span className="font-medium" style={{ color: LEVEL[u.a.urgency.level].color }}>{LEVEL[u.a.urgency.level].label} priority</span><span className="text-ink-3">{KINDS.find(([k]) => k === fixKind(u.a))?.[1]}</span></>}
+        summary={<UnitSummary u={unitWithRow} today={today} />}
+        actions={v ? <QuickActions rows={[r]} busy={act.isPending} onApprove={approve} onWithdraw={withdraw} onSave={(ids) => act.mutate({ action: 'save', ids })} onHandOver={handOver} /> : null}>
+        <VmCard u={unitWithRow} rank={i + 1} today={today} engine={!!v} busy={act.isPending} highlight={false} anchor={false}
+          onApprove={approve} onWithdraw={withdraw} onList={() => showList(u.a, u.device)} fresh={!!u.r && agentFilter.isNew(u.r)}
+          news={newsOn(u) ?? (u.r?.threats?.length ? newsOf(u.a) : 0)} agent={agentFilter.agent}
+          otherVersions={(versionsOn.get(`${u.device}|${softwareOf(u.a)}`) ?? []).filter((x) => x !== u.version)} />
+      </ExpandableCard>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -281,28 +303,15 @@ function FixCards() {
           <span className="tabular text-[40px] leading-none tracking-tight">{num(shownVulns - shownNoPatch)}</span>
           <span className="text-sm text-ink-3">vulnerabilities<br />these remediations close</span>
         </div>
-        <div className="text-sm text-ink-2">
-          <p>
-            <b>{num(inVm.length)} remediations</b> on <b>{num(new Set(inVm.map((u) => u.device)).size)} VMs</b> cover <b>{num(shownVulns)}</b>{shownVulns === vulns ? <> (all) of the <b>{num(vulns)}</b></> : <> of the {num(vulns)}</>} vulnerabilities Defender found:{' '}
-            {KINDS.filter(([k]) => k !== 'none' && ofKind(k)).map(([k], i, all) => (
-              <span key={k}>{i > 0 && (i === all.length - 1 ? ' and ' : ', ')}{num(ofKind(k))} {KIND_PHRASE[k][ofKind(k) === 1 ? 0 : 1]}</span>
-            ))}
-            {settings > 0 && <>, plus <Link to="/fixes/settings" className="underline decoration-hairline underline-offset-2 hover:decoration-ink"><b>{num(settings)} security settings</b></Link> to change</>}.{' '}
-            {num(count(1))} are marked High priority.
+        <div className="text-sm text-ink-2 text-justify">
+          <h2 className="text-base font-semibold text-ink">
+            {num(inVm.length)} Remediations · {num(new Set(inVm.map((u) => u.device)).size)} Virtual Machines
+          </h2>
+          <p className="mt-2">
+            Address all {num(shownVulns)} Defender-identified vulnerabilities through {num(ofKind('update'))} updates, {num(ofKind('upgrade'))} upgrades, and {num(settings)} security settings, including {num(count(1))} high-priority remediations. VM-specific remediation cards with deadlines, backed by Defender data and predefined catalogues.
           </p>
-          {agentFilter.agent === 'threat_intel' && (
-            <p className="mt-1.5 rounded-lg px-3 py-2" style={{ background: `color-mix(in oklab, ${statusColor.warning} 10%, transparent)` }}>
-              <b>{num(shownNews)}</b> of these {num(shownVulns)} were reported in threat intelligence. A remediation updates or removes the whole app version,
-              so approving these cards also clears the other <b>{num(shownVulns - shownNews)}</b> on the same versions that the {AGENT_NAME.vulnerability} found.
-            </p>
-          )}
-          <p className="mt-1.5">
-            {shownNoPatch > 0
-              ? <><b style={{ color: statusColor.warning }}>{num(shownNoPatch)} have no security update available</b>: their cards list compensating controls until one is released.</>
-              : noPatch > 0 && shownVulns !== vulns ? <>A security update is available for every vulnerability shown.</> : <>A security update is available for every vulnerability.</>}
-          </p>
-          <p className="mt-1.5 text-xs text-ink-3">
-            One card per app version on each VM, with that VM's own deadline. Priority, numbers and commands come from Defender data and fixed catalogues; the agent only explains them. Built {ago(X.built_at)}.
+          <p className="mt-2 text-xs text-ink-3">
+            Last updated {ago(X.built_at)}.
           </p>
           {verified.length > 0 && (
             <Link to="/fixes/history" className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium hover:underline" style={{ color: statusColor.good }}
@@ -436,13 +445,13 @@ function UnitSummary({ u, today }: { u: Unit; today: string }) {
         <span className="shrink-0 rounded-md bg-well px-1.5 py-0.5 text-ink-2">{u.device}</span>
       </div>
       <div className="truncate font-semibold leading-snug">{u.a.app} <span className="font-normal text-ink-3">{u.version}</span></div>
-      <div className="grid grid-cols-3 gap-2">
+      {vulns > 0 && <div className="grid grid-cols-3 gap-2">
         <StatBox value={vulns} label="Vulnerabilities" />
         <StatBox value={severe} label="Critical / high" color={severe ? statusColor.critical : undefined} />
         {left != null
           ? <StatBox value={Math.abs(left)} label={late ? 'Days overdue' : left === 0 ? 'Due today' : 'Days left'} color={late ? statusColor.critical : undefined} />
           : <StatBox value="–" label="No deadline" />}
-      </div>
+      </div>}
       {u.r && <div className="flex min-w-0 items-center gap-2"><StatusPill r={u.r} /><PersonLine r={u.r} short /></div>}
     </>
   )
@@ -610,7 +619,7 @@ function VmCard({ u, rank, today, engine, busy, highlight, anchor, onApprove, on
           </Details>
         )}
         {(txt.steps?.length || (a.fix.command && kindOf !== 'none')) ? (
-          <Details title={<>Manual remediation steps {ai && <AiBadge />}</>}>
+          <Details title={<>Manual remediation steps</>}>
             {txt.steps?.length ? <ol className="ml-4 list-decimal space-y-1 text-sm text-ink-2">{txt.steps.map((s, i) => <li key={i}>{s}</li>)}</ol> : null}
             {a.fix.note && <p className="mt-2 text-xs text-ink-3">{a.fix.note}</p>}
             {a.fix.command && kindOf !== 'none' && <div className="mt-2 text-xs text-ink-3">Prefer to do it yourself? <CommandLine command={a.fix.command} /></div>}
@@ -624,7 +633,7 @@ function VmCard({ u, rank, today, engine, busy, highlight, anchor, onApprove, on
         )}
 
         <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-hairline pt-3 text-xs text-ink-3">
-          {ai ? <AiBadge text="Agent-generated · review before acting" /> : <Tag>Based on Defender data</Tag>}
+          {ai ? null : <Tag>Based on Defender data</Tag>}
           <HopLink to={`/vulnerabilities/all?q=${encodeURIComponent(softwareOf(a))}`} title="This app in our full vulnerability list">Vulnerabilities</HopLink>
           {a.fix.url && (
             <a href={a.fix.url} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 font-medium text-ink hover:underline">
@@ -767,7 +776,7 @@ function SettingsCards() {
           <span className="tabular text-[40px] leading-none tracking-tight">{num(inOpco.length)}</span>
           <span className="text-sm text-ink-3">security settings<br />need changing</span>
         </div>
-        <div className="text-sm text-ink-2">
+        <div className="text-sm text-ink-2 text-justify">
           <p>
             Windows and Defender settings that are weaker than Microsoft recommends. These are <b>configuration findings</b>, tracked separately from software vulnerabilities,
             and <b>not alerts</b>: no malicious activity has occurred, but each one weakens the security baseline.
@@ -900,7 +909,7 @@ function SettingCard({ s, rows, engine, busy, onApprove, onWithdraw, isNew }: {
         )}
 
         <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-hairline pt-3 text-xs text-ink-3">
-          {ai ? <AiBadge text="Agent-generated · review before acting" /> : <Tag>Microsoft guidance</Tag>}
+          {ai ? null : <Tag>Microsoft guidance</Tag>}
           {link && (
             <a href={link} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 font-medium text-ink hover:underline">
               Microsoft guidance <ExternalLink className="size-3" />
@@ -1052,13 +1061,6 @@ function Details({ title, children }: { title: React.ReactNode; children: React.
   )
 }
 
-function AiBadge({ text = 'Agent' }: { text?: string }) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-md bg-violet/15 px-1.5 py-0.5 text-[11px] font-medium text-violet">
-      <Sparkles className="size-3" /> {text}
-    </span>
-  )
-}
 
 /** Remediations the agent cannot do (no automatic fix): hand them all to the people who must do them by hand. */
 function HandOverAll({ ids, busy, onHandOver }: { ids: string[]; busy: boolean; onHandOver: (ids: string[]) => void }) {
@@ -1066,8 +1068,8 @@ function HandOverAll({ ids, busy, onHandOver }: { ids: string[]; busy: boolean; 
     <Panel className="flex flex-wrap items-center gap-3 px-5 py-3.5">
       <UserCog className="size-5 shrink-0" style={{ color: statusColor.critical }} />
       <p className="min-w-0 flex-1 text-sm text-ink-2">
-        <b className="text-ink">{num(ids.length)} remediation{ids.length === 1 ? '' : 's'} the agent cannot do.</b> Hand them over: each becomes
-        "Manual action required" with an owner and steps, and stays open until someone marks it fixed and Defender confirms it.
+        <b className="text-ink">{num(ids.length)} remediation{ids.length === 1 ? '' : 's'} need manual remediation.</b> Hand them over: each is tracked as
+        "Awaiting manual remediation" with the Remediation Agent's steps until it is marked fixed and Defender confirms it.
       </p>
       <button onClick={() => onHandOver(ids)} disabled={busy} className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-50">
         <UserCog className="size-4" /> Hand all {num(ids.length)} over

@@ -52,7 +52,8 @@ class AttackDetectionSource:
                          "users": list(dict.fromkeys(u.get("account") for u in _json(f.get("users")) if u.get("account")))[:3],
                          "alerts": [a.get("title") for a in _json(f.get("alerts"))][:2],
                          "timeline": _json(f.get("timeline"))[:6],
-                         "resolution": {"what_happened": r["what_happened"], "steps": _json(r.get("steps")), "done_when": r["done_when"],
+                         "resolution": {"title": r.get("title"), "why_it_matters": r.get("why_it_matters"),
+                                        "what_happened": r["what_happened"], "steps": _json(r.get("steps")), "done_when": r["done_when"],
                                         "source": r["source"], "model": r.get("model")} if r else None})
         hits.sort(key=lambda h: str(h.get("first_hit") or ""), reverse=True)
         return {"generated": out.get("generated_at"), "run_id": out.get("run_id"), "hits": hits,

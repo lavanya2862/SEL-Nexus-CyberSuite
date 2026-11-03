@@ -39,7 +39,9 @@ class ExecutiveSummary(BaseModel):
 
 
 class Resolution(BaseModel):
-    what_happened: str = Field(description="What this sign of attack means, in plain English for a non-expert, max 40 words")
+    title: str = Field(description="A precise headline for this detection on this device, max 10 words, no attack numbers, no severity words")
+    what_happened: str = Field(description="What was observed on the device and what it indicates, from the evidence, professional, max 60 words")
+    why_it_matters: str = Field(description="The risk if it is not addressed, specific to this evidence, max 45 words")
     steps: list[str] = Field(description="3 to 6 resolution steps in order, each one concrete action starting with a verb, max 35 words each")
     done_when: str = Field(description="How to confirm the problem is resolved, max 30 words")
 

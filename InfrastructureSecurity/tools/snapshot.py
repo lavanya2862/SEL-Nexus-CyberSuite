@@ -63,8 +63,9 @@ def refuse_if_running() -> None:
                  "Stop it first with Stop_Infrastructure_Security.cmd, then try again.")
 
 
-def wanted(path: Path, with_guide: bool) -> bool:
-    if any(part in SKIP_DIRS for part in path.parts) or path.suffix.lower() in SKIP_SUFFIXES:
+def wanted(path: Path, with_guide: bool, with_cache: bool = False) -> bool:
+    skip = SKIP_DIRS - {"cache"} if with_cache else SKIP_DIRS
+    if any(part in skip for part in path.parts) or path.suffix.lower() in SKIP_SUFFIXES:
         return False
     return with_guide or path.name not in SKIP_NAMES
 
@@ -77,7 +78,7 @@ def git_commit() -> str:
         return "unknown"
 
 
-def export(logs: bool, with_guide: bool, out: Path | None) -> Path:
+def export(logs: bool, with_guide: bool, out: Path | None, with_cache: bool = False) -> Path:
     refuse_if_running()
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
     user = getpass.getuser().replace(" ", "_")
@@ -95,7 +96,7 @@ def export(logs: bool, with_guide: bool, out: Path | None) -> Path:
                     continue
                 for f in sorted(p for p in base.rglob("*") if p.is_file()):
                     rel = f.relative_to(base)
-                    if wanted(rel, with_guide):
+                    if wanted(rel, with_guide, with_cache):
                         z.write(f, f"{name}/{sub}/{rel.as_posix()}")
                         files += 1
             last = next((x for x in (ROOT / folder / "data" / "last_run.json", ROOT / folder / "data" / "status" / "last_run.json")
@@ -171,13 +172,14 @@ def main() -> int:
     e = sub.add_parser("export", help="write a snapshot of this computer's data")
     e.add_argument("--logs", action="store_true", help="include each agent's logs")
     e.add_argument("--with-guide", action="store_true", help="include the GUIDE backtest database (about 400 MB)")
+    e.add_argument("--all", action="store_true", help="everything except secrets: adds logs, feed caches and the GUIDE database")
     e.add_argument("--out", type=Path, help="where to write the .zip (default: snapshots\\)")
     for name in ("import", "show"):
         sub.add_parser(name).add_argument("file", type=Path)
     args = parser.parse_args()
     os.chdir(ROOT)
     if args.command == "export":
-        export(args.logs, args.with_guide, args.out)
+        export(args.logs or args.all, args.with_guide or args.all, args.out, args.all)
     elif args.command == "show":
         show(args.file)
     else:

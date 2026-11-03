@@ -43,6 +43,8 @@ Do this after the agents have run and the data looks right in the portal.
    Options:
    - `--logs` also includes each agent's logs (useful when someone needs to investigate a run).
    - `--with-guide` also includes the GUIDE backtest database (about 400 MB).
+   - `--all` includes everything except secrets: logs, feed caches and the GUIDE database (about 470 MB). Use it
+     when a teammate's runs fail and they need an exact copy of yours.
    - `--out <path>` writes the zip somewhere else.
 
    The tool prints where it wrote the file and what it contains, for example:

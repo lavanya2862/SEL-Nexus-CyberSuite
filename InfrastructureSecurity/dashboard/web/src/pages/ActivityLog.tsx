@@ -85,10 +85,6 @@ export function ActivityLog() {
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Activity log</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-3">
-          A record of who started each agent pipeline and who approved, executed or verified its remediations and triage
-          decisions, with name, email, date and time. Newest first.
-        </p>
       </div>
       <Panel className="flex flex-col gap-3 p-5">
         <FilterBar className="border-0 bg-transparent p-0" chips={chips} onClear={() => { setText(''); setAction(''); setWhen({ preset: 'any' }) }}
@@ -101,7 +97,7 @@ export function ActivityLog() {
           : log.error ? <Empty text={String((log.error as Error).message)} />
           : !items.length ? <Empty text={action || q || when.preset !== 'any' ? 'No activity matches these filters.' : 'No activity recorded yet. Agent runs, remediation and triage actions appear here as soon as someone performs them.'} />
           : (
-            <DTable head={[['When'], ['Who'], ['Action'], ['Agent'], ['Target'], ['Details']]} minWidth={1040}>
+            <DTable head={[['Timestamp'], ['User'], ['Action'], ['Agent'], ['Target']]}>
               {items.map((e) => {
                 const known = ACTIONS[e.action] ?? { label: e.label || e.action, tone: 'idle' as const }
                 const failed = e.outcome === 'failed' && (e.action === 'run.finish' || e.action === 'fix.run')
@@ -126,7 +122,6 @@ export function ActivityLog() {
                       <div className="line-clamp-2 break-words" title={e.target}>{e.target || '–'}</div>
                       {uc && <Link to={`/runs/${uc}`} className="text-xs text-sky hover:underline">open run</Link>}
                     </td>
-                    <td className="max-w-[360px] text-xs text-ink-2">{e.detail || <span className="text-ink-3">–</span>}</td>
                   </tr>
                 )
               })}

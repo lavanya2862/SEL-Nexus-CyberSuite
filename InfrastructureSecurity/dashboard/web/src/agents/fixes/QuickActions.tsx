@@ -1,5 +1,6 @@
 // The decision buttons on a remediation card (every Remediation tab): approve, defer or withdraw without opening it.
-// A remediation waiting for a person gets none: only the owner's manual fix (in the details) closes it.
+// A remediation waiting for a person gets none: only the owner's manual fix (in the details) closes it. One without an
+// automatic fix gets "Hand over" instead of Approve.
 import { Bookmark, RotateCcw, Undo2, UserCog, Zap } from 'lucide-react'
 import { CardButton } from '@/components/kit'
 import { canApprove, type FixRow } from '@/agents/fixes/data'
@@ -10,11 +11,12 @@ export function QuickActions({ rows, busy, onApprove, onWithdraw, onSave, onHand
   onHandOver?: (ids: string[]) => void
 }) {
   const ids = (list: FixRow[]) => list.map((r) => r.fix_id)
-  const can = rows.filter(canApprove)
+  const real = rows.filter((r) => r.fix_id.startsWith('fx_'))          // only remediations the fix engine knows
+  const can = real.filter(canApprove)
   const retry = can.length > 0 && can.every((r) => r.status === 'failed' || r.status === 'still_there')
-  const proposed = rows.filter((r) => r.status === 'proposed')
-  const approved = rows.filter((r) => r.status === 'approved')
-  const noFix = rows.filter((r) => r.status === 'info')
+  const proposed = real.filter((r) => r.status === 'proposed')
+  const approved = real.filter((r) => r.status === 'approved')
+  const noFix = real.filter((r) => r.status === 'info')
   const many = rows.length > 1
   return (
     <>
@@ -26,7 +28,7 @@ export function QuickActions({ rows, busy, onApprove, onWithdraw, onSave, onHand
       {onSave && proposed.length > 0 && (
         <CardButton disabled={busy} onClick={() => onSave(ids(proposed))}><Bookmark className="size-3.5" /> Defer</CardButton>
       )}
-      {onHandOver && noFix.length > 0 && (
+      {onHandOver && noFix.length > 0 && can.length === 0 && (
         <CardButton primary disabled={busy} onClick={() => onHandOver(ids(noFix))}><UserCog className="size-3.5" /> Hand over{many ? ` ${noFix.length}` : ''}</CardButton>
       )}
       {approved.length > 0 && (

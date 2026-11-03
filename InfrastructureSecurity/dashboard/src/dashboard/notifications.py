@@ -133,7 +133,7 @@ def _fixes(settings) -> list[dict]:
     out = []
     for e in events[:12]:
         text = str(e.get("text") or "")
-        bad = any(w in text.lower() for w in ("failed", "still there", "error", "manual action required"))
+        bad = any(w in text.lower() for w in ("failed", "still there", "error", "manual remediation required"))
         out.append(item(f"fix:{e.get('at')}:{hashlib.md5(text.encode()).hexdigest()[:8]}", e.get("at"), "fix", "high" if bad else "info",
                         text.split(": ", 1)[0] if ": " in text and len(text) > 90 else text,
                         text.split(": ", 1)[1] if ": " in text and len(text) > 90 else "",

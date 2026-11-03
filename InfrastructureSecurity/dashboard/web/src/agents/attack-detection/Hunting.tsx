@@ -112,7 +112,7 @@ function Overview({ d, onOpen }: { d: AttackData; onOpen: () => void }) {
       </Panel>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <Card className="xl:col-span-7" title="Detections by attack" description="Open findings for each of the 12 attacks; attacks without a detection are shown for coverage">
+        <Card className="xl:col-span-7" title="Active Detections by Attack Category" description="Active findings across all 12 monitored attack categories, including zero-detection categories for full coverage">
           <Chart height={330} build={(tk) => {
             const rows = [...d.attacks].sort((a, b) => b.attack - a.attack)
             return {
@@ -215,7 +215,7 @@ function Detected({ d }: { d: AttackData }) {
 }
 
 function headline(h: Finding) {
-  return (h.search_name || h.detail || 'Sign of attack').replace(/^(TEST:\s*)?Hunt hit:\s*/, '')
+  return (h.resolution?.title || h.search_name || h.detail || 'Sign of attack').replace(/^(TEST:\s*)?Hunt hit:\s*/, '')
 }
 
 function RemediationChip({ h }: { h: Finding }) {
@@ -232,7 +232,7 @@ function FindingCard({ h, onOpen }: { h: Finding; onOpen: () => void }) {
     <button onClick={onOpen} className="flex h-full w-full flex-col gap-2 rounded-xl border border-hairline bg-panel p-4 text-left transition-colors hover:border-hairline-strong hover:bg-well/40 focus-visible:outline-2 focus-visible:outline-blue">
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <SevTag sev={h.severity} />
-        <span className="text-ink-3">Attack {h.attack} · {h.attack_name}</span>
+        <span className="text-ink-3">{h.attack_name}</span>
         {h.is_test && <span className="rounded bg-well px-1.5 py-0.5 text-[10px] font-semibold text-ink-2">LAB TEST</span>}
       </div>
       <div className="font-semibold leading-snug">{headline(h)}</div>
@@ -291,7 +291,7 @@ function FindingDialog({ h, d, onClose }: { h: Finding; d: AttackData; onClose: 
   const technique = h.technique?.match(/^T\d{4}(\.\d{3})?$/) ? h.technique : null
   return (
     <DetailDialog onClose={onClose} title={headline(h)}
-      eyebrow={<><SevTag sev={h.severity} /><span className="text-ink-3">Attack {h.attack} · {h.attack_name}</span><RemediationChip h={h} />{h.is_test && <span className="rounded bg-well px-1.5 py-0.5 text-[10px] font-semibold text-ink-2">LAB TEST</span>}</>}
+      eyebrow={<><SevTag sev={h.severity} /><span className="text-ink-3">{h.attack_name}</span><RemediationChip h={h} />{h.is_test && <span className="rounded bg-well px-1.5 py-0.5 text-[10px] font-semibold text-ink-2">LAB TEST</span>}</>}
       subtitle={`${h.device_name}${opco ? ` · ${opco}` : ''} · first seen ${dateTime(utc(h.first_hit))}`}
       footer={<>
         <span className="mr-auto text-xs text-ink-3">Remediation runs only after approval in the Remediation tab.</span>
@@ -320,7 +320,7 @@ function FindingDialog({ h, d, onClose }: { h: Finding; d: AttackData; onClose: 
 
       <DialogSection title="What the search looked for" aside={technique && <a className="text-blue hover:underline" href={`https://attack.mitre.org/techniques/${technique.replace('.', '/')}/`} target="_blank" rel="noreferrer">MITRE ATT&CK {technique}</a>}>
         <p className="font-medium">{h.search_name}</p>
-        {attack && <p className="mt-1 leading-relaxed text-ink-2">Part of attack {attack.attack}, {attack.name.toLowerCase()}: {attack.description} <span className="text-ink-3">Tactics: {attack.tactics}.</span></p>}
+        {attack && <p className="mt-1 leading-relaxed text-ink-2">{h.resolution?.why_it_matters || attack.description} <span className="text-ink-3">Tactics: {attack.tactics}.</span></p>}
         {search?.query && (
           <details className="group mt-2">
             <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-ink-2 hover:text-ink">
@@ -408,8 +408,7 @@ function Coverage({ d }: { d: AttackData }) {
   return (
     <div className="flex flex-col gap-4">
       <p className="max-w-3xl text-sm text-ink-2">
-        Every run executes {num(d.attacks.reduce((n, a) => n + a.searches.length, 0))} Advanced Hunting queries in Microsoft Defender, grouped by the 12 attacks below.
-        Each attack has a lab test that produces harmless activity of that kind, so a detection can be confirmed on purpose.
+        Each run executes {num(d.attacks.reduce((n, a) => n + a.searches.length, 0))} Microsoft Defender Advanced Hunting queries across 12 attack categories, each paired with safe lab tests to verify detection.
       </p>
       <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
         {d.attacks.map((a) => {
@@ -439,7 +438,7 @@ function Coverage({ d }: { d: AttackData }) {
                 </div>
                 <details className="group mt-auto">
                   <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-ink-2 hover:text-ink">
-                    <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" /> {a.searches.length} searches · lab test {a.lab_test}
+                    <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" /> {a.searches.length} searches
                   </summary>
                   <ul className="mt-2 flex flex-col gap-1 text-xs">
                     {a.searches.map((s) => (

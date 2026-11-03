@@ -132,7 +132,7 @@ const SORTERS: Record<SortKey, (a: VRow, b: VRow) => number> = {
 
 const PAGE = 50
 
-export function VulnList({ app, software, data, fixRows, engine, startAgent, startDevice, onClose, prev, next }: {
+export function VulnList({ app, software, data, fixRows, engine, startAgent, startDevice, onClose }: {
   app: VulnFixApp; software: string; data: VulnData; fixRows: FixRow[]; engine: boolean; startAgent?: 'vulnerability' | 'threat_intel' | null
   /** open on one computer (a run page's card) */
   startDevice?: string
@@ -205,8 +205,6 @@ export function VulnList({ app, software, data, fixRows, engine, startAgent, sta
             </DialogDescription>
           </div>
           <div className="flex items-center gap-1.5">
-            <NavButton disabled={!prev} onClick={prev?.go} title={prev ? `Previous app: ${prev.name}` : undefined}><ChevronLeft className="size-4" /> Previous app</NavButton>
-            <NavButton disabled={!next} onClick={next?.go} title={next ? `Next app: ${next.name}` : undefined}>Next{next ? `: ${next.name}` : ' app'} <ChevronRight className="size-4" /></NavButton>
             <button onClick={onClose} aria-label="Close" className="grid size-8 place-items-center rounded-lg hover:bg-well"><X className="size-4" /></button>
           </div>
         </div>
@@ -270,8 +268,6 @@ export function VulnList({ app, software, data, fixRows, engine, startAgent, sta
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-3">
           <span>
             {list.length ? `Showing ${num(page * PAGE + 1)}–${num(Math.min(list.length, page * PAGE + PAGE))} of ${num(list.length)}` : 'No results'}
-            {chips.length > 0 && ` (filtered from ${num(rows.length)})`}
-            {!sort && ' · threat intel first, then open, then by severity'}
           </span>
           {pages > 1 && (
             <span className="flex items-center gap-1">

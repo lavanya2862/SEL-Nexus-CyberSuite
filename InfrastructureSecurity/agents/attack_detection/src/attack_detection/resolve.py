@@ -77,14 +77,15 @@ def resolve_one(f: dict, ai: GeminiClient) -> dict:
         res = standard(f)
         res["dropped"] = dropped
         return res
-    return {"what_happened": answer.what_happened[:400], "steps": steps, "done_when": answer.done_when[:300],
+    return {"title": answer.title[:120], "why_it_matters": answer.why_it_matters[:400],
+            "what_happened": answer.what_happened[:500], "steps": steps, "done_when": answer.done_when[:300],
             "source": "ai", "model": ai.model(), "dropped": dropped}
 
 
 def run(store: Store, settings: Settings, ai: GeminiClient | None) -> dict:
     todo = store.query("""
         SELECT f.* FROM findings f LEFT JOIN resolutions r USING (finding_id)
-        WHERE f.kind <> 'exposure' AND (r.finding_id IS NULL OR r.source <> 'ai')
+        WHERE f.kind <> 'exposure' AND (r.finding_id IS NULL OR r.source <> 'ai' OR r.title IS NULL)
         ORDER BY f.first_hit DESC NULLS LAST""")
     ai_note = None if ai else "AI not configured"
     done = {"ai": 0, "standard": 0}
@@ -101,8 +102,8 @@ def run(store: Store, settings: Settings, ai: GeminiClient | None) -> dict:
                 continue                      # already has standard steps: keep them, retry the AI next run
             res = standard(f)
         done[res["source"]] += 1
-        store.upsert("resolutions", [{"finding_id": f["finding_id"], **{k: res[k] for k in ("what_happened", "done_when",
-                                      "source", "model")}, "steps": dumps(res["steps"]), "dropped": dumps(res["dropped"]),
+        store.upsert("resolutions", [{"finding_id": f["finding_id"], **{k: res.get(k) for k in ("title", "why_it_matters", "what_happened",
+                                      "done_when", "source", "model")}, "steps": dumps(res["steps"]), "dropped": dumps(res["dropped"]),
                                       "created_at": utcnow()}])
     total = store.scalar("SELECT COUNT(*) FROM findings WHERE kind <> 'exposure'") or 0
     by_ai = store.scalar("""SELECT COUNT(*) FROM resolutions r JOIN findings f USING (finding_id)
@@ -116,6 +117,7 @@ def run(store: Store, settings: Settings, ai: GeminiClient | None) -> dict:
 
 def for_findings(store: Store) -> dict[str, dict]:
     """finding_id -> resolution, for the report and the dashboard."""
-    return {r["finding_id"]: {"what_happened": r["what_happened"], "steps": _j(r["steps"]), "done_when": r["done_when"],
+    return {r["finding_id"]: {"title": r.get("title"), "why_it_matters": r.get("why_it_matters"),
+                              "what_happened": r["what_happened"], "steps": _j(r["steps"]), "done_when": r["done_when"],
                               "source": r["source"], "model": r["model"]}
             for r in store.query("SELECT * FROM resolutions")}

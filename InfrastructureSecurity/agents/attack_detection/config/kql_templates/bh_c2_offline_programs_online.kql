@@ -10,6 +10,8 @@ DeviceNetworkEvents
                                        "installutil.exe", "regasm.exe", "regsvcs.exe", "cmstp.exe", "wmic.exe",
                                        "spoolsv.exe", "explorer.exe")
 | where not(InitiatingProcessFileName =~ "explorer.exe" and RemotePort in (80, 443))
+// Windows starts rundll32 itself for telemetry and maintenance (CompatTelRunner, scheduled tasks): not a program going online on its own
+| where not(InitiatingProcessFileName =~ "rundll32.exe" and InitiatingProcessParentFileName in~ ("CompatTelRunner.exe", "svchost.exe", "taskhostw.exe"))
 | summarize Connections = count(), Timestamp = min(Timestamp), Destinations = make_set(coalesce(RemoteUrl, RemoteIP), 10),
             take_any(DeviceName, InitiatingProcessAccountName, InitiatingProcessCommandLine, RemoteIP, RemotePort)
             by DeviceId, InitiatingProcessFileName

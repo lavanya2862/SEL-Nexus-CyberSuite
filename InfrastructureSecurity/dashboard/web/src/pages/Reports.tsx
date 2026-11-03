@@ -36,7 +36,6 @@ export function Reports() {
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
-        <p className="mt-1 text-sm text-ink-3">Agent-generated reports in Word, PDF and Excel, most recent first.</p>
       </div>
       {error && <Empty text={String((error as Error).message)} />}
       {data && (

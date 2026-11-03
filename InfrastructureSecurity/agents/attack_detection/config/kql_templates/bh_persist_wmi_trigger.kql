@@ -14,4 +14,6 @@ union
                                          "__FilterToConsumerBinding")
      | project Timestamp, DeviceId, DeviceName, ActionType = "ProcessCreated", ProcessCommandLine,
                InitiatingProcessAccountName = AccountName, InitiatingProcessFileName, InitiatingProcessCommandLine)
+// built-in subscriptions only write to the event log (NTEventLogEventConsumer, e.g. Windows' SCM Event Log Consumer)
+| where ProcessCommandLine !has "NTEventLogEventConsumer" and ProcessCommandLine !has "SCM Event Log" and ProcessCommandLine !has "BVTConsumer"
 | take 500

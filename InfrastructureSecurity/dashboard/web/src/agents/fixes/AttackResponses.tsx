@@ -88,11 +88,11 @@ export function AttackResponses({ owner = 'attack_detection' }: { owner?: Owner 
           <span className="tabular text-[40px] leading-none tracking-tight">{num(all.filter((r) => r.status === 'proposed').length)}</span>
           <span className="text-sm text-ink-3">responses<br />to decide</span>
         </div>
-        <div className="text-sm text-ink-2">
+        <div className="text-sm text-ink-2 text-justify">
           <p>
             For every {owner === 'threat_intel' ? 'collected indicator (a bad IP, domain, URL or file hash from the news) seen on a managed device' : 'suspicious behaviour'} the <span className="inline-flex items-center gap-1.5 font-medium"><span className={cn('size-2 rounded-full', AGENT_DOT[owner])} />{AGENT_NAME[owner]}</span> finds,
             it proposes a standard response: <b>update Defender, scan and remove any threats found</b> on the affected device, repeating with a full scan until Defender lists no active threat.{' '}
-            Nothing runs until you approve it: <b>Approve</b> then Execute remediation, or <b>Auto-fix</b> on a card to approve and run it at once.
+            Nothing runs until you approve it: <b>Approve</b> then Execute remediation.
           </p>
           <p className="mt-1.5 text-xs text-ink-3">
             Device isolation is outside this agent's scope; perform it in Microsoft Defender. The evidence on each card comes directly from Defender.
@@ -167,19 +167,19 @@ export function AttackResponses({ owner = 'attack_detection' }: { owner?: Owner 
                     return (
                       <ExpandableCard defaultOpen={focus === r.fix_id} highlight={focus === r.fix_id}
                         accent={h ? sevColor(h.severity) : statusColor.critical}
-                        title={h ? h.search_name : r.app}
+                        title={h ? h.resolution?.title || h.search_name : r.app}
                         subtitle={`${r.device_name}${h ? ` · first seen ${dateTime(utc(h.first_hit))}` : ''}`}
-                        eyebrow={<>{h ? <><SevTag sev={h.severity} /><span className="text-ink-3">Attack {h.attack} · {h.attack_name}</span></> : <span className="text-ink-3">Indicator seen on the device</span>}<StatusPill r={r} /></>}
+                        eyebrow={<>{h ? <><SevTag sev={h.severity} /><span className="text-ink-3">{h.attack_name}</span></> : <span className="text-ink-3">Indicator seen on the device</span>}<StatusPill r={r} /></>}
                         footer={<ResponseActions r={r} busy={busy} onApprove={() => approve([r.fix_id])} onRun={() => autoFix(act, [r.fix_id], v.default_method)}
                           onSave={() => act.mutate({ action: 'save', ids: [r.fix_id] })} onUndo={(action) => act.mutate({ action, ids: [r.fix_id] })} />}
                         actions={<QuickActions rows={[r]} busy={busy} onApprove={approve} onWithdraw={(ids) => act.mutate({ action: 'unapprove', ids })} onSave={(ids) => act.mutate({ action: 'save', ids })} />}
                         summary={
                           <>
                             <div className="flex items-center justify-between gap-2 text-[11px] font-medium">
-                              <span className="truncate font-normal text-ink-3">{h ? `Attack ${h.attack} · ${h.attack_name}` : 'Indicator seen on the device'}</span>
+                              <span className="truncate font-normal text-ink-3">{h ? h.attack_name : 'Indicator seen on the device'}</span>
                               <span className="shrink-0 rounded-md bg-well px-1.5 py-0.5 text-ink-2">{r.device_name}</span>
                             </div>
-                            <div className="line-clamp-2 font-semibold leading-snug">{h ? h.search_name : r.app}</div>
+                            <div className="line-clamp-2 font-semibold leading-snug">{h ? h.resolution?.title || h.search_name : r.app}</div>
                             <div className="grid grid-cols-3 gap-2">
                               <StatBox value={h ? h.severity : 'Indicator'} label="Severity" color={h ? sevColor(h.severity) : undefined} />
                               <StatBox value={h?.first_hit ? ago(utc(h.first_hit)) : '–'} label="First seen" />
@@ -192,10 +192,7 @@ export function AttackResponses({ owner = 'attack_detection' }: { owner?: Owner 
                           <p className="leading-relaxed">{h ? h.resolution?.what_happened || h.detail : r.app}</p>
                           {r.note && <p className="mt-2 break-all rounded-lg bg-well px-3 py-2 font-mono text-xs text-ink-3">{r.note}</p>}
                         </DialogSection>
-                        {attack && <DialogSection title="Why this matters"><p className="leading-relaxed text-ink-2">{attack.description}</p></DialogSection>}
-                        <DialogSection title="What approval does">
-                          <p className="leading-relaxed text-ink-2">Microsoft Defender updates its security intelligence on {r.device_name}, runs a quick scan and removes any active threat, then repeats with a full scan until no active threat remains. Device isolation and account changes stay with the SOC in the Microsoft Defender portal.</p>
-                        </DialogSection>
+                        {attack && <DialogSection title="Why this matters"><p className="leading-relaxed text-ink-2">{h?.resolution?.why_it_matters || attack.description}</p></DialogSection>}
                         {r.status !== 'proposed' && r.status !== 'saved' && (r.agent?.length || r.message || r.status === 'running' || r.status === 'queued')
                           ? <DialogSection title="Remediation activity"><AgentMoves r={r} /><ManualAction r={r} /><RecordLink id={r.fix_id} className="mt-2" /></DialogSection> : null}
                       </ExpandableCard>
@@ -221,10 +218,10 @@ function ResponseActions({ r, busy, onApprove, onRun, onSave, onUndo }: {
   const ghost = 'inline-flex items-center gap-1.5 rounded-lg border border-hairline-strong bg-panel px-3.5 py-2 text-sm font-medium hover:bg-well disabled:opacity-50'
   const primary = 'btn-blue inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-50'
   const note = (text: string) => <span className="mr-auto text-xs text-ink-3">{text}</span>
-  if (r.status === 'proposed') return <>{note('Nothing runs on the device until you approve it.')}<button onClick={onSave} disabled={busy} className={ghost}><Bookmark className="size-4" /> Defer</button><button onClick={onApprove} disabled={busy} className={ghost}><Zap className="size-4" /> Approve</button><button onClick={onRun} disabled={busy} className={primary}><Sparkles className="size-4" /> Auto-fix</button></>
+  if (r.status === 'proposed') return <>{note('Approval runs a Microsoft Defender scan on the device and removes active threats. Nothing runs before that.')}<button onClick={onSave} disabled={busy} className={ghost}><Bookmark className="size-4" /> Defer</button><button onClick={onApprove} disabled={busy} className={ghost}><Zap className="size-4" /> Approve</button><button onClick={onRun} disabled={busy} className={primary}><Sparkles className="size-4" /> Auto-fix</button></>
   if (r.status === 'saved') return <>{note('Deferred: kept here for later.')}<button onClick={() => onUndo('unsave')} disabled={busy} className={ghost}><Undo2 className="size-4" /> Undo defer</button><button onClick={onApprove} disabled={busy} className={primary}><Zap className="size-4" /> Approve</button></>
   if (r.status === 'approved') return <>{note('Approved: runs with the next Execute remediation.')}<button onClick={() => onUndo('unapprove')} disabled={busy} className={ghost}><Undo2 className="size-4" /> Remove approval</button></>
   if (r.status === 'failed' || r.status === 'still_there') return <>{note('The last attempt did not finish cleanly.')}<button onClick={onRun} disabled={busy} className={primary}><Sparkles className="size-4" /> Try again</button></>
-  if (r.status === 'manual_required') return note(`Manual action required: ${r.handover?.owner ?? 'the owner'} remediates it, then marks it fixed manually above.`)
+  if (r.status === 'manual_required') return note('Manual action required: remediate, then mark it fixed manually above.')
   return null
 }

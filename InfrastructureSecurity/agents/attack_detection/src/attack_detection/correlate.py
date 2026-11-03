@@ -118,17 +118,26 @@ def _hunt_threat(store: Store, hunt: dict, is_test: bool) -> str:
     return tid
 
 
+def _blocked_only(finding: dict) -> bool:
+    """Every Defender alert on it is Informational (e.g. a test file Defender prevented): not a sign of an attack in use."""
+    try:
+        alerts = json.loads(finding.get("alerts") or "[]") if isinstance(finding.get("alerts"), str) else finding.get("alerts") or []
+    except ValueError:
+        return False
+    return bool(alerts) and all(str(a.get("severity", "")).lower() == "informational" for a in alerts)
+
+
 def _open_doors(store: Store, known: dict, now) -> list[dict]:
     """Attack 12, search 4: a machine with a Critical or High exploitable vulnerability (an attack 12 hit) that also
     shows a sign of attacks 1 to 11 within OPEN_DOOR_DAYS becomes one 'open door in use now' finding."""
     attack_of = {key: t.attack for key, t in tpl.load().items()}
     rows = store.query("""SELECT f.*, h.template FROM findings f JOIN hunts h ON h.hunt_id = f.hunt_id
-                          WHERE f.kind = 'behaviour_hit' AND NOT f.is_test""")
+                          WHERE f.kind IN ('behaviour_hit', 'exposure') AND NOT f.is_test""")
     doors = []
     for door in (r for r in rows if r["template"] == "bh_exposure_hot_cve"):
         since = now - timedelta(days=OPEN_DOOR_DAYS)
         clues = [r for r in rows if r["device_id"] == door["device_id"] and 1 <= attack_of.get(r["template"], 0) <= 11
-                 and r["first_hit"] and to_utc(r["first_hit"]) >= since]
+                 and r["first_hit"] and to_utc(r["first_hit"]) >= since and not _blocked_only(r)]
         if not clues:
             continue
         hunt = {"template": "open_door", "origin": "template", "technique": "T1190",
@@ -160,7 +169,10 @@ def run(store: Store, client: DefenderClient | None, run_id: str) -> dict:
         row = json.loads(r["row_json"]) if isinstance(r["row_json"], str) else r["row_json"]
         hunt = hunts[r["hunt_id"]]
         test = is_lab_test(row)
-        key = ("behaviour_hit", hunt["template"] + (hunt["technique"] or ""), r["device_id"], test)
+        # a weakness alone (exploitable vulnerability) is exposure, not an attack: it only shows as an "open door"
+        # when a sign of attack is on the same machine (_open_doors)
+        kind = "exposure" if hunt["template"] == "bh_exposure_hot_cve" else "behaviour_hit"
+        key = (kind, hunt["template"] + (hunt["technique"] or ""), r["device_id"], test)
         g = groups.setdefault(key, {"hunt": hunt, "rows": [], "detail": hunt["name"].split(" (")[0], "is_test": test})
         g["rows"].append((r, row))
 

@@ -88,10 +88,10 @@ def _machine_accounts() -> set[str]:
 
 _ACCOUNTS = _machine_accounts()
 # Threat Intel's event texts that carry a person: "Approved by X (Azure Run Command): …", "Saved for later by X: …"
-_BY = re.compile(r"^(Approved|Saved for later|Approval withdrawn|No longer saved for later|Remediated manually|Handed to a person) by (.+?)(?= \(|: )")
+_BY = re.compile(r"^(Approved|Saved for later|Approval withdrawn|No longer saved for later|Remediated manually|Handed over for manual remediation) by (.+?)(?= \(|: )")
 _EVENT_ACTION = {"Approved": "fix.approve", "Saved for later": "fix.save",
                  "Approval withdrawn": "fix.unapprove", "No longer saved for later": "fix.unsave",
-                 "Remediated manually": "fix.manual", "Handed to a person": "fix.handover"}
+                 "Remediated manually": "fix.manual", "Handed over for manual remediation": "fix.handover"}
 
 
 def is_account(who) -> bool:

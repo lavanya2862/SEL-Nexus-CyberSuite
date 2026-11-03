@@ -33,7 +33,7 @@ ACTIONS = {
     "fix.save": "Saved remediation for later",
     "fix.unsave": "Moved remediation back to the queue",
     "fix.manual": "Marked remediation as done manually",
-    "fix.handover": "Handed remediation to a person",
+    "fix.handover": "Handed over for manual remediation",
     "fix.run": "Ran remediation",
     "fix.probe": "Checked remediation result",
     "triage.agree": "Agreed with triage verdict",

@@ -11,7 +11,7 @@ import { dateTime } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import {
-  PLANNED_STEPS, AGENT_DOT, AGENT_KEYS, AGENT_NAME, fmtSeconds, typicalLabel, useElapsed, useRuns, type RunFinding, type RunState, type StepStatus, type AgentKey,
+  PLANNED_STEPS, AGENT_DOT, AGENT_KEYS, AGENT_NAME, fmtSeconds, useElapsed, useRuns, type RunFinding, type RunState, type StepStatus, type AgentKey,
 } from '@/lib/runs'
 
 type ViewStep = { label: string; description: string; status: StepStatus; detail: string; started_at: string | null; finished_at: string | null }
@@ -45,10 +45,9 @@ export function Runs() {
   return (
     <div className="flex flex-col gap-5">
       {/* header */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-col items-start gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{AGENT_NAME[uc]}</h1>
-          <p className="mt-1 text-sm text-ink-3">Run an agent on demand and track each stage in real time. Runs continue in the background if you leave this page.</p>
         </div>
         <div className="flex rounded-xl border border-hairline bg-panel p-1" role="tablist" aria-label="Agent">
           {AGENT_KEYS.map((k) => {
@@ -102,7 +101,7 @@ export function Runs() {
               className="inline-flex items-center gap-2 rounded-xl btn-blue px-5 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {waiting ? <Hand className="size-4" /> : <Play className="size-4" />}
-              {running ? 'Running…' : waiting ? 'Paused: awaiting remediation approval' : run ? 'Run again' : `Run ${AGENT_NAME[uc].toLowerCase()} now`}
+              {running ? 'Running…' : waiting ? 'Paused: awaiting remediation approval' : run ? 'Run again' : `Run ${AGENT_NAME[uc]} now`}
             </button>
           </div>
         </div>
@@ -134,14 +133,13 @@ export function Runs() {
 function StatusHeadline({ run, uc, elapsed, running, current, total, offline, waiting }: {
   run: RunState | null; uc: AgentKey; elapsed: number; running: boolean; current: number; total: number; offline: boolean; waiting: boolean
 }) {
-  const typical = typicalLabel(uc, run?.typical_seconds)
   let icon = <Clock className="size-5 text-ink-3" />
   let title = 'Ready to run'
-  let sub = `${total} steps · ${typical}`
+  let sub = `${total} steps`
   if (running && run) {
     icon = <span className="relative grid size-5 place-items-center"><span className="absolute size-5 animate-ping rounded-full bg-sky/40" /><span className="size-2.5 rounded-full bg-sky" /></span>
     title = current >= 0 ? `Step ${current + 1} of ${total}: ${run.steps[current].label}` : 'Starting…'
-    sub = `Started ${dateTime(run.started_at)} · ${fmtSeconds(elapsed)} so far${offline ? ' (paused: CyberSuite unavailable)' : ''} · ${typical}`
+    sub = `Started ${dateTime(run.started_at)} · ${fmtSeconds(elapsed)} so far${offline ? ' (paused: CyberSuite unavailable)' : ''}`
   } else if (running) {
     title = 'Starting…'
   } else if (run) {
@@ -154,7 +152,7 @@ function StatusHeadline({ run, uc, elapsed, running, current, total, offline, wa
     } as const
     icon = map[run.status].i
     title = map[run.status].t
-    sub = `${dateTime(run.started_at)}${run.finished_at ? ` → ${dateTime(run.finished_at)}` : ''} · ${typical}`
+    sub = `${dateTime(run.started_at)}${run.finished_at ? ` → ${dateTime(run.finished_at)}` : ''}`
     if (waiting) {
       const open = run.fix?.open ?? 0
       icon = <Hand className="size-5 animate-pulse" style={{ color: statusColor.warning }} />
@@ -254,7 +252,7 @@ function Node({ status, n }: { status: StepStatus; n: number }) {
 
 /* ───────── results ───────── */
 
-function ResultPanel({ run, uc, seconds }: { run: RunState; uc: AgentKey; seconds: number }) {
+function ResultPanel({ run, uc, seconds: _seconds }: { run: RunState; uc: AgentKey; seconds: number }) {
   const navigate = useNavigate()
   const { startedHere } = useRuns()
   const good = run.status === 'ok' || run.status === 'partial'
@@ -284,9 +282,11 @@ function ResultPanel({ run, uc, seconds }: { run: RunState; uc: AgentKey; second
             <h2 className="text-lg font-semibold tracking-tight">
               {good ? 'What this run found' : run.status === 'skipped' ? 'Nothing was run' : 'Why it stopped'}
             </h2>
-            <p className="mt-1 text-sm text-ink-3">
-              {good ? `${AGENT_NAME[uc]} finished in ${fmtSeconds(seconds)}. Every page in CyberSuite now shows these results.` : run.message}
-            </p>
+            {!good && run.message && (
+              <p className="mt-1 text-sm text-ink-3">
+                {run.message}
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             {good && (

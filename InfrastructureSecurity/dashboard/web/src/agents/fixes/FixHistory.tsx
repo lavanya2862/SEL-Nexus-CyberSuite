@@ -43,7 +43,7 @@ export function FixHistory() {
           <span className="tabular text-[40px] leading-none tracking-tight" style={{ color: statusColor.good }}>{num(fixed.length)}</span>
           <span className="text-sm text-ink-3">vulnerabilities remediated<br />{first ? `since ${shortDate(first)}` : ''}</span>
         </div>
-        <div className="text-sm text-ink-2">
+        <div className="text-sm text-ink-2 text-justify">
           <p>
             <b>{num(byPortal)}</b> of them were remediated by CyberSuite ({num(runs.filter((r) => r.status === 'verified' && !isSetting(r)).length)} app updates), and Defender confirmed each one.
             The other <b>{num(fixed.length - byPortal)}</b> were resolved outside the portal, for example through automatic application updates or manual patching.

@@ -299,7 +299,7 @@ def verify(state: FixState, current_ids: set[str], inventory_at: datetime | None
                 event(data, f"Verified by Defender: {_label(f)} is no longer vulnerable", fid)
                 counts["verified"] += 1
             elif fid not in current_ids and status in ("approved", "saved") and after(decided_at) and seen_since(f, decided_at):
-                f.update(status="gone", verified_at=now.isoformat())
+                f.update(status="gone", verified_at=now.isoformat(), message=gone_reason(f, installed, inventory_at))
                 event(data, f"{_label(f)} no longer reported by Defender before the Threat Intel Agent remediated it", fid)
                 counts["gone"] += 1
             elif fid in current_ids and status == "done" and (f.get("item") or {}).get("kind") != "response" \
@@ -309,6 +309,21 @@ def verify(state: FixState, current_ids: set[str], inventory_at: datetime | None
                 event(data, f"Still reported by Defender 24 h after remediation: {_label(f)}", fid)
                 counts["still_there"] += 1
     return counts
+
+
+def gone_reason(f: dict, installed: dict[tuple[str, str], set[str]] | None, inventory_at: datetime | None) -> str:
+    """Why a remediation was resolved before it ran: Defender stopped reporting that version on that computer, so it was
+    updated or removed outside CyberSuite (an app that updates itself, a person, or another tool)."""
+    item = f.get("item") or {}
+    device, app, version = item.get("device_name", ""), item.get("app", ""), item.get("version", "")
+    if item.get("kind") == "setting":
+        return (f"Microsoft Defender no longer reports '{app}' as misconfigured on {device}, so CyberSuite changed nothing: "
+                "it was corrected outside CyberSuite, for example by Group Policy, Intune or a person.")
+    now = sorted((installed or {}).get((device.lower(), str(item.get("software_name", "")).lower()), set()) - {version})
+    when = f" (inventory of {inventory_at:%d %b %H:%M} UTC)" if inventory_at else ""
+    after = f" Defender now reports version {', '.join(now)}." if now else " Defender no longer reports the application on this device."
+    return (f"Microsoft Defender no longer reports {app} {version} on {device}{when}, so CyberSuite ran nothing: it was "
+            f"updated or removed outside CyberSuite (automatic update, a person or another tool).{after}")
 
 
 def requeue_awaiting(state: FixState, now: datetime | None = None) -> int:
@@ -364,6 +379,8 @@ def refresh(store: Store, settings: Settings, source: str | None = None) -> dict
     # first plan with found_by: whatever the old plan had was found before recording started (no flood of "new")
     migrating = bool(previous) and not any("found_by" in i for i in previous.values())
     everything = compute(store, settings, limit_devices=False)      # verification looks at every computer
+    from threat_intel.fix.brief import attach_briefs
+    brief_ai = attach_briefs(settings, everything)                 # the AI's brief for what the agent cannot run
     items = [i for i in everything if not settings.fix_devices or i["device_name"].lower() in settings.fix_devices]
     inventory_at = store.scalar("SELECT MAX(snapshot_at) FROM devices")
     devices = {str(r["device_name"]).lower(): r["last_seen"]
@@ -414,7 +431,8 @@ def refresh(store: Store, settings: Settings, source: str | None = None) -> dict
             "grew": dict(sorted(grew.items(), key=lambda kv: -kv[1])[:200]), "grew_vulns": sum(grew.values()),
             # what kind of fixes are new, so the run page links to the right Fix & protect tab
             "new_settings": sum(1 for i in fixable if i["fix_id"] in new_ids and i.get("kind") == "setting"),
-            "new_apps": sum(1 for i in fixable if i["fix_id"] in new_ids and not i.get("kind")), **checked}
+            "new_apps": sum(1 for i in fixable if i["fix_id"] in new_ids and not i.get("kind")), **checked,
+            "brief_ai": brief_ai}
 
 
 def read_plan(settings: Settings) -> dict:
@@ -456,7 +474,7 @@ def _row(item: dict, f: dict) -> dict:
                                         "winget_id", "stage", "findings", "cves", "max_epss",
                                         "note", "kind", "config_id", "category", "subcategory", "impact",
                                         "found_by", "threats",
-                                        "setting_kind", "setting_target", "setting_value")},
+                                        "setting_kind", "setting_target", "setting_value", "brief")},
             "status": status, **{k: f.get(k) for k in ("method", "approved_by", "approved_at", "saved_by", "saved_at",
                                                       "started_at", "finished_at",
                                                       "verified_at", "message", "result", "agent", "handover", "manual",
@@ -522,30 +540,19 @@ def detail(settings: Settings, fid: str) -> dict | None:
 
 
 def _no_fix_handover(item: dict) -> dict:
-    """The handover for a remediation the agent has no automatic fix for (action none), from its catalogue note."""
-    device, app, note = item.get("device_name") or "the computer", item.get("app") or "the application", item.get("note") or ""
-    if item.get("kind") == "setting":
-        owner, steps = "Endpoint security team", [
-            f"Review '{app}' on {device} with the device owner and the people who use it",
-            "Apply it through Group Policy or Intune, with a rollback plan",
-            "Confirm the setting on the computer, then mark the remediation as done manually"]
-    elif note.lower().startswith("not an app but a part"):
-        owner, steps = "IT operations", [
-            f"Update the applications on {device} that include {app} (listed in the cause)",
-            "Wait for Microsoft Defender to rescan the device",
-            "Mark the remediation as done manually once those applications are updated"]
-    else:
-        owner, steps = "IT operations", [
-            f"Find how {app} {item.get('version') or ''} was installed on {device}: installer, bundle or copied folder".replace("  ", " "),
-            "Update it to the vendor's fixed version, or remove it if nothing needs it",
-            "Confirm it in Apps & features or on disk, then mark the remediation as done manually"]
-    return {"cause": note or "CyberSuite has no automatic remediation for this item.", "steps": steps, "owner": owner,
-            "summary": "", "by_ai": False, "evidence": [], "at": utcnow().isoformat()}
+    """The handover for a remediation the agent cannot run (action none): the AI's brief for the item, or, when the AI
+    was not available, a handover that says so (no hand-written explanation)."""
+    b = item.get("brief") or {}
+    if b.get("cause"):
+        return {"cause": b["cause"], "steps": list(b.get("steps") or []), "reason": b.get("reason", ""), "summary": "",
+                "by_ai": True, "model": b.get("model", ""), "evidence": [], "at": utcnow().isoformat()}
+    return {"cause": "", "steps": [], "summary": "", "by_ai": False, "evidence": [],
+            "ai_unavailable": b.get("unavailable") or "not available: the plan was built without the AI", "at": utcnow().isoformat()}
 
 
 def hand_over(settings: Settings, ids: list[str], who: str | None = None) -> dict:
     """A person hands a remediation the agent cannot do (no automatic fix) to the people who must do it by hand:
-    it becomes manual_required with a handover (cause, steps, owner), then follows the manual flow (mark_manual)."""
+    it becomes manual_required with a handover (the AI brief: cause and steps), then follows the manual flow (mark_manual)."""
     who = who or _user()
     items = {i["fix_id"]: i for i in read_plan(settings).get("items", [])}
     done, skipped = [], []
@@ -560,7 +567,7 @@ def hand_over(settings: Settings, ids: list[str], who: str | None = None) -> dic
             data["fixes"][fid] = {"status": "manual_required", "item": item, "handover": h, "handed_by": who,
                                   "handed_at": h["at"], "finished_at": h["at"],
                                   "trail": prev.get("trail") or [], "attempts": _attempts(prev)}
-            event(data, f"Handed to a person by {who}: {_label(data['fixes'][fid])}. Owner: {h['owner']}", fid)
+            event(data, f"Handed over for manual remediation by {who}: {_label(data['fixes'][fid])}", fid)
             done.append(fid)
     return {"handed": done, "skipped": skipped}
 

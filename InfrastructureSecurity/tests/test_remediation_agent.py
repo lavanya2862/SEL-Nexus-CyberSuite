@@ -136,8 +136,8 @@ def test_nothing_installed_is_not_retried_and_goes_to_a_person(results):
     r = results["not_found"]
     assert r["status"] == "manual_required" and r["engines"] == ["winget"]
     h = r["handover"]
-    assert h["owner"] == "IT operations" and len(h["steps"]) >= 3 and "exit code -995" in h["evidence"]
-    assert any(e.startswith("Manual action required: Mozilla Firefox on opcc-wks-01") for e in r["events"])
+    assert h["steps"] == [] and h["ai_unavailable"].startswith("not available") and "exit code -995" in h["evidence"]
+    assert any(e.startswith("Manual remediation required: Mozilla Firefox on opcc-wks-01") for e in r["events"])
 
 
 def test_a_person_marks_it_done_and_it_is_logged(results):
@@ -157,7 +157,7 @@ def test_reapproval_keeps_earlier_attempts_and_the_trail(results):
 
 
 def test_a_no_fix_item_is_handed_to_a_person():
-    """No automatic fix (action none): a person hands it over, it becomes manual_required with steps and an owner."""
+    """No automatic fix (action none): it is handed over for manual remediation; without an AI brief it says the AI was not available."""
     py = python("threat_intel")
     if not py.exists():
         pytest.skip("threat_intel has no .venv yet")
@@ -175,7 +175,7 @@ out = {"handed": plan.hand_over(s, ["fx_000000000001"], "Lavanya")}
 out["again"] = plan.hand_over(s, ["fx_000000000001"], "Lavanya")
 d = plan.detail(s, "fx_000000000001")
 out["row"] = {k: d["row"].get(k) for k in ("status", "handed_by")}
-out["owner"] = d["row"]["handover"]["owner"]; out["steps"] = len(d["row"]["handover"]["steps"])
+out["unavailable"] = d["row"]["handover"].get("ai_unavailable"); out["steps"] = len(d["row"]["handover"]["steps"])
 out["marked"] = plan.mark_manual(s, ["fx_000000000001"], "Lavanya", "Deleted C:/LabApps/log4j")
 out["trail"] = [e["text"] for e in plan.detail(s, "fx_000000000001")["trail"]]
 print(json.dumps(out))
@@ -186,6 +186,6 @@ print(json.dumps(out))
     assert r["handed"] == {"handed": ["fx_000000000001"], "skipped": []}
     assert r["again"]["skipped"] == ["fx_000000000001"]          # already with a person: not handed twice
     assert r["row"] == {"status": "manual_required", "handed_by": "Lavanya"}
-    assert r["owner"] == "IT operations" and r["steps"] == 3
+    assert r["unavailable"].startswith("not available") and r["steps"] == 0
     assert r["marked"]["marked"] == ["fx_000000000001"]
-    assert r["trail"][0].startswith("Handed to a person by Lavanya") and r["trail"][1].startswith("Remediated manually by Lavanya")
+    assert r["trail"][0].startswith("Handed over for manual remediation by Lavanya") and r["trail"][1].startswith("Remediated manually by Lavanya")

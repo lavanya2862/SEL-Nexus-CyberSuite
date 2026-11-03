@@ -26,7 +26,10 @@ export interface FixRow {
   /** The Remediation Agent's moves (scans for attack responses; winget / choco / uninstall / apply retries for the rest), why, and the result */
   agent?: { action: 'quick_scan' | 'full_scan' | 'winget' | 'choco' | 'uninstall' | 'apply' | 'stop'; reason: string; result: string; status?: FixStatus }[] | null
   /** When no allowed move remediated it: what the person who takes over needs (the Remediation Agent's, or standard steps) */
-  handover?: { cause: string; steps: string[]; owner: string; summary?: string; by_ai?: boolean; evidence: string[]; at: string } | null
+  handover?: { cause: string; steps: string[]; reason?: string; result?: string; summary?: string; by_ai?: boolean; model?: string
+    ai_unavailable?: string; evidence: string[]; at: string } | null
+  /** the Remediation Agent's brief for a remediation it cannot run (action none): or why the AI could not write it */
+  brief?: { reason?: string; cause?: string; steps?: string[]; model?: string; unavailable?: string } | null
   /** A person remediated it by hand (then Defender verifies it as usual) */
   manual?: { by: string; at: string; note: string } | null
   /** who handed a remediation without an automatic fix to a person, and when */
@@ -111,11 +114,11 @@ export const STATUS: Record<FixStatus, { label: string; tone: 'muted' | 'sky' | 
   done: { label: 'Pending verification', tone: 'teal' },
   verified: { label: 'Verified by Defender', tone: 'good' },
   failed: { label: 'Failed', tone: 'bad' },
-  manual_required: { label: 'Manual action required', tone: 'bad' },
+  manual_required: { label: 'Awaiting manual remediation', tone: 'bad' },
   awaiting_vendor: { label: 'Awaiting vendor package', tone: 'warn' },
   still_there: { label: 'Still listed by Defender', tone: 'warn' },
   gone: { label: 'Resolved before remediation', tone: 'muted' },
-  info: { label: 'No automatic fix', tone: 'muted' },
+  info: { label: 'Manual remediation', tone: 'muted' },
 }
 
 export const ACTION_LABEL: Record<FixRow['action'], string> = { upgrade: 'Update', remove: 'Remove', replace: 'Replace', setting: 'Change setting', respond: 'Scan and clean', none: 'No action' }
@@ -139,5 +142,5 @@ export function settingChange(r: Pick<FixRow, 'setting_kind' | 'setting_target' 
   return 'Changes it to what Microsoft recommends'
 }
 export const METHOD_LABEL: Record<FixMethod, string> = { runcommand: 'Azure Run Command', liveresponse: 'Defender Live Response' }
-export const canApprove = (r: FixRow) => r.action !== 'none' && ['proposed', 'saved', 'failed', 'still_there', 'gone'].includes(r.status)
+export const canApprove = (r: FixRow) => ['proposed', 'saved', 'failed', 'still_there', 'gone', 'manual_required', 'info'].includes(r.status)
 export const canWithdraw = (r: FixRow) => ['approved', 'failed', 'awaiting_vendor', 'still_there'].includes(r.status)

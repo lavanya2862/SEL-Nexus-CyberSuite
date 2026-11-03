@@ -13,7 +13,7 @@ picks the next move from APP_MOVES (without AI: APP_LADDER), never a command of 
 "awaiting_vendor" means every update attempt ran cleanly but no source publishes a newer version yet; the plan
 re-queues it under the same approval a day later (plan.requeue_awaiting).
 "manual_required" means the computer reported but no allowed move remediated it: the fix carries a handover (cause,
-steps, owner, evidence) and a person marks it done manually (plan.mark_manual); Defender then verifies it as usual.
+steps, evidence) and it is marked done manually (plan.mark_manual); Defender then verifies it as usual.
 "failed" is left for remediations that never ran (the computer did not report).
 """
 
@@ -116,39 +116,19 @@ def awaiting_vendor(action: str, results: list[dict | None]) -> bool:
     return True
 
 
-# A person's handover when no allowed move remediates it: the Remediation Agent's own cause, steps and owner when it
-# gave them, else these standard steps for the action
-MANUAL_STEPS = {
-    "upgrade": ["Sign in to {device} with an administrator account",
-                "Update {app} with the vendor's installer to the version Microsoft Defender Vulnerability Management recommends",
-                "Confirm the new version in Apps & features, then mark the remediation as done manually"],
-    "remove": ["Sign in to {device} with an administrator account",
-               "Uninstall {app} from Apps & features, or with the vendor's uninstaller",
-               "Remove leftover program folders and uninstall entries if the uninstaller is missing",
-               "Confirm it no longer appears in Apps & features, then mark the remediation as done manually"],
-    "setting": ["Check whether Group Policy, Intune or tamper protection enforces this setting on {device}",
-                "Change '{app}' at that source to the recommended value",
-                "Confirm the value on the computer, then mark the remediation as done manually"],
-    "respond": ["Open {device} in Microsoft Defender and review the remaining active threats",
-                "Isolate the device in Defender if a threat is still active",
-                "Run a full scan once the threat is removed, then mark the remediation as done manually"],
-}
-MANUAL_STEPS["replace"] = MANUAL_STEPS["upgrade"]
-MANUAL_OWNER = {"setting": "Endpoint security team", "respond": "SOC analyst"}
-
-
-def handover(item: dict, message: str, result: dict | None, moves: list[dict] | None) -> dict:
-    """What the person who takes over gets: cause, steps, owner and the evidence the computer reported."""
+def handover(item: dict, message: str, result: dict | None, moves: list[dict] | None, ai_note: str = "") -> dict:
+    """The handover when no allowed move remediated it: the Remediation Agent's own cause and steps (its stop move), the
+    result and the evidence the computer reported. Without the AI it says so instead of giving hand-written steps."""
     stop = next((m for m in reversed(moves or []) if m.get("action") == "stop"), {})
-    fill = {"device": item.get("device_name") or "the computer", "app": item.get("app") or "the application"}
-    steps = [str(s) for s in stop.get("steps") or [] if str(s).strip()][:5] or \
-        [s.format(**fill) for s in MANUAL_STEPS.get(item.get("action"), MANUAL_STEPS["upgrade"])]
+    steps = [str(s) for s in stop.get("steps") or [] if str(s).strip()][:6]
     log_lines = [str(x) for x in (result or {}).get("log") or []][-6:]
     code = (result or {}).get("exit")
-    return {"cause": (stop.get("cause") or "").strip() or message, "steps": steps,
-            "owner": (stop.get("owner") or "").strip() or MANUAL_OWNER.get(item.get("action"), "IT operations"),
-            "summary": stop.get("result") or "", "by_ai": bool(stop.get("cause") or stop.get("steps")),
-            "evidence": ([f"exit code {code}"] if code is not None else []) + log_lines, "at": utcnow().isoformat()}
+    out = {"cause": (stop.get("cause") or "").strip(), "steps": steps, "result": message,
+           "summary": stop.get("result") or "", "by_ai": bool(stop.get("cause") or steps),
+           "evidence": ([f"exit code {code}"] if code is not None else []) + log_lines, "at": utcnow().isoformat()}
+    if not out["by_ai"]:
+        out["ai_unavailable"] = ai_note or "not available: the Remediation Agent did not write a handover"
+    return out
 
 
 def judge(action: str, result: dict | None) -> tuple[str, str]:
@@ -325,13 +305,14 @@ class FixRunner:
             # the computer reported, yet no allowed move remediated it: a person takes over (failed = it never ran)
             note = None
             if status == "failed" and result is not None:
-                status, note = "manual_required", handover(item, message, result, moves)
+                status, note = "manual_required", handover(item, message, result, moves,
+                                                           "" if self.ai is not None else "not available: no AI model is configured or it stopped answering")
             with self.state.edit() as data:
                 data["fixes"][fid].update(status=status, message=message[:600], finished_at=utcnow().isoformat(),
                                           result=result, output=(output or "")[-3000:], agent=moves, handover=note)
                 if note:
-                    event(data, f"Manual action required: {item['app']} on {device}. Owner: {note['owner']}. "
-                                f"Cause: {note['cause']}", fid)
+                    event(data, f"Manual remediation required: {item['app']} on {device}. "
+                                f"{note['cause'] or message}", fid)
             self._say(f"{device}: {' '.join(p for p in (item['app'], item.get('version')) if p)} -> {status}: {message}", fid)
             results[fid] = status
 
@@ -370,7 +351,7 @@ class FixRunner:
                 if move:
                     summary = move.summary or move.reason
                     moves.append({"action": "stop", "reason": move.reason, "result": summary, "cause": move.cause,
-                                  "steps": [str(s) for s in move.steps][:5], "owner": move.owner})
+                                  "steps": [str(s) for s in move.steps][:6]})
                 break
             choice = move.action.strip().lower() if move else ""
             if choice not in allowed:                      # anything else (or no AI): the standard move

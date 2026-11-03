@@ -44,13 +44,10 @@ export function FixProgress({ embedded }: { embedded?: boolean } = {}) {
   const auto = useAutoStart(error instanceof FixDown, 'fix')
   return (
     <div className="flex flex-col gap-5">
-      {embedded ? (
-        <p className="text-sm text-ink-3">Each remediation advances as the device reports back. Remediations continue if you leave this page.</p>
-      ) : <>
+      {embedded ? null : <>
         <Link to="/fixes" className="inline-flex w-fit items-center gap-1.5 text-sm text-ink-3 hover:text-ink"><ArrowLeft className="size-4" /> Remediation</Link>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Remediation progress</h1>
-          <p className="mt-1 text-sm text-ink-3">Each remediation advances as the device reports back. Remediations continue if you leave this page.</p>
         </div>
       </>}
       {isLoading ? <Skeleton className="h-64 rounded-2xl" /> : error ? (
@@ -83,7 +80,7 @@ function Body({ v }: { v: FixView }) {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             {live ? <Loader2 className="mt-0.5 size-6 animate-spin text-sky" /> : <CheckCircle2 className="mt-0.5 size-6" style={{ color: statusColor.good }} />}
-            <div>
+            <div className="text-justify">
               <h2 className="text-xl font-semibold tracking-tight">
                 {live ? (v.worker.task === 'probe' ? 'Checking device connectivity…' : 'Remediating…') : rows.length ? 'Last remediation run complete' : waiting.length ? 'Nothing running now' : 'No remediations executed yet'}
               </h2>
@@ -131,7 +128,7 @@ function Body({ v }: { v: FixView }) {
         <Panel className="p-6" id="waiting">
           <div className="flex flex-wrap items-center gap-2">
             <UserCog className="size-4" style={{ color: statusColor.critical }} />
-            <h3 className="font-semibold tracking-tight">Waiting for a person or a vendor</h3>
+            <h3 className="font-semibold tracking-tight">Awaiting manual remediation or a vendor package</h3>
             <span className="text-xs text-ink-3">· {waiting.length} open · stays here until it is resolved, whichever run it came from</span>
           </div>
           <ul className="mt-4 flex flex-col divide-y divide-hairline">

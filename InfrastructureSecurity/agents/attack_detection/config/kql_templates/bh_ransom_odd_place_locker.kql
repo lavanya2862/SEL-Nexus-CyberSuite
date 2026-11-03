@@ -3,6 +3,8 @@
 // technique: T1486
 // attack: 1
 DeviceFileEvents
+// Microsoft Edge updates itself: its updater unpacks archives and renames many files in its own folders
+| where InitiatingProcessFileName !~ "MicrosoftEdgeUpdate.exe" and not(InitiatingProcessFolderPath has @"\Microsoft\EdgeUpdate" or InitiatingProcessFolderPath has @"\Microsoft\Edge\")
 | where Timestamp > ago({{LOOKBACK}}d)
 | where ActionType in ("FileModified", "FileRenamed", "FileDeleted")
 | where InitiatingProcessFolderPath matches regex @"(?i)(\\temp\\|\\downloads\\|\\users\\public\\|\\perflogs\\)"

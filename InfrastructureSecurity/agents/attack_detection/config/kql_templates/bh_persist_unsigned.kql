@@ -7,6 +7,8 @@ let autostart = DeviceRegistryEvents
     | where ActionType == "RegistryValueSet" and RegistryKey has_any (@"\CurrentVersion\Run", @"\CurrentVersion\RunOnce")
     | extend Program = tolower(extract(@"(?i)([a-z]:\\[^""]+?\.(exe|dll|scr|com))", 1, RegistryValueData))
     | where isnotempty(Program)
+    // installed programs (Program Files, Windows) are not where persistence hides; e.g. Edge's own startup entry
+    | where not(Program startswith @"c:\program files" or Program startswith @"c:\windows\")
     | project DeviceId, DeviceName, Timestamp, RegistryKey, RegistryValueName, RegistryValueData, Program,
               InitiatingProcessAccountName, InitiatingProcessFileName;
 let files = DeviceProcessEvents

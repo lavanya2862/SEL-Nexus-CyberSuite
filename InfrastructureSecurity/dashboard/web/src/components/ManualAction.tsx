@@ -28,20 +28,18 @@ function DoneByHand({ m }: { m: NonNullable<FixRow['manual']> }) {
 export const nextVendorCheck = (r: FixRow) => (r.finished_at ? new Date(new Date(r.finished_at.replace(' ', 'T') +
   (/[zZ]|[+-]\d\d:?\d\d$/.test(r.finished_at) ? '' : 'Z')).getTime() + 24 * 3600_000) : null)
 
-/** One line on a small card while a person must act (or the vendor must publish), so it never disappears from view. */
-/** Why the fix engine has no automatic remediation for a row (action none), in a few words, from its catalogue note. */
+/** The Remediation Agent's one-line reason for a remediation it cannot run, or that the AI could not write it. */
 export function noFixReason(r: FixRow): string {
-  const note = r.note ?? ''
-  if (/^Not an app but a part/i.test(note)) return 'Built into other apps: fixed when those apps are updated'
-  if (/^No remediation defined/i.test(note)) return 'No automatic fix set up: remediate by hand'
-  if (/^Needs an IT person/i.test(note)) return 'Needs an IT person: changing it could lock people out'
-  return note.split(/[.;:(]/)[0].trim() || 'No automatic fix: remediate by hand'
+  if (r.brief?.reason) return r.brief.reason
+  if (r.brief?.unavailable) return `AI ${r.brief.unavailable}`
+  return ''
 }
 
 export function PersonLine({ r, short }: { r?: FixRow | null; short?: boolean }) {
-  if (r?.status === 'info') return <span className="truncate text-xs text-ink-3" title={r.note || undefined}>{noFixReason(r)}</span>
+  if (r?.status === 'gone') return <span className="line-clamp-2 text-xs text-ink-3" title={r.message ?? undefined}>{short ? 'Updated or removed outside CyberSuite before it ran' : r.message}</span>
+  if (r?.status === 'info') return noFixReason(r) ? <span className="truncate text-xs text-ink-3" title={r.brief?.cause || undefined}>{noFixReason(r)}</span> : null
   if (short) {                              // one quiet line for a small card; the details carry the rest
-    if (r?.status === 'manual_required') return <span className="truncate text-xs text-ink-3">Owner: {r.handover?.owner ?? 'IT operations'}</span>
+    if (r?.status === 'manual_required') return r.handover?.reason ? <span className="truncate text-xs text-ink-3">{r.handover.reason}</span> : null
     if (r?.status === 'awaiting_vendor') {
       const next = nextVendorCheck(r)
       return <span className="truncate text-xs text-ink-3">{next && next.getTime() > Date.now() ? `Re-checked ${next.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'Re-checked with the next run'}</span>
@@ -51,8 +49,8 @@ export function PersonLine({ r, short }: { r?: FixRow | null; short?: boolean })
   if (r?.status === 'manual_required') {
     return (
       <div className="mt-1 rounded-md px-2 py-1.5 text-[11px]" style={{ background: `${statusColor.critical}14` }}>
-        <span className="inline-flex items-center gap-1 font-semibold" style={{ color: statusColor.critical }}><UserCog className="size-3.5" /> Waiting for a person</span>
-        <span className="text-ink-2"> · Owner: {r.handover?.owner ?? 'IT operations'}</span>
+        <span className="inline-flex items-center gap-1 font-semibold" style={{ color: statusColor.critical }}><UserCog className="size-3.5" /> Awaiting manual remediation</span>
+        
         {r.handover?.cause && <span className="mt-0.5 line-clamp-2 block text-ink-3">{r.handover.cause}</span>}
       </div>
     )
@@ -68,7 +66,8 @@ export function PersonLine({ r, short }: { r?: FixRow | null; short?: boolean })
   return null
 }
 
-/** Manual action required: cause, owner, steps, what the agent tried, the evidence, and "Mark as fixed manually". */
+/** Awaiting manual remediation: the Remediation Agent's cause and steps (or that the AI was not available), what it
+ *  tried, the evidence, and "Mark as fixed manually". */
 export function ManualAction({ r, compact }: { r: FixRow; compact?: boolean }) {
   const [open, setOpen] = useState(!compact)
   const [note, setNote] = useState('')
@@ -82,22 +81,35 @@ export function ManualAction({ r, compact }: { r: FixRow; compact?: boolean }) {
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
         className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs" style={{ background: `${statusColor.critical}14` }}>
         <UserCog className="size-4 shrink-0" style={{ color: statusColor.critical }} />
-        <span className="font-semibold" style={{ color: statusColor.critical }}>Manual action required</span>
-        <span className="truncate text-ink-2">· Owner: <b className="font-medium text-ink">{h.owner}</b></span>
+        <span className="font-semibold" style={{ color: statusColor.critical }}>Awaiting manual remediation</span>
+        
         <span className="ml-auto shrink-0 text-ink-3">{ago(h.at)}</span>
         <ChevronDown className={cn('size-4 shrink-0 text-ink-3 transition-transform', open && 'rotate-180')} />
       </button>
-      {!open && <p className="line-clamp-2 px-3 pb-2 pt-1.5 text-xs text-ink-2">{h.cause}</p>}
+      {!open && <p className="line-clamp-2 px-3 pb-2 pt-1.5 text-xs text-ink-2">{h.cause || (h.ai_unavailable ? `AI ${h.ai_unavailable}` : h.result)}</p>}
       {open && (
         <div className="flex flex-col gap-3 px-3 py-3 text-xs">
-          <div>
-            <div className="mb-0.5 font-medium text-ink-3">Cause</div>
-            <p className="text-ink">{h.cause}</p>
-          </div>
-          <div>
-            <div className="mb-1 font-medium text-ink-3">Steps {h.by_ai ? '(Remediation Agent)' : '(standard)'}</div>
-            <ol className="flex list-decimal flex-col gap-1 pl-4 text-ink">{h.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
-          </div>
+          {h.ai_unavailable && (
+            <p className="rounded-lg bg-well px-2.5 py-2 text-ink-2"><b className="text-ink">AI {h.ai_unavailable}.</b> The Remediation Agent could not write the cause and steps for this remediation.</p>
+          )}
+          {h.cause && (
+            <div>
+              <div className="mb-0.5 font-medium text-ink-3">Cause</div>
+              <p className="text-ink">{h.cause}</p>
+            </div>
+          )}
+          {h.result && (
+            <div>
+              <div className="mb-0.5 font-medium text-ink-3">Result on the computer</div>
+              <p className="text-ink-2">{h.result}</p>
+            </div>
+          )}
+          {h.steps.length > 0 && (
+            <div>
+              <div className="mb-1 font-medium text-ink-3">Steps (Remediation Agent{h.model ? ` · ${h.model}` : ''})</div>
+              <ol className="flex list-decimal flex-col gap-1 pl-4 text-ink">{h.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
+            </div>
+          )}
           {tries.length > 0 && (
             <div>
               <div className="mb-1 font-medium text-ink-3">What the agent tried</div>

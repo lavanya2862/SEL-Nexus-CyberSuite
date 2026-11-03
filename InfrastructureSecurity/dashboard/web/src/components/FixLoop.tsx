@@ -271,7 +271,7 @@ export function StatusPill({ r }: { r: FixRow }) {
   const s = STATUS[r.status]
   const color = { muted: 'var(--ink-3)', sky: 'var(--sky)', run: 'var(--sky)', teal: 'var(--teal)', good: statusColor.good, bad: statusColor.critical, warn: '#b37400' }[s.tone]
   return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium" style={{ color }}>
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium" style={{ color }} title={r.message ?? undefined}>
       {r.status === 'running' ? <Loader2 className="size-3 animate-spin" /> : r.status === 'verified' ? <ShieldCheck className="size-3" /> : <span className="size-1.5 rounded-full" style={{ background: color }} />}
       {s.label}
     </span>
@@ -329,7 +329,7 @@ function DevicePlan({ device, rows, stages, sel, toggle, setMany }: {
                   </td>
                   <td className="whitespace-nowrap text-ink-2">{ACTION_LABEL[r.action]}</td>
                   <td className="tabular text-right">{num(r.findings)}</td>
-                  <td><StatusPill r={r} />{r.approved_by && r.status === 'approved' && <div className="mt-0.5 text-[11px] text-ink-3">by {r.approved_by} · {r.method === 'liveresponse' ? 'Live Response' : 'Run Command'}</div>}</td>
+                  <td><StatusPill r={r} />{r.status === 'gone' && r.message && <div className="mt-0.5 line-clamp-2 max-w-md text-[11px] leading-snug text-ink-3">{r.message}</div>}{r.approved_by && r.status === 'approved' && <div className="mt-0.5 text-[11px] text-ink-3">by {r.approved_by} · {r.method === 'liveresponse' ? 'Live Response' : 'Run Command'}</div>}</td>
                   <td className="max-w-[300px] text-xs text-ink-2 [overflow-wrap:anywhere]">{r.message ?? ''}</td>
                 </tr>
               )

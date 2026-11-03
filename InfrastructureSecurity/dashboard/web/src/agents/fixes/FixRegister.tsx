@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils'
 type ViewKey = 'acted' | 'person' | 'progress' | 'vendor' | 'completed' | 'verified' | 'problems' | 'deferred' | 'proposed' | 'all'
 const VIEWS: [ViewKey, string, FixStatus[] | null][] = [
   ['acted', 'All acted on', null],
-  ['person', 'Waiting for a person', ['manual_required']],
+  ['person', 'Awaiting manual remediation', ['manual_required']],
   ['progress', 'In progress', ['approved', 'queued', 'running']],
   ['vendor', 'Awaiting vendor', ['awaiting_vendor']],
   ['completed', 'Pending verification', ['done']],
@@ -62,7 +62,7 @@ export function FixRegister({ rows, opco }: { rows: FixRow[]; opco: string }) {
     .filter((r) => inView(view, r) && (!status.length || status.includes(r.status)) && (device === 'all' || r.device_name === device)
       && (type === 'all' || typeOf(r) === type) && (agent === 'all' || agent in (r.found_by ?? {}))
       && (approver === 'all' || r.approved_by === approver || r.manual?.by === approver)
-      && (!term || [r.app, r.device_name, r.fix_id, r.version, r.handover?.owner].some((x) => (x ?? '').toLowerCase().includes(term)))
+      && (!term || [r.app, r.device_name, r.fix_id, r.version, r.handover?.reason].some((x) => (x ?? '').toLowerCase().includes(term)))
       && inDateRange(utc(lastActivity(r)), when))
     .sort((a, b) => Number(b.status === 'manual_required') - Number(a.status === 'manual_required') || (lastActivity(b) ?? '').localeCompare(lastActivity(a) ?? ''))
 
@@ -137,7 +137,8 @@ export function FixRegister({ rows, opco }: { rows: FixRow[]; opco: string }) {
                   <td className="whitespace-nowrap">{r.device_name}</td>
                   <td>
                     <StatusPill r={r} />
-                    {r.status === 'manual_required' && <div className="text-[11px] text-ink-3">Owner: {r.handover?.owner ?? 'IT operations'}</div>}
+                    {r.status === 'gone' && r.message && <div className="mt-0.5 line-clamp-2 max-w-md text-[11px] leading-snug text-ink-3">{r.message}</div>}
+                    
                     {r.manual && <div className="text-[11px] text-ink-3">Fixed by hand: {r.manual.by}</div>}
                   </td>
                   <td className="whitespace-nowrap text-xs">{r.approved_by ? <>{r.approved_by}<div className="text-ink-3">{dateTime(utc(r.approved_at))}</div></> : <span className="text-ink-3">–</span>}</td>

@@ -84,9 +84,9 @@ function Overview({ d }: { d: ThreatIntelData }) {
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {([
-            [num(w.threats_collected), 'threats collected', `${when}: attack news, advisories and vulnerability lists`, 'var(--tint-blue)'],
-            [num(Object.values(w.ioc_types).reduce((a, b) => a + b, 0)), 'indicators collected', `IPs, domains, URLs, file hashes · ${when} · ${num(d.ioc_hits)} observed on managed devices`, 'var(--tint-violet)'],
-            [num(d.posture.affecting), 'applicable threats', `${num(d.posture.vulnerabilities ?? 0)} vulnerabilities in installed software · ${num(d.posture.indicators ?? 0)} with indicators seen on a device`, 'var(--tint-red)'],
+            [num(w.threats_collected), 'Threats Collected', `${when}: attack news, advisories and vulnerability lists`, 'var(--tint-blue)'],
+            [num(Object.values(w.ioc_types).reduce((a, b) => a + b, 0)), 'Indicators Collected', `IPs, domains, URLs, file hashes · ${when} · ${num(d.ioc_hits)} observed on managed devices`, 'var(--tint-violet)'],
+            [num(d.posture.affecting), 'Applicable Threats', `${num(d.posture.vulnerabilities ?? 0)} vulnerabilities in installed software · ${num(d.posture.indicators ?? 0)} with indicators seen on a device`, 'var(--tint-red)'],
           ] as const).map(([v, l, h, tint]) => (
             <div key={l} className="tint-box rounded-xl px-3.5 py-3" style={{ '--tint': tint } as React.CSSProperties}>
               <div className="tint-num tabular text-lg font-semibold leading-none">{v}</div>
@@ -99,7 +99,7 @@ function Overview({ d }: { d: ThreatIntelData }) {
 
       <Card title="Intelligence pipeline" description={`How all intelligence collected (${when}) is reduced to a prioritised list of updates`}>
         <ol className="flex flex-col gap-3">
-          {w.funnel.map((f, i) => (
+          {w.funnel.filter((f) => !f.stage.toLowerCase().includes('assessed')).map((f, i) => (
             <li key={f.stage} className="grid grid-cols-[minmax(0,180px)_1fr] items-center gap-4">
               <div>
                 <div className="text-sm font-medium">{f.stage}</div>
@@ -318,7 +318,7 @@ function Landscape({ d }: { d: ThreatIntelData }) {
   const busiest = days.indexOf(Math.max(...days))
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-      <Card className="xl:col-span-8" title="Threats by day and source type" description={`Everything collected ${when}, by the day it was published${hasEarlier ? ' · “Earlier” = published before the period' : ''}`}>
+      <Card className="xl:col-span-8" title="Threats by day and source type">
         <div className="mb-4 flex flex-wrap gap-x-6 gap-y-3">
           <div>
             <div className="tabular text-2xl font-semibold leading-none">{num(total)}</div>
@@ -363,7 +363,7 @@ function Landscape({ d }: { d: ThreatIntelData }) {
           })}
         />
       </Card>
-      <Card className="xl:col-span-4" title="Risk ratings" description={`Everything collected ${when}, rated by fixed rules`}>
+      <Card className="xl:col-span-4" title="Risk ratings" description="Threat intelligence findings classified by evaluated risk severity">
         <Chart
           height={300}
           build={(tk) => ({

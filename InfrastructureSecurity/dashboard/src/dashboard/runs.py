@@ -60,56 +60,55 @@ class Step:
 # Members must follow the pipeline's own order (they are matched against the log one after another).
 def vulnerability_steps() -> list[Step]:
     return [
-        Step("download", "Download from Defender", "Full vulnerability export, plus changes Defender recorded since the last run"),
-        Step("check", "Validate", "Store today's snapshot and verify completeness"),
-        Step("score", "Score and report", "Score each finding and compute report metrics"),
-        Step("advice", "Remediation agent", "The agent writes remediation steps for every finding"),
-        Step("fix", "Remediation", "Propose new remediations from this run for your approval below"),
+        Step("download", "Defender Data Acquisition", "Retrieves vulnerability data and incremental updates from Microsoft Defender."),
+        Step("check", "Data Validation", "Validates snapshot completeness and data integrity."),
+        Step("score", "Vulnerability Prioritization & Reporting", "Prioritizes vulnerabilities and generates analytical reports."),
+        Step("advice", "Remediation Drafting", "Drafts actionable remediation steps for identified vulnerabilities."),
+        Step("fix", "Remediation Execution", "Executes approved remediation actions."),
     ]
 
 
 def threat_intel_steps() -> list[Step]:
     return [
-        Step("gather", "Collect and analyse threat intelligence", "New threats from 10 public feeds; the agent analyses each one and its likelihood of exploitation",
+        Step("gather", "Intelligence Gathering", "Collects and analyses threat intelligence from multiple public sources.",
              ("collect", "inventory", "derive", "nvd_details", "epss", "products", "analyse")),
-        Step("affects", "Assess exposure", "Check whether the targeted software is present on managed devices",
+        Step("affects", "Threat Assessment", "Checks identified threats against managed device software to determine applicability and risk.",
              ("exposure", "score", "correlate")),
-        Step("fixes", "Write remediation steps", "The agent writes remediation steps for each applicable threat, validated against Defender data",
+        Step("fixes", "Remediation Guidance", "Generates actionable remediation recommendations for identified vulnerabilities.",
              ("fix_advice",)),
-        Step("outputs", "Publish the report", "Applicable threats, remediation guidance, alerts and the report",
+        Step("outputs", "Security Reporting", "Generates security reports, updates dashboards, and distributes relevant alerts.",
              ("alerts", "report", "dashboard", "metrics")),
-        Step("fix", "Remediation", "Propose new remediations from this run for your approval below", ("fix_plan",)),
+        Step("fix", "Remediation Approval", "Presents proposed remediation actions for analyst review, approval, or deferral.",
+             ("fix_plan",)),
     ]
 
 
 def attack_steps() -> list[Step]:
     """The Attack Detection Agent's run: its own devices and hunts, findings.json, then the fix engine's proposals."""
     return [
-        Step("search", "Hunt across managed devices", "Search Microsoft Defender (last 30 days) for the 12 attacks' techniques",
+        Step("search", "Device Activity Hunting", "Retrieves managed devices from Microsoft Defender and searches the last 30 days of activity for techniques associated with 12 known attacks.",
              ("inputs", "hunt")),
-        Step("evidence", "Correlate the evidence", "Signed-in users and Defender context; earlier detections are kept, new ones added",
+        Step("evidence", "Evidence Correlation", "Links hunting findings to managed devices, signed-in users, Defender alerts, and activity timelines to establish investigation context.",
              ("correlate", "exposure", "rescore")),
-        Step("resolve", "Write resolution steps", "The agent writes resolution steps for each new detection, validated against the evidence",
+        Step("resolve", "Remediation Drafting", "Generates evidence-backed remediation steps for newly identified detections, including host isolation, malware scanning, and account resets.",
              ("resolve",)),
-        Step("publish", "Publish", "Update the Attack detection page, raise alerts and write the report",
-             # import ... dashboard: runs from before 31 Oct 2026, when the Threat Intel Agent imported the results
+        Step("publish", "Results & Report Publishing", "Updates the Attack Detection dashboard, publishes analytical reports, and distributes alerts for identified attacks.",
              ("report", "publish", "import", "rescore", "alerts", "report", "dashboard")),
-        Step("fix", "Remediation", "Propose a Defender scan-and-clean for every detection; a person approves each one",
-             ("fix", "fix_plan", "auto_fix", "threat_intel")),   # all but "fix": runs from before 31 Oct 2026
+        Step("fix", "Remediation Execution", "Prepares Defender scan-and-clean actions for detected attacks and executes approved actions when automated remediation is enabled.",
+             ("fix", "fix_plan", "auto_fix", "threat_intel")),
     ]
 
 
 def alert_triage_steps() -> list[Step]:
     return [
         # The pipeline's own housekeeping (feedback import, lab grading) still runs; it is just not shown as a step.
-        Step("ingest", "Ingest new incidents", "New or changed incidents from Microsoft Defender and Sentinel", ("ingest",)),
-        Step("triage", "Classify each incident", "The agent reviews the evidence and classifies it: true positive, false positive or needs review",
+        Step("ingest", "Incident Retrieval", "Retrieves new and updated incidents from Microsoft Defender and Microsoft Sentinel.", ("ingest",)),
+        Step("triage", "Incident Classification", "Analyzes incident evidence and classifies potential threats to determine the required response.",
              ("triage",)),
-        Step("act", "Respond", "Close false positives, escalate true positives, request Defender scans and clean-up (when enabled)",
+        Step("act", "Incident Response", "Executes response actions, escalates confirmed threats, and initiates Defender scans or cleanup when enabled.",
              ("auto_resolve", "respond", "writeback", "actions")),
-        Step("publish", "Publish the triage queue", "Results available for review on the Alert triage page", ("metrics", "export", "report")),
+        Step("publish", "Results & Report Publishing", "Publishes incident classification results, triage metrics, and reports to the Alert Triage dashboard.", ("metrics", "export", "report")),
     ]
-
 
 STEPS = {"threat_intel": threat_intel_steps, "vulnerability": vulnerability_steps, "alert_triage": alert_triage_steps, "attack_detection": attack_steps}
 AGENT_NAMES = {"threat_intel": "Threat Intel Agent", "vulnerability": "Vulnerability Agent", "alert_triage": "Alert Triage Agent", "attack_detection": "Attack Detection Agent"}
@@ -124,8 +123,12 @@ def agent_key(key: str) -> str:
 
 
 STEPS_AFTER_TRIAGE = {"auto_resolve", "respond", "defender_view", "writeback", "actions", "ledger", "accuracy", "metrics", "export"}
-VERDICT_WORDS = {"likely_true_positive": "real threat", "likely_false_positive": "false alarm",
-                 "benign_positive": "false positive", "needs_investigation": "needs a person"}
+VERDICT_WORDS = {
+    "likely_true_positive": "Potential threat identified",
+    "likely_false_positive": "False alarm identified",
+    "benign_positive": "Benign activity identified",
+    "needs_investigation": "Requires analyst review",
+}
 
 
 def verdict_count(n: int, words: str) -> str:
@@ -157,15 +160,19 @@ def ingest_parts(c: dict) -> list[str]:
 
 
 def ingest_words(text: str) -> str:
-    """ → "No new incidents in Defender" or "2 new incidents · 1 closed or reclassified in Defender" """
+    """Alert Triage Stage 1: Incident Retrieval completion message."""
     c = ingest_counts(text)
     if c is None:
-        return text
-    head = [f"{_plural(c['new'], 'new incident')}"] if c["new"] else []
-    return " · ".join(head + ingest_parts(c)) or "No new incidents in Defender"
+        return text or "No new incidents detected"
+    if c.get("new"):
+        return "New incidents retrieved"
+    if c.get("new_alerts"):
+        return "Incident updates retrieved"
+    if c.get("reclassified"):
+        return "Incident status updates retrieved"
+    return "No new incidents detected"
 
-
-REPORT_READY = "Report updated with today's numbers"
+REPORT_READY = "Vulnerability prioritization and reports completed"
 
 
 def defender_new(info: dict) -> tuple[int, int] | None:
@@ -179,56 +186,87 @@ def defender_new(info: dict) -> tuple[int, int] | None:
 
 
 def download_words(info: dict, vulns: int | None = None) -> str:
-    """ "4,524 vulnerabilities in Defender · none new in this run" or "… · 2 new in this run · 13 fixed".
-
-    `vulns` is the count after the load step drops the repeats Defender lists twice, so it matches every page. Until
-    the load finishes (or in logs from before it was logged) the count is left out: the export's row count includes
-    those repeats; the Data quality page shows both."""
+    """Plain words for the Defender Data Acquisition step."""
     if info.get("vulnerability_rows") is None:
         return ""
-    text = f"{vulns:,} vulnerabilities in Defender" if vulns is not None else "Downloaded from Defender"
-    counts = defender_new(info)
-    if counts is None:
-        return text
-    new, fixed = counts
-    text += f" · {new:,} new in this run" if new else " · none new in this run"
-    return text + (f" · {fixed:,} remediated" if fixed else "")
+    return "Defender data retrieved"
 
 
 def advice_summary(info: dict, stopped: str = "") -> str:
-    """The Remediation agent step in plain words: "Remediation steps ready for every vulnerability", no counts.
-
-    Counts confused people: the total ("111 fix guides") read as "111 new", and the rewritten count ("14 new") as
-    "only 14 problems get a fix". Only a problem is spelled out: guides the AI could not update this run keep basic
-    steps ("rules") or the older AI text (ai minus reused minus asked). `stopped` is the reason from the
-    "AI stopped" / "AI explanations off" warning, if the log had one.
-    """
-    behind = info.get("rules", 0) + max(0, info.get("ai", 0) - info.get("reused", 0) - info.get("asked", 0))
-    if not behind:
-        return "Remediation steps ready for every vulnerability"
-    why = ("agent daily limit reached" if "quota" in stopped.lower() else "agent unavailable" if stopped
-           else "agent output did not pass validation")
-    return f"Remediation steps ready · some use standard guidance: {why}"
+    """The Remediation Drafting step: how many AI cards were written anew and how many were still current, or that the
+    AI was not available (then the cards keep their last AI text and new ones have none)."""
+    if stopped:
+        return f"AI not available: {_short(stopped)}"
+    asked, reused = info.get("asked"), info.get("reused")
+    if asked is None and reused is None:
+        return "Remediation steps drafted"
+    return f"{int(asked or 0)} drafted · {int(reused or 0)} unchanged"
 
 
-def fix_words(info: dict) -> str:
-    """The Remediation stage in a few words: "6 new remediations to approve · 102 waiting from earlier runs"."""
+def fix_words(info: dict, uc: str = "vulnerability") -> str:
+    """The Remediation Execution / Approval stage in plain words."""
     new, waiting = int(info.get("new") or 0), int(info.get("waiting") or 0)
-    text = f"{new} new remediation{'s' if new > 1 else ''} to approve" if new else "No new remediations this run"
-    return text + (f" · {waiting:,} waiting from earlier runs" if waiting else "")
+    if uc == "threat_intel":
+        if not new and not waiting:
+            return "No new remediation proposals"
+        if not new and waiting:
+            return "Existing remediation proposals awaiting review"
+        if new == 1:
+            return "Remediation proposal awaiting approval"
+        return "Remediation proposals awaiting approval"
+    if uc == "attack_detection":
+        if not new:
+            return "No new remediation actions · Pending approvals remain" if waiting else "No new remediation actions"
+        return "New remediation actions awaiting approval"
+    # vulnerability (default)
+    if not new:
+        return "No new actions · Pending approvals exist" if waiting else "No new remediation actions"
+    msg = "New remediation action awaiting approval" if new == 1 else "New remediation actions awaiting approval"
+    return f"{msg} · Pending approvals exist" if waiting else msg
 
 
 def auto_fix_words(info: dict) -> str:
-    """Runs from before 31 Oct 2026, when auto-fix existed: "Auto-fix ran 2 scan-and-cleans (1 from earlier runs) · 2 clean"."""
-    n, earlier = int(info.get("approved") or 0), int(info.get("earlier") or 0)
+    """Attack Detection auto-remediation completion message."""
+    n = int(info.get("approved") or 0)
     if not n:
-        return "Auto-fix on · nothing left to remediate"
-    what = _plural(n, "scan-and-clean") + (f" ({earlier} from earlier runs)" if earlier else "")
+        return "No outstanding issues require remediation"
     if info.get("busy"):
-        return f"Auto-fix approved {what} · another remediation run is going, so they run on the next Execute"
+        return "Remediation approved and queued for the next execution"
     done, failed = int(info.get("done") or 0), int(info.get("failed") or 0)
-    return f"Auto-fix ran {what} · {done} clean" + (f" · {failed} not clean yet, retried next run" if failed else "")
+    if failed:
+        return "Remediation completed with some issues still unresolved"
+    return "Defender scan-and-clean completed"
 
+
+STAGE_ERRORS = {
+    "vulnerability": {
+        "download": "Data retrieval failed",
+        "validate": "Validation failed",
+        "score": "Report generation failed",
+        "advice": "Remediation drafting failed",
+        "fix": "Remediation execution failed",
+    },
+    "threat_intel": {
+        "gather": "Threat intelligence collection failed",
+        "affects": "Threat assessment failed",
+        "fixes": "Remediation guidance failed",
+        "outputs": "Report generation failed",
+        "fix": "Remediation approval failed",
+    },
+    "attack_detection": {
+        "search": "Hunting failed",
+        "evidence": "Evidence correlation failed",
+        "resolve": "Remediation drafting failed",
+        "publish": "Results and report publishing failed",
+        "fix": "Remediation execution failed",
+    },
+    "alert_triage": {
+        "ingest": "Incident retrieval failed",
+        "triage": "Incident classification failed",
+        "act": "Incident response failed",
+        "publish": "Results and report publishing failed",
+    },
+}
 
 # Why a run stopped, in plain words (no numbers): the first pattern found in the end of the log wins.
 STOP_REASONS = [
@@ -277,19 +315,16 @@ def _new_steps(d: dict) -> int:
 
 
 def _searched(d: dict) -> str:
-    """The attack search in plain words: no counts of searches or rows, only whether some could not run."""
-    return "Searched the last 30 days of activity" + (" · some searches could not run" if d.get("errors") else "")
+    """The attack search in plain words."""
+    return "Hunting completed with partial results" if d.get("errors") else "Hunting completed"
 
 
 def threats_words(ex: dict) -> str:
-    """Only what this run found: "No new threats affect our computers" / "3 new threats affect our computers".
-    The running total is on the Threats page; runs from before the new count say only that the check ran."""
+    """Threat Intel Stage 2: Threat Assessment completion summary."""
     if "new_threats_exposed" not in ex:
-        return "Checked against the software on managed devices"
-    new = ex["new_threats_exposed"]
-    return f"{_plural(new, 'new applicable threat')}" if new else "No new applicable threats"
-
-
+        return "Threat applicability completed"
+    new = ex.get("new_threats_exposed", 0)
+    return "Applicable threats identified" if new else "No applicable threats identified"
 def _alerts(n: int) -> str:
     return f"{_plural(n, 'alert')} sent" if n else "no alerts needed"
 
@@ -307,17 +342,15 @@ def feed_counts(feeds: dict) -> str:
     return text
 
 
-def friendly(name: str, value) -> str | None:
-    """A Threat Intel step result as one plain sentence (None → show the raw text)."""
+def friendly(name: str, value, uc: str = "") -> str | None:
+    """A Threat Intel / Attack Detection / Alert Triage step result as one plain sentence (None → show the raw text)."""
     d = value if isinstance(value, dict) else {}
     try:
+        # Threat Intel sub-steps
         if name == "collect":
-            new = sum(int(n) for v in d.values() for n in re.findall(r"\d+", str(v)))
-            return f"{_n(new)} new items · {feed_counts(d)}"
-        if name == "inventory":
-            return f"{_n(d['vulnerabilities'])} vulnerabilities on {d['devices']} devices"
-        if name == "derive":
-            return f"{_n(d.get('relevant_new_cves', 0))} new CVEs that matter to us"
+            return "Threat intelligence collected"
+        if name in ("inventory", "derive"):
+            return "Vulnerability inventory analysed"
         if name == "nvd_details":
             return f"Details for {_n(value)} CVEs from NVD"
         if name == "epss":
@@ -325,39 +358,57 @@ def friendly(name: str, value) -> str | None:
         if name == "products":
             return "Linked CVEs to the products they affect"
         if name == "analyse":
-            return f"{_n(d['candidates'])} threats assessed"
+            return "Threat analysis completed"
         if name == "exposure":
-            return f"{_n(d['threats_exposed'])} threats apply to our {d.get('devices', '?')} devices"
+            return "threat applicability assessed" if uc == "threat_intel" else f"{_n(d.get('threats_exposed', 0))} threats apply to devices"
         if name in ("score", "rescore"):
-            return f"{d.get('Critical', 0)} critical · {d.get('High', 0)} high · {d.get('Medium', 0)} medium"
-        if name == "hunt":
-            return _searched(d)
+            return "Risk severity evaluated"
         if name == "correlate":
-            return f"{_n(d.get('exposure_findings', 0))} findings linked to evidence"
-        if name == "alerts":
-            return _alerts(d["new_alerts"]).capitalize()
+            if uc == "threat_intel":
+                return "Security findings correlated"
+            return f"{_n(d.get('exposure_findings', d.get('hit_findings', 0)))} findings linked to evidence"
         if name == "fix_advice":
             new = _new_steps(d)
-            return f"Remediation steps written for {_plural(new, 'threat')}" if new else "No new remediation steps needed"
+            return "Remediation guidance generated" if new else "No remediation required"
+        if name == "report":
+            return "Reports generated" if uc == "threat_intel" else "Word and PDF report written"
+        if name == "dashboard":
+            return "Dashboard updated" if uc == "threat_intel" else "Dashboard rebuilt"
+
+        # Attack Detection sub-steps
+        if name == "inputs":
+            return "Loading indicators and hunting queries"
+        if name == "hunt":
+            return "Hunting completed with partial results" if d.get("errors") else "Hunting completed"
         if name == "resolve":
             new = _new_steps(d)
-            return f"Resolution steps written for {_plural(new, 'detection')}" if new else "No new remediation steps needed"
-        if name == "report":
-            return "Word and PDF report written"
-        if name == "dashboard":
-            return "Dashboard rebuilt"
+            return "Remediation plans generated" if new else "No new remediation plans required"
+        if name == "publish":
+            return "Detection results and reports published"
+
+        # Shared
+        if name == "alerts":
+            return _alerts(d.get("new_alerts", 0)).capitalize()
         if name == "metrics":
             return "Benefit metrics updated"
         if name in ("fix_plan", "fix"):
-            return fix_words(d)
+            return fix_words(d, uc)
         if name == "auto_fix":
             return auto_fix_words(d)
-        # Alert Triage
+
+        # Alert Triage sub-steps
         if name == "feedback":
-            return f"{_plural(d.get('feedback', 0), 'feedback click')} · {_plural(d.get('actions', 0), 'action')} imported"
+            return "Analyst feedback synchronized"
         if name == "auto_resolve":
-            return (f"{d.get('resolve', 0)} closed · {d.get('escalate', 0)} escalated · "
-                    f"{d.get('needs_human', 0)} left for analyst review" + (f" · {d['failed']} failed" if d.get("failed") else ""))
+            if d.get("failed"):
+                return "Response actions completed with errors"
+            if d.get("escalate"):
+                return "Incidents escalated for review"
+            if d.get("resolve"):
+                return "Response actions completed"
+            if d.get("needs_human"):
+                return "Pending analyst review"
+            return "No response actions required"
         if name == "writeback":
             return f"{_n(value)} comments posted in Defender"
         if name == "actions":
@@ -367,62 +418,68 @@ def friendly(name: str, value) -> str | None:
         if name == "accuracy":
             return f"{d.get('lab_correct', 0)} of {d.get('lab_incidents', 0)} benchmark cases classified correctly"
         if name == "export":
-            return "Triage queue published"
+            return "Triage results and reports published"
     except (KeyError, TypeError, ValueError):
         return None
     return None
 
 
-def group_summary(key: str, r: dict) -> str | None:
-    """A finished Threat Intel / Alert Triage step in a few plain words, from its sub-steps' results (None → keep the last sub-step's text)."""
+def group_summary(key: str, r: dict, uc: str = "") -> str | None:
+    """A finished pipeline step in a few plain words, from its sub-steps' results (None → keep the last sub-step's text)."""
     def get(name: str) -> dict:
         return r[name] if isinstance(r.get(name), dict) else {}
     try:
+        # Threat Intel
         if key == "gather":
-            feeds, an = get("collect"), get("analyse")
-            news = sum(int(n) for v in feeds.values() for n in re.findall(r"\d+", str(v)))
-            failed = [k for k, v in feeds.items() if not str(v).startswith(("ok", "skipped"))]
-            text = f"{_n(news)} threat intelligence items checked"
-            return text + (f" · {_plural(len(failed), 'source')} could not be reached" if failed else "")
+            return "Threat intelligence collection completed"
         if key == "affects":
             return threats_words(get("exposure"))
         if key == "fixes":
             new = _new_steps(get("fix_advice"))
-            return f"Remediation steps written for {_plural(new, 'applicable threat')}" if new else "No new remediation steps needed"
-        if key == "fix":
-            return auto_fix_words(get("auto_fix")) if get("auto_fix") else fix_words(get("fix") or get("fix_plan"))
+            return "Remediation guidance generated" if new else "No remediation required"
+        if key == "outputs":
+            return "Report generation completed"
+
+        # Attack Detection
         if key == "search":
-            return _searched(get("hunt"))
+            return "Hunting completed with partial results" if get("hunt").get("errors") else "Hunting completed"
+        if key in ("evidence", "attack"):
+            co = get("correlate")
+            new_hits = co.get("new_hits", co.get("hit_findings", 0))
+            if not new_hits:
+                return "No new detections identified"
+            return "New detection identified" if new_hits == 1 else "New detections identified"
         if key == "resolve":
             new = _new_steps(get("resolve"))
-            return f"Resolution steps written for {_plural(new, 'detection')}" if new else "No new remediation steps needed"
+            return "Remediation plans generated" if new else "No new remediation plans required"
+
+        # Shared Remediation (Stage 5)
+        if key == "fix":
+            if get("auto_fix"):
+                return auto_fix_words(get("auto_fix"))
+            return fix_words(get("fix") or get("fix_plan"), uc)
+
+        # Publish
         if key == "publish":
-            al = get("alerts")
-            return f"Attack detection page updated · {_alerts(al['new_alerts'])}"
-        if key in ("evidence", "attack"):
-            # what this run added; the Attack detection page keeps every earlier sign as well
-            co = get("correlate")
-            if "new_hits" not in co:                                  # runs from before signs were kept
-                return f"{_plural(co['hit_findings'], 'detection')} found" if co["hit_findings"] else "No detections found"
-            return f"{_plural(co['new_hits'], 'new detection')} found" if co["new_hits"] else "No new detections"
-        if key == "outputs":
-            al, rs = get("alerts"), get("resolve")
-            text = "Report ready"
-            if _new_steps(rs):
-                text += f" · resolution steps for {_plural(_new_steps(rs), 'detection')}"
-            return text + f" · {_alerts(al['new_alerts'])}"
+            if uc == "alert_triage" or "export" in r or "triage" in r or "auto_resolve" in r:
+                return "Triage results and reports published"
+            return "Detection results and reports published"
+
         # Alert Triage
         if key == "act":
             ar, rs = get("auto_resolve"), get("respond")
-            done = [f"{ar[k]} {w}" for k, w in (("resolve", "closed"), ("escalate", "escalated"),
-                                                 ("needs_human", "left for analyst review")) if ar.get(k)]
-            if rs.get("requested"):
-                n, s = rs["requested"], "" if rs["requested"] == 1 else "s"
-                done.append(f"Asked Defender for {n} scan{s} or clean-up{s}")
             failed = ar.get("failed", 0) + rs.get("failed", 0)
-            return (" · ".join(done) or "Nothing needed action") + (f" · {failed} failed" if failed else "")
-        if key == "publish":
-            return "Ready to review"
+            if failed:
+                return "Response actions completed with errors"
+            if rs.get("requested"):
+                return "Defender scan or cleanup initiated"
+            if ar.get("escalate"):
+                return "Incidents escalated for review"
+            if ar.get("resolve"):
+                return "Response actions completed"
+            if ar.get("needs_human"):
+                return "Pending analyst review"
+            return "No response actions required"
     except (KeyError, TypeError, ValueError):
         return None
     return None
@@ -493,9 +550,9 @@ class RunState:
         line = (line.replace("Advice agent", "Remediation agent").replace("Fix stage", "Remediation stage")   # older logs
                 .replace("AI fix card:", "AI remediation card:").replace("AI fix guide", "AI remediation guide"))
         if "Remediation stage started" in line:
-            self._finish(a, detail=self.steps[a].detail or "Remediation guidance updated")
+            self._finish(a, detail=self.steps[a].detail or "Remediation steps drafted")
             self._start(fx)
-            self.steps[fx].detail = "Fetching the latest software list from Defender and checking which remediations are new"
+            self.steps[fx].detail = "Checking pending remediation actions"
             return
         if "Remediation stage finished:" in line:
             info = _literal(line.split("Remediation stage finished:", 1)[1].strip())
@@ -504,7 +561,19 @@ class RunState:
                 self._finish(fx, detail=fix_words(info))
             return
         if "Remediation stage skipped:" in line:
-            self._finish(fx, "skipped", _short(line.split("Remediation stage skipped:", 1)[1].strip()))
+            detail = line.split("Remediation stage skipped:", 1)[1].strip()
+            detail_lower = detail.lower()
+            if "setting" in detail_lower or "disabled" in detail_lower or "switched off" in detail_lower:
+                msg = "Disabled in settings"
+            elif "timeout" in detail_lower or "timed out" in detail_lower:
+                msg = "Remediation engine timed out"
+            elif "plan" in detail_lower or "refresh" in detail_lower:
+                msg = "Remediation plan refresh failed"
+            elif "unavailable" in detail_lower or "not respond" in detail_lower or "no remediation engine" in detail_lower:
+                msg = "Remediation engine unavailable"
+            else:
+                msg = _short(detail)
+            self._finish(fx, "skipped", msg)
             return
         if "Extract finished:" in line:
             info = _literal(line.split("Extract finished:", 1)[1].strip())
@@ -521,9 +590,9 @@ class RunState:
             self._finish(d)
             self._start(c)
         elif "Quality check failed" in line:
-            self._finish(c, "error", _short(line.split(":", 3)[-1]))
+            self._finish(c, "error", "Validation failed")
         elif "Publishing the dashboard" in line:
-            self._finish(c, detail=self.steps[c].detail or "Quality checks done")
+            self._finish(c, detail=self.steps[c].detail or "Validation checks completed")
             self._start(sc)
         elif "Score and report finished:" in line:
             self._finish(sc, detail=REPORT_READY)
@@ -539,14 +608,14 @@ class RunState:
                 self._finish(sc, detail=self.steps[sc].detail or REPORT_READY)
                 self._start(a)
             item = line.split("AI remediation card:", 1)[1].split("(")[0].strip()
-            self.steps[a].detail = f"Writing remediation guidance: {item}"
+            self.steps[a].detail = f"Writing remediation steps: {item}"
         elif "Remediation agent finished:" in line:
             info = _literal(line.split("Remediation agent finished:", 1)[1].strip())
             if isinstance(info, dict):
                 self.results["advice"] = info
                 self._finish(a, detail=advice_summary(info, self.results.get("ai_stopped", "")))
             else:
-                self._finish(a, "error", "AI remediation guidance not updated this run (the rest of the run completed)")
+                self._finish(a, "error", "Remediation drafting failed")
         elif "Open findings by severity:" in line:
             sev = _literal(line.split("Open findings by severity:", 1)[1].strip())
             if isinstance(sev, dict):
@@ -557,16 +626,19 @@ class RunState:
             self.results["ai_fixes"] = line.split(":", 1)[1].strip()
         elif "Quality:" in line:
             self.results["quality"] = line.rsplit("Quality:", 1)[1].strip()
-            self.steps[c].detail = "Quality " + self.results["quality"]
+            q = self.results["quality"]
+            self.steps[c].detail = "Data validation passed" if "PASS" in q else "Data validation completed with warnings" if "WARN" in q else "Validation checks completed"
         elif "Daily run finished" in line:
             self._finish(sc, detail=self.steps[sc].detail or REPORT_READY)
             self._finish(a, detail=self.steps[a].detail if self.steps[a].detail and not self.steps[a].detail.startswith("Writing")
-                         else "Remediation guidance updated")
+                         else "Remediation steps drafted")
         elif "Run FAILED" in line:
-            self.message = _short(line.split("Run FAILED", 1)[1].strip(" :"))
+            raw_msg = line.split("Run FAILED", 1)[1].strip(" :")
+            self.message = _short(raw_msg)
+            stage_err = {d: "Authentication failed" if "401" in raw_msg or "auth" in raw_msg.lower() else "Export retrieval failed" if "link" in raw_msg.lower() or "export" in raw_msg.lower() else "Data retrieval failed", c: "Validation failed", sc: "Report generation failed", a: "Remediation drafting failed", fx: "Remediation execution failed"}
             for i, s in enumerate(self.steps):
                 if s.status == "running":
-                    self._finish(i, "error", self.message)
+                    self._finish(i, "error", stage_err.get(i, self.message))
 
     def _feed_threat_intel(self, line: str) -> None:
         m = re.search(r"Step (\w+) (ok|failed|skipped)(?::\s*(.*))?", line)
@@ -590,7 +662,7 @@ class RunState:
         group = self._seq[idx][0]
         if result:
             value = _literal(result)
-            self.steps[group].detail = (friendly(name, value) if outcome == "ok" else None) or _short(result)
+            self.steps[group].detail = (friendly(name, value, self.uc) if outcome == "ok" else None) or _short(result)
             if outcome == "ok":
                 self.results[name] = value
         self._refresh_groups()
@@ -607,7 +679,7 @@ class RunState:
             i = self._index("triage")
             self._start(i)
             n = len(self.results["verdicts"])
-            self.steps[i].detail = f"{n} checked · latest: {VERDICT_WORDS.get(t.group(2), t.group(2))}"
+            self.steps[i].detail = VERDICT_WORDS.get(t.group(2), t.group(2))
             return
         if "Triage of" in line and "failed" in line:
             self.results["triage_failed"] = self.results.get("triage_failed", 0) + 1
@@ -624,13 +696,10 @@ class RunState:
 
     def _triage_text(self, n: int, failed: int) -> str:
         if not n and not failed:
-            return "No new alerts to check"
-        counts: dict[str, int] = {}
-        for v in self.results.get("verdicts", []):
-            counts[VERDICT_WORDS.get(v, v)] = counts.get(VERDICT_WORDS.get(v, v), 0) + 1
-        text = f"{n} checked" + (" · " + ", ".join(verdict_count(c, w) for w, c in counts.items()) if counts else "")
-        return text + (f" · {failed} failed" if failed else "")
-
+            return "No incidents requiring triage"
+        if failed:
+            return "Incident classification completed with errors"
+        return "Incident classification completed"
     def _refresh_groups(self) -> None:
         for gi, step in enumerate(self.steps):
             states = [self._seq_status[i] for i, (g, _) in enumerate(self._seq) if g == gi]
@@ -640,7 +709,9 @@ class RunState:
                 else:
                     self._finish(gi, "error" if "error" in states else "done")
                     if "error" not in states:
-                        step.detail = group_summary(step.key, self.results) or step.detail
+                        step.detail = group_summary(step.key, self.results, self.uc) or step.detail
+                    else:
+                        step.detail = STAGE_ERRORS.get(self.uc, {}).get(step.key, "Operation failed")
             elif any(s != "pending" for s in states):
                 self._start(gi)
         nxt = next((i for i, s in enumerate(self.steps) if s.status in ("pending", "running")), None)
@@ -765,15 +836,6 @@ class RunState:
         fx = r.get("fix_advice") if isinstance(r.get("fix_advice"), dict) else {}
         if fx:
             add("Remediation steps written this run", _new_steps(fx), "for applicable threats")
-        co = r.get("correlate") if isinstance(r.get("correlate"), dict) else {}
-        if co:
-            hits = co.get("new_hits", co.get("hit_findings", 0))
-            add("New detections", hits, ("since the last run" + (", listed below" if named.get("attack") else "")) if hits
-                else "Defender hunts found nothing new on managed devices")
-        al = r.get("alerts") if isinstance(r.get("alerts"), dict) else {}
-        add("Alerts sent", al.get("new_alerts"),
-            ("to the security team" + (", listed below" if named.get("alerts") else "")) if al.get("new_alerts")
-            else "only for applicable Critical or High threats; none new this run")
         self._fix_fact(add)
         return out
 
@@ -874,10 +936,20 @@ def fix_waiting(run: dict, fix_dir: Path, read: Callable[[Path], dict | None] = 
     saved = sum(1 for i in ids if (decided.get(i) or {}).get("status") == "saved")
     step = {**step}
     if open_ids:
-        step.update(status="waiting", finished_at=None,
-                    detail=f"Awaiting your decision: {len(open_ids)} of {len(ids)} new remediation{'s' if len(ids) != 1 else ''}")
+        if run.get("uc") == "threat_intel":
+            detail = "Awaiting analyst review" if len(open_ids) == len(ids) else "Remediation decisions pending"
+        elif run.get("uc") == "attack_detection":
+            detail = "Remediation decisions pending"
+        else:
+            detail = f"Awaiting your decision: {len(open_ids)} of {len(ids)} new remediation{'s' if len(ids) != 1 else ''}"
+        step.update(status="waiting", finished_at=None, detail=detail)
     elif ids and not str(step.get("detail") or "").startswith("Auto-fix"):
-        step["detail"] = f"All {len(ids)} decided: {to_fix} approved, {saved} deferred"
+        if run.get("uc") == "threat_intel":
+            step["detail"] = "All remediation decisions recorded"
+        elif run.get("uc") == "attack_detection":
+            step["detail"] = "Remediation decisions completed"
+        else:
+            step["detail"] = f"All {len(ids)} decided: {to_fix} approved, {saved} deferred"
     hint = (f"{len(open_ids)} still waiting for you below" if open_ids
             else f"of {len(ids)} new remediation{'s' if len(ids) != 1 else ''} in this run" if ids else "no new remediations in this run")
     facts = [{**f, "value": str(to_fix), "hint": hint} if f.get("label") == APPROVED_FACT else f

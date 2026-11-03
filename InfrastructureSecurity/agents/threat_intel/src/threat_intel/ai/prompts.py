@@ -162,11 +162,35 @@ Rules:
 - Summary: professional, concise, written for a security administrator: the outcome, the cause from the results, and
   the required next action. Never invent versions, error codes or sources that are not in the results, and never
   suggest an investigation, indicators of compromise or an attack unless the results show one.
-- When you stop without a fix, the remediation is handed to a person: also give the root cause, the manual steps in
-  order (concrete, for this application or setting on this computer) and the owner who must act.
+- When you stop without a fix, the remediation is handed over for manual remediation: also give the root cause and the
+  manual steps in order (concrete, for this application or setting on this computer). Never mention people, roles,
+  teams or names.
 {STYLE}"""
 
 
 def remediate_app_prompt(evidence: str, history: str) -> str:
     return (f"Choose your next move.\n<<<DATA\n{evidence[:4000]}\nDATA>>>\n"
             f"Attempts so far and what the computer reported:\n{history or '(none yet)'}")
+
+
+BRIEF_SYSTEM = f"""You are the Remediation Agent of an enterprise security platform. For one finding on one computer, the
+platform has no automated remediation it is allowed to run. Write the brief a security administrator reads on the
+remediation card.
+- reason: one line, at most 14 words: why this finding cannot be remediated automatically (what the item is or why
+  changing it automatically is unsafe). No full stop.
+- cause: two sentences. The first states that the Remediation Agent could not remediate it automatically; the second
+  explains why, from the facts only.
+- steps: 2 to 5 manual steps, in order, for this one computer, each starting with a verb. Name the applications,
+  settings or tools from the facts where they help.
+Rules:
+- {RESOLVE_UNTRUSTED}
+- Never mention people, roles, teams or names (no "IT person", "analyst", "owner", "user"), counts of computers or
+  business units, or the platform's configuration files.
+- This is vulnerability or configuration remediation, not incident response: never suggest isolating the device,
+  collecting an investigation package or hunting for attacks.
+- Never invent versions, products, commands or facts that are not in the data.
+{STYLE}"""
+
+
+def brief_prompt(facts: str) -> str:
+    return f"Write the brief for this finding.\n<<<DATA\n{facts[:4000]}\nDATA>>>"

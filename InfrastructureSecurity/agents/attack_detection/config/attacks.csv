@@ -10,4 +10,4 @@ attack,name,description,tactics,severity,lab_test
 9,Discovery,"Bursts of reconnaissance commands that enumerate users, groups, shares, hosts and network configuration.",Discovery,Medium,Test-09-QuietScouting.ps1
 10,Data exfiltration,"Staging and archiving of data followed by unusual outbound transfers, including slow transfers spread over time.","Collection, Exfiltration",High,Test-10-SlowDataTheft.ps1
 11,Command and control,"Periodic beaconing, named pipes used by attack frameworks, and programs that normally never connect to the internet doing so.",Command and Control,High,Test-11-CallingHome.ps1
-12,Exploited vulnerability,"A device with a Critical or High vulnerability that has a public exploit, combined with signs of exploitation or of attacks 1 to 11 on the same device.",Initial Access,Critical,Test-12-OpenDoor.ps1
+12,Exploited vulnerability,"A device with a Critical or High vulnerability that has a public exploit, combined with signs of exploitation or other attack behaviour on the same device.",Initial Access,Critical,Test-12-OpenDoor.ps1
