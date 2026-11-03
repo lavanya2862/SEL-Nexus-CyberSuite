@@ -200,7 +200,7 @@ def advice_summary(info: dict, stopped: str = "") -> str:
 
 
 
-    return "Remediation steps drafted"
+    return "Remediation drafting completed"
 
 
 def fix_words(info: dict, uc: str = "vulnerability") -> str:
@@ -550,7 +550,7 @@ class RunState:
         line = (line.replace("Advice agent", "Remediation agent").replace("Fix stage", "Remediation stage")   # older logs
                 .replace("AI fix card:", "AI remediation card:").replace("AI fix guide", "AI remediation guide"))
         if "Remediation stage started" in line:
-            self._finish(a, detail=self.steps[a].detail or "Remediation steps drafted")
+            self._finish(a, detail=self.steps[a].detail or "Remediation drafting completed")
             self._start(fx)
             self.steps[fx].detail = "Checking pending remediation actions"
             return
@@ -631,7 +631,7 @@ class RunState:
         elif "Daily run finished" in line:
             self._finish(sc, detail=self.steps[sc].detail or REPORT_READY)
             self._finish(a, detail=self.steps[a].detail if self.steps[a].detail and not self.steps[a].detail.startswith("Writing")
-                         else "Remediation steps drafted")
+                         else "Remediation drafting completed")
         elif "Run FAILED" in line:
             raw_msg = line.split("Run FAILED", 1)[1].strip(" :")
             self.message = _short(raw_msg)
@@ -778,9 +778,9 @@ class RunState:
                 reused = adv.get("reused")
                 asked = adv.get("asked")
                 changes = int(asked) if asked is not None else (max(0, total - int(reused)) if reused is not None else total)
+                # only cards this run wrote: the cards kept from earlier runs are in Remediation, not counted here
                 add("Remediation cards written", f"{changes:,}",
-                    f"applying them resolves {adv.get('vulnerabilities', 0):,} vulnerabilities"
-                    + (f" and {settings:,} misconfiguration{'s' if settings != 1 else ''}" if settings else ""))
+                    "for new or changed findings in this run" if changes else "no new or changed findings in this run")
             fx = self.fix_result()
             if fx:
                 new = int(fx.get("new") or 0)
@@ -932,9 +932,10 @@ def fix_waiting(run: dict, fix_dir: Path, read: Callable[[Path], dict | None] = 
     fix, step = run.get("fix"), next((s for s in run.get("steps", []) if s["key"] == "fix"), None)
     if not fix or not step or run.get("status") not in ("ok", "partial") or step["status"] != "done":
         return run
-    ids = fix.get("new_ids") or []
     decided = (read(fix_dir / "state.json") or {}).get("fixes") or {}
     planned = {i.get("fix_id") for i in (read(fix_dir / "plan.json") or {}).get("items") or []}
+    # only this run's remediations that still exist: one that left the plan undecided is not counted anywhere
+    ids = [i for i in fix.get("new_ids") or [] if i in planned or i in decided]
     open_ids = [i for i in ids if i not in decided and i in planned]
     to_fix = sum(1 for i in ids if (decided.get(i) or {}).get("status") in FIX_TO_DO)
     saved = sum(1 for i in ids if (decided.get(i) or {}).get("status") == "saved")
@@ -956,9 +957,11 @@ def fix_waiting(run: dict, fix_dir: Path, read: Callable[[Path], dict | None] = 
             step["detail"] = f"All {len(ids)} decided: {to_fix} approved, {saved} deferred"
     hint = (f"{len(open_ids)} still waiting for you below" if open_ids
             else f"of {len(ids)} new remediation{'s' if len(ids) != 1 else ''} in this run" if ids else "no new remediations in this run")
-    facts = [{**f, "value": str(to_fix), "hint": hint} if f.get("label") == APPROVED_FACT else f
+    facts = [{**f, "value": str(to_fix), "hint": hint} if f.get("label") == APPROVED_FACT
+             else {**f, "value": f"{len(open_ids):,}", "hint": "proposed in this run: decide on each below" if open_ids
+                   else "nothing new to approve in this run"} if f.get("label") == "New remediations to approve" else f
              for f in run.get("facts") or []]
-    return {**run, "fix": {**fix, "open": len(open_ids), "to_fix": to_fix, "saved_now": saved}, "facts": facts,
+    return {**run, "fix": {**fix, "new_ids": ids, "new": len(ids), "open": len(open_ids), "to_fix": to_fix, "saved_now": saved}, "facts": facts,
             "steps": [step if s["key"] == "fix" else s for s in run["steps"]], "waiting_for_you": bool(open_ids)}
 
 
@@ -1101,9 +1104,15 @@ class RunManager:
                 st = self.latest(uc)
                 run = {**st.to_dict(), "typical_seconds": self.typical_seconds(uc)} if st else None
                 if run and run["status"] != "running" and any((run.get("new_ids") or {}).values()):
-                    # Attack Detection's signs of attack are listed in the Threat Intel data, which imports them
-                    source = self.uc_dirs["threat_intel" if uc == "attack_detection" and "threat_intel" in self.uc_dirs else uc]
-                    run["findings"] = run_findings(run["new_ids"], self._fix_files(source / "data" / "dashboard" / "dashboard_data.json"))
+                    if uc == "attack_detection":         # its own published detections (one per attack per device)
+                        pub = self._fix_files(self.uc_dirs[uc] / "data" / "out" / "findings.json") or {}
+                        run["findings"] = run_findings(run["new_ids"], {"hits": pub.get("findings") or []})
+                        # count only the detections still published: merged or removed ones are not new detections
+                        n = sum(1 for f in run["findings"] if f["kind"] == "attack")
+                        run["facts"] = [{**f, "value": str(n), "hint": f["hint"] if n else "no new detections on managed devices"}
+                                        if f.get("label") == "New detections" else f for f in run.get("facts") or []]
+                    else:
+                        run["findings"] = run_findings(run["new_ids"], self._fix_files(self.uc_dirs[uc] / "data" / "dashboard" / "dashboard_data.json"))
                 out[uc] = fix_waiting(run, self.fix_dir, self._fix_files) if run and self.fix_dir else run
             return out
 

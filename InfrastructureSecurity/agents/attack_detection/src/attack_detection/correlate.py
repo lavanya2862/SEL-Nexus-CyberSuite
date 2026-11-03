@@ -30,6 +30,7 @@ AMSI_TEST = "7e72c3ce-861b-4339-8740-0ac1484f1386"        # Microsoft's harmless
 ENC_ARG = re.compile(r"(?i)\s[-/]e[a-z]*\s+([A-Za-z0-9+/=]{16,})")
 SYSTEM_ACCOUNTS = {"system", "local service", "network service", "anonymous logon"}
 OPEN_DOOR_DAYS = 14               # attack 12: a sign of attacks 1-11 this recent on a machine with a high-rated weakness
+NOT_EXPLOITATION = {8, 9}         # a new account or discovery commands are usually an administrator, never proof of exploitation
 
 USERS_QUERY = """DeviceLogonEvents
 | where Timestamp > ago(7d)
@@ -137,6 +138,7 @@ def _open_doors(store: Store, known: dict, now) -> list[dict]:
     for door in (r for r in rows if r["template"] == "bh_exposure_hot_cve"):
         since = now - timedelta(days=OPEN_DOOR_DAYS)
         clues = [r for r in rows if r["device_id"] == door["device_id"] and 1 <= attack_of.get(r["template"], 0) <= 11
+                 and attack_of.get(r["template"], 0) not in NOT_EXPLOITATION
                  and r["first_hit"] and to_utc(r["first_hit"]) >= since and not _blocked_only(r)]
         if not clues:
             continue
@@ -169,9 +171,10 @@ def run(store: Store, client: DefenderClient | None, run_id: str) -> dict:
         row = json.loads(r["row_json"]) if isinstance(r["row_json"], str) else r["row_json"]
         hunt = hunts[r["hunt_id"]]
         test = is_lab_test(row)
-        # a weakness alone (exploitable vulnerability) is exposure, not an attack: it only shows as an "open door"
+        # a weakness alone (exploitable or internet-reachable vulnerability) is exposure, not an attack: it only shows as
+    # an "open door"
         # when a sign of attack is on the same machine (_open_doors)
-        kind = "exposure" if hunt["template"] == "bh_exposure_hot_cve" else "behaviour_hit"
+        kind = "exposure" if hunt["template"].startswith("bh_exposure") else "behaviour_hit"
         key = (kind, hunt["template"] + (hunt["technique"] or ""), r["device_id"], test)
         g = groups.setdefault(key, {"hunt": hunt, "rows": [], "detail": hunt["name"].split(" (")[0], "is_test": test})
         g["rows"].append((r, row))
@@ -182,6 +185,7 @@ def run(store: Store, client: DefenderClient | None, run_id: str) -> dict:
 
     # Signs of attack are kept from run to run: a run adds the new ones and refreshes the ones it finds again
     known = {r["finding_id"]: r for r in store.query("SELECT finding_id, first_hit, created_at FROM findings WHERE kind <> 'exposure'")}
+    seen = {r["finding_id"] for r in store.query("SELECT finding_id FROM findings")}   # every kind, for "new in this run"
     findings = []
     for key, g in groups.items():
         kind, _, dev, _ = key
@@ -211,7 +215,20 @@ def run(store: Store, client: DefenderClient | None, run_id: str) -> dict:
     doors = _open_doors(store, known, now)
     store.upsert("findings", doors)
     findings += doors
-    new = [f for f in findings if f["finding_id"] not in known]
+    # a detection is new once, counted per attack per device like the published findings (publish.merge_key); an
+    # exposure (weakness, no attack) is never a detection
+    attack_of = {key: t.attack for key, t in tpl.load().items()}
+    template_of = {r["hunt_id"]: r["template"] for r in store.query("SELECT hunt_id, template FROM hunts")}
+    def key(f: dict) -> tuple:
+        t = template_of.get(f["hunt_id"], "")
+        return (attack_of.get(t) or t, f["device_id"], bool(f["is_test"]))
+    old = {key(f) for f in store.query("SELECT finding_id, hunt_id, device_id, is_test FROM findings WHERE kind <> 'exposure'")
+           if f["finding_id"] in seen}
+    new, keys = [], set()
+    for f in findings:
+        if f["kind"] != "exposure" and f["finding_id"] not in seen and key(f) not in old and key(f) not in keys:
+            keys.add(key(f))
+            new.append(f)
     stats = {"new_hits": len(new),                                  # found for the first time in this run
              "new_hit_ids": [f["finding_id"] for f in new][:NEW_IDS_SHOWN],   # the dashboard's run page names them
              "hit_findings": store.scalar("SELECT COUNT(*) FROM findings WHERE kind <> 'exposure'") or 0,   # all kept

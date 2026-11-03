@@ -42,8 +42,9 @@ views for **Agent could not remediate** and **Waiting for manual remediation
 | Software | Devices | Why it is manual | What IT does |
 | --- | --- | --- | --- |
 | OpenSSL (built into other apps) | opca-wks-01, opcc-wks-01 | OpenSSL is bundled inside other vendors' applications and Microsoft components. It is not an installed package that can be updated on its own. The agent tried and could not remediate it on opca-wks-01. | In Defender Vulnerability Management, open the software inventory, list the files that carry the OpenSSL DLLs (libssl, libcrypto), and update each parent application to the version that ships a fixed OpenSSL. |
-| PHP 8.1 | opcc-wks-01 | No vetted package. A PHP upgrade can break the web applications that run on it. | Upgrade to a supported PHP branch (8.3 or later) after the application owner has tested it, or remove PHP if it is not used. |
-| log4j | opcc-wks-01 | A Java library inside applications, not a package. | Find the owning application (from the JAR paths in the Defender evidence) and apply the vendor's update. Where no update exists, set `log4j2.formatMsgNoLookups=true` or remove `JndiLookup.class`. |
+
+PHP 8.1 (removed with its XAMPP 8.1 stack) and log4j-core 2.14.1 (every copy of the file deleted) are now automated
+through `fix_catalog.csv`: their cards show **Approve**.
 
 Defender "No security update available" items also stay manual until the vendor releases a fix. Apply compensating
 controls in the meantime.

@@ -201,6 +201,7 @@ function Uninstall-Entry($e) {
             if ($r.code -in $rebootCodes) { $script:reboot = $true }
             return $r.code
         } elseif ($u -match 'unins\d*\.exe') { $cmd = "$u /VERYSILENT /SUPPRESSMSGBOXES /NORESTART" }
+        elseif ($u -match 'xampp\\uninstall\.exe') { $cmd = "$u --mode unattended --unattendedmodeui none" }   # BitRock installer
         elseif ($u -match 'Package Cache') { $cmd = "$u /uninstall /quiet /norestart" }
         elseif ($u) { $cmd = "$u /S" }
         else { Say "remove $($e.name): no uninstall command"; return -998 }
@@ -339,6 +340,30 @@ if ($s.action -eq 'respond') {
     $result.after = $left.Count
     $result.found = @($left | Select-Object -First 5 | ForEach-Object { "$($_.ThreatName)" })
     $result.exit = if ($result.error) { 1 } else { 0 }
+    $result.log = @($log)
+    Write-Output ('FIXRESULT ' + ($result | ConvertTo-Json -Compress -Depth 4))
+    exit 0
+}
+
+# ------------------------------------------------------------------ library file (no installer, e.g. log4j-core-2.14.1.jar)
+if ($s.action -eq 'remove_file') {
+    # every copy with exactly the catalogue's file name on the fixed drives, outside Windows itself; nothing else is touched
+    $result = @{ id = $s.id; action = $s.action; computer = $env:COMPUTERNAME; exit = 0 }
+    $roots = @(Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -ne $null -and $_.Root -match '^[A-Z]:\\$' } | ForEach-Object { $_.Root })
+    $find = { @(foreach ($r in $roots) { foreach ($n in @($s.files)) {
+        Get-ChildItem -LiteralPath $r -Recurse -File -Filter $n -Force -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notlike "$env:windir\*" -and $_.Extension -eq '.jar' } } }) }
+    $found = & $find
+    $result.before = @($found | Select-Object -First 8 | ForEach-Object { $_.FullName })
+    if (-not $found) { Say 'no file with this name on the device - changed nothing'; $result.not_found = $true; $result.exit = -995 }
+    foreach ($f in $found) {
+        try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; Say "deleted $($f.FullName)" }
+        catch { Say "could not delete $($f.FullName): $($_.Exception.Message)" }
+    }
+    $left = & $find
+    $result.left = @($left | ForEach-Object { $_.FullName })
+    $result.left_count = @($left).Count
+    $result.reboot = $false
     $result.log = @($log)
     Write-Output ('FIXRESULT ' + ($result | ConvertTo-Json -Compress -Depth 4))
     exit 0

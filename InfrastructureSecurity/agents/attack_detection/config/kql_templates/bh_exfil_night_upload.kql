@@ -12,7 +12,7 @@ DeviceNetworkEvents
 | where ActionType == "ConnectionSuccess" and RemoteIPType == "Public"
 | where tolower(InitiatingProcessFileName) in (tools) or tolower(InitiatingProcessVersionInfoOriginalFileName) in (tools)
      or InitiatingProcessCommandLine matches regex @"(?i)\s(copy|sync|move|copyto)\s+\S+\s+\S+:"
-| extend Hour = hourofday(Timestamp), Day = dayofweek(Timestamp) / 1d
+| extend Hour = hourofday(datetime_utc_to_local(Timestamp, "{{WORK_TZ}}")), Day = dayofweek(datetime_utc_to_local(Timestamp, "{{WORK_TZ}}")) / 1d
 | where Hour < workStart or Hour >= workEnd or Day in (0, 6)
 | summarize Connections = count(), Timestamp = min(Timestamp), Destinations = make_set(coalesce(RemoteUrl, RemoteIP), 10),
             take_any(DeviceName, InitiatingProcessAccountName, InitiatingProcessCommandLine)

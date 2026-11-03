@@ -1,3 +1,4 @@
 ioc_type,value,note
 domain,example.com,LAB TEST ONLY: harmless IANA example domain visited by scripts/lab/Test-LabIoc.ps1
 sha256,275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f,LAB TEST ONLY: EICAR antivirus test file (harmless) from scripts/lab/Test-Eicar.ps1
+sha256,4b12e606795cdbdb975a050f84ebe3d453c6ec860825b4acd5176c69500a78e9,LAB TEST ONLY: harmless script C:\ProgramData\CyberSuiteLab\lab-indicator.ps1 that only prints a line

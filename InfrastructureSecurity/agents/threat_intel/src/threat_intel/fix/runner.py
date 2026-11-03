@@ -40,10 +40,10 @@ RESPONSE_LADDER = ("QuickScan", "FullScan", "FullScan")
 # The moves the Remediation Agent may choose after a failed attempt, per action: each runs the same fixed script with
 # only the spec's engine changed (MOVE_SPEC). The ladder is the order without AI, and its length caps the attempts.
 APP_MOVES = {"upgrade": ("winget", "choco"), "replace": ("winget", "choco"), "remove": ("uninstall",),
-             "setting": ("apply",)}
+             "remove_file": ("delete",), "setting": ("apply",)}
 APP_LADDER = {"upgrade": ("winget", "choco"), "replace": ("winget", "choco"), "remove": ("uninstall", "uninstall"),
-              "setting": ("apply", "apply")}
-MOVE_SPEC = {"winget": {"engine": "winget"}, "choco": {"engine": "choco"}, "uninstall": {}, "apply": {}}
+              "remove_file": ("delete",), "setting": ("apply", "apply")}
+MOVE_SPEC = {"winget": {"engine": "winget"}, "choco": {"engine": "choco"}, "uninstall": {}, "delete": {}, "apply": {}}
 
 
 class FixBusy(RuntimeError):
@@ -146,6 +146,13 @@ def judge(action: str, result: dict | None) -> tuple[str, str]:
         after = [after]
     code = result.get("exit")
     reboot = " A restart is needed to finish." if result.get("reboot") else ""
+    if action == "remove_file":
+        files = ", ".join(result.get("before") or []) if isinstance(result.get("before"), list) else str(result.get("before") or "")
+        if result.get("not_found"):
+            return "failed", "No file with this name is on the device any more, so nothing was changed. Defender clears it on its next scan."
+        if int(result.get("left_count") or 0) > 0:
+            return "failed", f"Could not delete every copy: {', '.join(result.get('left') or [])} is still there."
+        return "done", f"Deleted: {files}."
     if result.get("not_found") or (action == "upgrade" and not before):
         # Never "done": nothing was found, so nothing was changed (and nothing new was installed).
         # A failed fix still becomes "verified" later if Defender stops listing it.

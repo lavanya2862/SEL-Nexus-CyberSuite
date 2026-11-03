@@ -89,11 +89,44 @@ def _label(findings: list[dict], attacks: list[dict]) -> list[dict]:
     return out
 
 
+def merge_key(f: dict) -> tuple:
+    """One detection per attack per device: several searches that see the same activity (a new account found by
+    'new local account' and 'created outside working hours') are one possible attack, not three."""
+    return (f.get("attack") or f.get("search"), f.get("device_id") or f.get("device_name"), bool(f.get("is_test")))
+
+
+def _merge(findings: list[dict], events: dict[str, dict]) -> list[dict]:
+    """Keep one finding per merge_key (the first found), with every search that matched listed in `signals` and the
+    events of all of them."""
+    groups: dict[tuple, list[dict]] = {}
+    for f in findings:
+        groups.setdefault(merge_key(f), []).append(f)
+    out = []
+    for members in groups.values():
+        members.sort(key=lambda f: (str(f.get("first_hit") or "9"), f["finding_id"]))
+        main = members[0]
+        seen, merged = set(), []
+        for m in members:
+            for e in (events.get(m["finding_id"]) or {}).get("events", []):
+                sig = json.dumps([e["time"], e["columns"]], sort_keys=True, default=str)
+                if sig not in seen:
+                    seen.add(sig)
+                    merged.append(e)
+        merged.sort(key=lambda e: e["time"], reverse=True)
+        main = {**main, "signals": [{"search": m["search"], "search_name": m["search_name"], "technique": m["technique"]} for m in members],
+                "first_hit": min((str(m["first_hit"]) for m in members if m.get("first_hit")), default=main.get("first_hit"))}
+        events[main["finding_id"]] = {"events": merged[:MAX_EVENTS], "event_count": len(merged),
+                                      "last_hit": merged[0]["time"] if merged else None}
+        out.append(main)
+    return out
+
+
 def write(store: Store, settings: Settings, run_id: str | None) -> dict:
     latest = run_id or store.scalar("SELECT run_id FROM hunts ORDER BY started_at DESC LIMIT 1")
     attacks = catalogue()
     findings = _label(_rows(store, "SELECT * FROM findings WHERE kind <> 'exposure' ORDER BY created_at DESC"), attacks)
     events = _events(store, findings)
+    findings = _merge(findings, events)
     data = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": utcnow().isoformat(),

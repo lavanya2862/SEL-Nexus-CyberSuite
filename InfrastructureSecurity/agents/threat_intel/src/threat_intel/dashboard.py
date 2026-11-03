@@ -250,8 +250,22 @@ def gather(store: Store, settings: Settings | None = None) -> dict:
     hits = q("""SELECT f.*, t.title FROM findings f JOIN threats t USING (threat_id)
                 WHERE f.kind <> 'exposure' ORDER BY f.first_hit DESC NULLS LAST LIMIT 200""")
     resolutions = resolve.for_findings(store)
+    iocs = {(r["ioc_type"], r["value"]): r for r in q("""SELECT ioc_type, value, source, malware, confidence, first_seen,
+                                                              reference, tags, is_test FROM iocs""")}
     for h in hits:
         h["resolution"] = resolutions.get(h["finding_id"])
+        # an indicator hit: which indicator (its feed, malware family, confidence) and what Defender recorded
+        m = re.match(r"matched (\S+) (.+)$", h.get("detail") or "") if h["kind"] == "ioc_hit" else None
+        if m:
+            ioc = iocs.get((m.group(1), m.group(2).strip())) or {}
+            last = (_j(h["timeline"]) or [{}])[0]
+            fields = dict(p.split("=", 1) for p in re.sub(r"^Hunt '[^']*': ", "", last.get("what") or "").split("; ") if "=" in p)
+            h["indicator"] = {"type": m.group(1), "value": m.group(2).strip(), "source": ioc.get("source"),
+                              "malware": ioc.get("malware"), "confidence": ioc.get("confidence"),
+                              "first_seen": str(ioc["first_seen"]) if ioc.get("first_seen") else None,
+                              "reference": ioc.get("reference"), "tags": ioc.get("tags"),
+                              "search": re.sub(r"^Hunt '([^']*)'.*", r"\1", last.get("what") or "") or None,
+                              "event": {k: v for k, v in fields.items() if v}}
         h["users"] = list(dict.fromkeys(u["account"] for u in _j(h["users"])))[:3]
         h["alerts"] = [a["title"] for a in _j(h["alerts"])][:2]
         h["timeline"] = _j(h["timeline"])[:6]

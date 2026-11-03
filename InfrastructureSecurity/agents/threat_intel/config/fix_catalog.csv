@@ -21,3 +21,5 @@ edge_chromium-based,Microsoft Edge,upgrade,Microsoft.Edge,microsoft-edge,Microso
 .net,.NET (old version),remove,,,Microsoft * Runtime - {ver2}.*,dotnet,2,End-of-life: no fix will ever come - removed (nothing in the lab uses it); install .NET 8 only if a program needs it
 .net_core,.NET Core (old version),remove,,,Microsoft * Runtime - {ver2}.*,dotnet,2,End-of-life: no fix will ever come - removed (nothing in the lab uses it); install .NET 8 only if a program needs it
 asp.net_core,ASP.NET Core (old version),remove,,,Microsoft ASP.NET Core {ver2}.*,dotnet,2,End-of-life: no fix will ever come - removed (nothing in the lab uses it); install ASP.NET Core 8 only if a website needs it
+php,PHP (XAMPP 8.1),remove,,,XAMPP*,httpd;mysqld;xampp-control,2,PHP 8.1 is end-of-life (security support ended 31 Dec 2025): removes the XAMPP 8.1 web stack that carries it (nothing in the lab uses it)
+log4j,Apache Log4j,remove_file,,,log4j-core-{ver3}.jar,,1,A library file with no installer: deletes every copy of this vulnerable log4j-core version (Log4Shell) from the device's fixed drives

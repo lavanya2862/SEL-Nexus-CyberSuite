@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, ArrowRight, Bot, CheckCircle2, ListChecks, Newspaper, ShieldAlert, ShieldCheck, Sparkles, Undo2, Wrench, Zap } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Bookmark, Bot, CheckCircle2, ListChecks, Newspaper, ShieldAlert, ShieldCheck, Sparkles, Undo2, Wrench, Zap } from 'lucide-react'
 import { StatusPill } from '@/components/FixLoop'
 import { Panel, SevTag } from '@/components/kit'
 import { VulnList } from '@/components/VulnList'
@@ -100,9 +100,6 @@ export function NewFixes({ fix, uc, since }: { fix: RunFix; uc: AgentKey; since:
   const grewOpen = grewRows.filter((r) => r.status === 'proposed')
   const decided = rows.length - open.length
   const fresh = rows.filter((r) => r.status === 'proposed')
-  const urgent = rows.filter((r) => r.stage === 1 && !isSetting(r) && !isResponse(r)).length
-  const attacks = rows.filter(isResponse).length
-  const settings = rows.filter(isSetting).length
   const busy = act.isPending || !v
   const approve = (ids: string[]) => v && ids.length && act.mutate({ action: 'approve', ids, method: v.default_method })
   const allDecided = !!v && rows.length > 0 && fresh.length === 0
@@ -130,18 +127,24 @@ export function NewFixes({ fix, uc, since }: { fix: RunFix; uc: AgentKey; since:
             <div className="min-w-0">
               <h2 className="text-lg font-semibold tracking-tight">
                 {allDecided ? `All ${rows.length} new remediation${rows.length === 1 ? '' : 's'} reviewed: the Remediation stage is complete`
-                  : fix.new ? `${fix.new} new remediation${fix.new === 1 ? '' : 's'} proposed in this run${fresh.length < rows.length ? ` · ${fresh.length} left to decide` : ''}`
+                  : rows.length ? `${rows.length} new remediation${rows.length === 1 ? '' : 's'} proposed in this run${fresh.length < rows.length ? ` · ${fresh.length} left to decide` : ''}`
                   : 'No new remediations in this run'}
               </h2>
-              {fix.new > 0 && (
+              {rows.length > 0 && (
                 <p className="mt-1 max-w-[70ch] text-sm text-ink-3">
-                  Review each item. <b className="text-ink-2">Approve</b> adds it to the remediation queue; no device is changed until you select <b className="text-ink-2">Execute remediation</b> and confirm. Anything not approved stays in Remediation.
+                  Review each item. <b className="text-ink-2">Approve</b> adds it to the remediation queue; no device is changed until you select <b className="text-ink-2">Execute remediation</b> and confirm. <b className="text-ink-2">Defer</b> keeps it in Remediation for later.
                 </p>
               )}
             </div>
           </div>
           {open.length > 0 && (
             <div className="flex flex-wrap gap-2">
+              {fresh.length > 0 && (
+                <button onClick={() => act.mutate({ action: 'save', ids: fresh.map((r) => r.fix_id) })} disabled={busy}
+                  className="inline-flex items-center gap-2 rounded-xl border border-hairline px-4 py-2.5 text-sm font-medium hover:bg-well disabled:opacity-50">
+                  <Bookmark className="size-4" /> Defer all {fresh.length}
+                </button>
+              )}
               <button
                 onClick={() => approve(open.map((r) => r.fix_id))}
                 disabled={busy}
@@ -154,14 +157,6 @@ export function NewFixes({ fix, uc, since }: { fix: RunFix; uc: AgentKey; since:
           )}
         </div>
 
-        {(urgent > 0 || attacks > 0 || settings > 0 || grewRows.length > 0) && (
-          <div className="mt-5 flex flex-wrap gap-2 text-xs">
-            {urgent > 0 && <Count n={urgent} label="high priority" color={statusColor.critical} />}
-            {attacks > 0 && <Count n={attacks} label={`sign${attacks === 1 ? '' : 's'} of attack to respond to`} color={statusColor.critical} />}
-            {settings > 0 && <Count n={settings} label={`security setting${settings === 1 ? '' : 's'}`} />}
-            {grewRows.length > 0 && <Count n={fix.grew_vulns ?? 0} label={`new vulnerabilities on ${grewRows.length} earlier remediation${grewRows.length === 1 ? '' : 's'}`} color={statusColor.warning} />}
-          </div>
-        )}
 
         <GettingReady what="The remediation engine" starting={auto.starting} failed={auto.failed} retry={auto.retry} className="mt-5" />
         {view.error && !down && <p className="mt-5 text-sm" style={{ color: statusColor.critical }}>{(view.error as Error).message}</p>}
@@ -173,15 +168,10 @@ export function NewFixes({ fix, uc, since }: { fix: RunFix; uc: AgentKey; since:
           </ul>
         )}
         {decided > 0 && (
-          <p className="mt-3 text-xs text-ink-3">{decided} of this run's remediations already have a decision (approved, deferred or resolved): <Link to="/fixes/history" className="text-blue hover:underline">see Remediation</Link>.</p>
-        )}
-        {v && rows.length < fix.new_ids.length && (
-          <p className="mt-3 text-xs text-ink-3">
-            {fix.new_ids.length - rows.length} of this run's remediations are no longer in the remediation plan (Defender stopped listing them, or a newer run replaced the plan).
-          </p>
+          <p className="mt-3 text-xs text-ink-3">{decided} of this run's remediations already have a decision (approved or resolved): <Link to="/fixes/history" className="text-blue hover:underline">see Remediation</Link>.</p>
         )}
 
-        {grewRows.length > 0 && (
+        {rows.length > 0 && grewOpen.length > 0 && (
           <div className="mt-6 border-t border-hairline pt-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
@@ -221,7 +211,7 @@ export function NewFixes({ fix, uc, since }: { fix: RunFix; uc: AgentKey; since:
         startDevice={list.device} onClose={() => setList(null)} />
     )}
     {/* outside the panel so it stays pinned to the bottom of the screen while scrolling; runs only this run's fixes */}
-    {v && <BasketBar v={v} scope={scope} />}
+    {v && rows.length > 0 && <BasketBar v={v} scope={scope} />}
     </>
   )
 }
@@ -240,13 +230,6 @@ function fixLinks(uc: AgentKey, since: string | null, _fix: RunFix): [string, st
   return [[q('', 'vulnerability'), 'Go to remediations']]
 }
 
-function Count({ n, label, color, strong }: { n: number; label: string; color?: string; strong?: boolean }) {
-  return (
-    <span className={cn('inline-flex items-center gap-1.5 rounded-lg border border-hairline px-3 py-1', strong && 'bg-well')}>
-      <b className="tabular text-sm" style={{ color }}>{num(n)}</b> <span className="text-ink-3">{label}</span>
-    </span>
-  )
-}
 
 const MOVE_LABEL = { quick_scan: 'Quick scan', full_scan: 'Full scan', winget: 'Install with winget', choco: 'Install with Chocolatey',
   uninstall: 'Uninstall', apply: 'Apply setting', stop: 'Finished' } as const
@@ -355,7 +338,7 @@ export function FixCardSmall({ r, busy, onFix, onAutoFix, onSave, onUndo, detail
         <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2">
           {r.status === 'proposed' ? (
             <>
-              <span />
+              <button onClick={onSave} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-hairline px-3 py-1.5 text-xs font-medium hover:bg-well disabled:opacity-50"><Bookmark className="size-3.5" /> Defer</button>
               <span className="flex gap-1.5">
                 <button onClick={onFix} disabled={busy} className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold disabled:opacity-50">
                   <Zap className="size-3.5" /> Approve
@@ -390,7 +373,7 @@ export function FixCardSmall({ r, busy, onFix, onAutoFix, onSave, onUndo, detail
  * result once it has run, and the decision buttons. The evidence, hunt results and full agent log stay on the
  * Attack detection and Remediation pages, one click away.
  */
-function ResponseCard({ r, busy, onFix, onAutoFix, onUndo }: {
+function ResponseCard({ r, busy, onFix, onAutoFix, onSave, onUndo }: {
   r: FixRow; busy: boolean; onFix: () => void; onAutoFix?: () => void; onSave: () => void; onUndo: (action: 'unapprove' | 'unsave') => void
 }) {
   const { theme } = useTheme()
@@ -433,7 +416,7 @@ function ResponseCard({ r, busy, onFix, onAutoFix, onUndo }: {
         <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2">
           {r.status === 'proposed' ? (
             <>
-              <span />
+              <button onClick={onSave} disabled={busy} className={cn(btn, 'border border-hairline font-medium hover:bg-well')}><Bookmark className="size-3.5" /> Defer</button>
               <span className="flex gap-1.5">
                 <button onClick={onFix} disabled={busy} className={cn(btn, 'btn-blue')}><Zap className="size-3.5" /> Approve</button>
               </span>
