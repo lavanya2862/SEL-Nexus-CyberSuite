@@ -1,9 +1,10 @@
 import { Link, useSearchParams } from 'react-router-dom'
-import { useState } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 import { ArrowRight, Gauge, ListChecks, Monitor, ShieldAlert, Sparkles, Undo2, X, Zap } from 'lucide-react'
 import { AgentMoves } from '@/components/NewFixes'
 import { DialogSection, ExpandableCard } from '@/components/DetailDialog'
 import { useAttackDetectionData, type Finding } from '@/agents/attack-detection/data'
+import { useThreatIntelData, type Hit } from '@/agents/threat-intel/data'
 import { StatusPill } from '@/components/FixLoop'
 import { DateFilter, Empty, FilterBar, FilterChoice, Panel, SevTag, StatBox, choiceChip, dateChip, inDateRange, type ActiveFilter, type DateRange } from '@/components/kit'
 import { BasketBar } from '@/agents/fixes/FixCentre'
@@ -50,6 +51,9 @@ export function AttackResponses({ owner = 'attack_detection' }: { owner?: Owner 
   const detections = useAttackDetectionData().data
   const attacks = detections?.attacks ?? []
   const hitOf = (r: FixRow): Finding | undefined => detections?.hits.find((h) => `response:${h.finding_id}` === r.software_name)
+  // the indicator hit behind an indicator response (Threat Intel Agent's own data)
+  const intel = useThreatIntelData().data
+  const indicatorOf = (r: FixRow): Hit | undefined => intel?.hits.find((h) => `response:${h.finding_id}` === r.software_name)
   const act = useFixAction()
   const down = view.error instanceof FixDown
   const auto = useAutoStart(down, 'fix')
@@ -206,15 +210,18 @@ export function AttackResponses({ owner = 'attack_detection' }: { owner?: Owner 
                   {(() => {
                     const h = owner === 'attack_detection' ? hitOf(r) : undefined
                     const attack = h && attacks.find((a) => a.attack === h.attack)
+                    const footer = <ResponseActions r={r} busy={busy} onApprove={() => approve([r.fix_id])} onRun={() => autoFix(act, [r.fix_id], v.default_method)}
+                      onUndo={() => act.mutate({ action: 'unapprove', ids: [r.fix_id] })} />
+                    const actions = <QuickActions rows={[r]} busy={busy} onApprove={approve} onWithdraw={(ids) => act.mutate({ action: 'unapprove', ids })} />
+                    if (owner === 'threat_intel') return <IndicatorCard r={r} hit={indicatorOf(r)} focus={focus === r.fix_id} footer={footer} actions={actions} />
                     return (
                       <ExpandableCard defaultOpen={focus === r.fix_id} highlight={focus === r.fix_id}
                         accent={h ? sevColor(h.severity) : statusColor.critical}
                         title={h ? h.resolution?.title || h.search_name : r.app}
                         subtitle={`${r.device_name}${h ? ` · first seen ${dateTime(utc(h.first_hit))}` : ''}`}
                         eyebrow={<>{h ? <><SevTag sev={h.severity} /><span className="text-ink-3">{h.attack_name}</span></> : <span className="text-ink-3">Indicator seen on the device</span>}<StatusPill r={r} /></>}
-                        footer={<ResponseActions r={r} busy={busy} onApprove={() => approve([r.fix_id])} onRun={() => autoFix(act, [r.fix_id], v.default_method)}
-                          onUndo={() => act.mutate({ action: 'unapprove', ids: [r.fix_id] })} />}
-                        actions={<QuickActions rows={[r]} busy={busy} onApprove={approve} onWithdraw={(ids) => act.mutate({ action: 'unapprove', ids })} />}
+                        footer={footer}
+                        actions={actions}
                         summary={
                           <>
                             <div className="flex items-center justify-between gap-2 text-[11px] font-medium">
@@ -265,4 +272,86 @@ function ResponseActions({ r, busy, onApprove, onRun, onUndo }: {
   if (r.status === 'failed' || r.status === 'still_there') return <>{note('The last attempt did not finish cleanly.')}<button onClick={onRun} disabled={busy} className={primary}><Sparkles className="size-4" /> Try again</button></>
   if (r.status === 'manual_required') return note('The agent could not remediate this. Follow the steps above, then select Mark as fixed manually.')
   return null
+}
+
+const IOC_KIND: Record<string, [string, string]> = {          // indicator type -> [what it is, what the device did]
+  sha256: ['File hash', 'A file with this exact hash was on the device'], sha1: ['File hash', 'A file with this exact hash was on the device'],
+  md5: ['File hash', 'A file with this exact hash was on the device'], domain: ['Domain', 'The device connected to this domain'],
+  ip: ['IP address', 'The device connected to this IP address'], url: ['URL', 'The device requested this URL'],
+}
+const EVENT_LABEL: Record<string, string> = {
+  ActionType: 'Defender event', FileName: 'File', FolderPath: 'Folder', RemoteUrl: 'Remote URL', RemoteIP: 'Remote IP', RemotePort: 'Remote port',
+  InitiatingProcessFileName: 'Process', InitiatingProcessCommandLine: 'Command line', InitiatingProcessAccountName: 'Account',
+}
+
+/** One indicator response (Threat Intel Agent): why the indicator is known-bad, what Defender saw on the device, how it was found, and the response. */
+function IndicatorCard({ r, hit, focus, footer, actions }: { r: FixRow; hit?: Hit; focus: boolean; footer: ReactNode; actions: ReactNode }) {
+  const ind = hit?.indicator
+  const [kind, did] = IOC_KIND[ind?.type ?? ''] ?? ['Indicator', 'Defender recorded activity matching this indicator']
+  const value = ind?.value ?? r.app.replace(/^matched \S+ /, '')
+  const short = value.length > 28 ? `${value.slice(0, 12)}…${value.slice(-8)}` : value
+  const ev = ind?.event ?? {}
+  const test = !!hit?.is_test || ind?.tags === 'test'
+  return (
+    <ExpandableCard defaultOpen={focus} highlight={focus} accent={test ? 'var(--ink-3)' : statusColor.critical} title={`${kind} ${short} seen on ${r.device_name}`}
+      subtitle={`${r.device_name}${hit?.first_hit ? ` · seen ${dateTime(utc(hit.first_hit))}` : ''}`}
+      eyebrow={<><span className="font-medium" style={{ color: test ? undefined : statusColor.critical }}>{test ? 'Lab test indicator' : 'Known-bad indicator'}</span><StatusPill r={r} /></>}
+      footer={footer} actions={actions}
+      summary={
+        <>
+          <div className="flex items-center justify-between gap-2 text-[11px] font-medium">
+            <span className="truncate font-normal text-ink-3">{test ? 'Lab test indicator' : 'Indicator of compromise'} · {kind}</span>
+            <span className="shrink-0 rounded-md bg-well px-1.5 py-0.5 text-ink-2">{r.device_name}</span>
+          </div>
+          <div className="truncate font-semibold leading-snug" title={value}>{kind} <span className="font-mono text-sm">{short}</span></div>
+          <p className="line-clamp-2 text-xs text-ink-2">{did}{ev.InitiatingProcessFileName ? ` (process ${ev.InitiatingProcessFileName})` : ''}.</p>
+          <div className="grid grid-cols-3 gap-2">
+            <StatBox value={ind?.source ?? '–'} label="Listed by" />
+            <StatBox value={ind?.confidence != null ? `${ind.confidence}%` : '–'} label="Confidence" />
+            <StatBox value={hit?.first_hit ? ago(utc(hit.first_hit)) : '–'} label="Seen" />
+          </div>
+          <div className="flex min-w-0 items-center gap-2"><StatusPill r={r} /><PersonLine r={r} short /></div>
+        </>
+      }>
+      <DialogSection title="Why it was raised">
+        <p className="leading-relaxed">
+          {test
+            ? <>This is a <b>harmless lab test indicator</b>, created on purpose to prove that the indicator sweep works end to end. It is not a real threat.</>
+            : <>This {kind.toLowerCase()} is listed as malicious by <b>{ind?.source ?? 'a threat intelligence feed'}</b>
+              {ind?.malware ? <> and linked to <b>{ind.malware}</b></> : null}
+              {ind?.confidence != null ? <> (confidence {ind.confidence}%)</> : null}. A managed device interacting with it indicates possible compromise.</>}
+        </p>
+        {ind?.reference && <p className="mt-2 text-xs text-ink-3">{ind.reference}</p>}
+      </DialogSection>
+      <DialogSection title="What Defender recorded">
+        <p className="mb-2 leading-relaxed text-ink-2">{hit?.resolution?.what_happened || `${did}.`}</p>
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 rounded-lg bg-well px-3 py-2 text-xs">
+          <dt className="text-ink-3">Indicator</dt><dd className="break-all font-mono">{value}</dd>
+          <dt className="text-ink-3">Device</dt><dd>{r.device_name}</dd>
+          {hit?.first_hit && <><dt className="text-ink-3">Time</dt><dd>{dateTime(utc(hit.first_hit))}</dd></>}
+          {hit?.users?.length ? <><dt className="text-ink-3">Signed-in users</dt><dd>{hit.users.join(', ')}</dd></> : null}
+          {Object.entries(ev).filter(([k]) => k in EVENT_LABEL).map(([k, val]) => <Fragment key={k}><dt className="text-ink-3">{EVENT_LABEL[k]}</dt><dd className="break-all">{val}</dd></Fragment>)}
+          <dt className="text-ink-3">Defender alerts</dt><dd>{hit?.alerts?.length ? hit.alerts.join('; ') : 'None raised'}</dd>
+        </dl>
+      </DialogSection>
+      <DialogSection title="How it was found">
+        <p className="leading-relaxed text-ink-2">
+          The Threat Intel Agent collects indicators (file hashes, domains, IP addresses and URLs) from its threat intelligence feeds and searches every
+          managed device for them with Microsoft Defender Advanced Hunting{ind?.search ? <> (<b>{ind.search}</b>)</> : null}, over the last 30 days of device activity.
+          {ind?.first_seen ? <> The feed published this indicator on {dateTime(utc(ind.first_seen))}.</> : null}
+        </p>
+      </DialogSection>
+      <DialogSection title="Response">
+        <p className="leading-relaxed text-ink-2">Approval runs a Microsoft Defender signature update, a scan and removal of any active threat on {r.device_name}, repeating with a full scan until Defender lists none. Nothing runs before approval.</p>
+        {hit?.resolution?.steps?.length ? (
+          <>
+            <div className="mt-3 text-xs font-medium text-ink-3">Further analyst steps in Microsoft Defender</div>
+            <ol className="ml-4 mt-1 list-decimal space-y-1 text-sm text-ink-2">{hit.resolution.steps.map((x, i) => <li key={i}>{x}</li>)}</ol>
+          </>
+        ) : null}
+      </DialogSection>
+      {r.status !== 'proposed' && (r.agent?.length || r.message || r.status === 'running' || r.status === 'queued')
+        ? <DialogSection title="Remediation activity"><AgentMoves r={r} /><ManualAction r={r} /><RecordLink id={r.fix_id} className="mt-2" /></DialogSection> : null}
+    </ExpandableCard>
+  )
 }

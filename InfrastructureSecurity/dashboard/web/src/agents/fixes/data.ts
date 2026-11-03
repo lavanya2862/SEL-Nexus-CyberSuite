@@ -13,7 +13,7 @@ export const fixTime = (s: string | null | undefined) => (s ? s.replace(' ', 'T'
 
 export interface FixRow {
   fix_id: string; device_name: string; opco: string; app: string; software_name: string; version: string
-  action: 'upgrade' | 'remove' | 'replace' | 'setting' | 'respond' | 'none'; winget_id: string; stage: number; findings: number; cves: number
+  action: 'upgrade' | 'remove' | 'replace' | 'remove_file' | 'setting' | 'respond' | 'none'; winget_id: string; stage: number; findings: number; cves: number
   max_epss: number; note: string; status: FixStatus
   method: FixMethod | null; approved_by: string | null; approved_at: string | null; started_at: string | null
   /** Save for later (on the run page's new-fix cards): reviewed, not fixed yet */
@@ -130,7 +130,7 @@ export function statusOf(r: FixRow): { label: string; tone: (typeof STATUS)[FixS
   return STATUS[r.status]
 }
 
-export const ACTION_LABEL: Record<FixRow['action'], string> = { upgrade: 'Update', remove: 'Remove', replace: 'Replace', setting: 'Change setting', respond: 'Scan and clean', none: 'No action' }
+export const ACTION_LABEL: Record<FixRow['action'], string> = { upgrade: 'Update', remove: 'Remove', replace: 'Replace', remove_file: 'Delete file', setting: 'Change setting', respond: 'Scan and clean', none: 'No action' }
 export const isSetting = (r: Pick<FixRow, 'kind' | 'software_name'>) => r.kind === 'setting' || r.software_name.startsWith('setting:')
 /** The app version a fix result reports (settings report plain numbers, so they have none) */
 export const versionOf = (v: { version?: string } | number | null | undefined) => (typeof v === 'object' && v ? v.version : undefined)

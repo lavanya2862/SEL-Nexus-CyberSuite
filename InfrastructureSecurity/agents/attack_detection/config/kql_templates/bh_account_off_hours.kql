@@ -8,7 +8,7 @@ let workEnd = 19;
 DeviceEvents
 | where Timestamp > ago({{LOOKBACK}}d)
 | where ActionType == "UserAccountCreated"
-| extend Hour = hourofday(Timestamp), Day = dayofweek(Timestamp) / 1d
+| extend Hour = hourofday(datetime_utc_to_local(Timestamp, "{{WORK_TZ}}")), Day = dayofweek(datetime_utc_to_local(Timestamp, "{{WORK_TZ}}")) / 1d
 | where Hour < workStart or Hour >= workEnd or Day in (0, 6)
 | project Timestamp, DeviceId, DeviceName, ActionType, AccountName, AccountDomain, Hour, Day,
           InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine

@@ -501,10 +501,10 @@ function VmCard({ u, rank, today, engine, busy, highlight, anchor, onApprove, on
   const late = left != null && left < 0
   const ended = pastEos(a).find((x) => x.version === u.version)
   const ending = !ended ? nearEos(a).find((x) => x.version === u.version) : undefined
-  const what = r?.action === 'remove' ? 'removes the old version' : r?.action === 'replace' ? 'replaces it with the current version' : 'updates it to the latest version'
+  const what = r?.action === 'remove_file' ? 'deletes the vulnerable library file' : r?.action === 'remove' ? 'removes the old version' : r?.action === 'replace' ? 'replaces it with the current version' : 'updates it to the latest version'
   // what the automated remediation does, in the type line: a "Software upgrade" of Python removes this one version
-  const does = r?.action === 'remove' ? 'removes this version' : r?.action === 'replace' ? 'replaces this version' : r && r.action !== 'none' ? 'updates this version' : null
-  const verb = r?.action === 'remove' ? 'removes' : r?.action === 'replace' ? 'replaces' : 'updates'
+  const does = r?.action === 'remove_file' ? 'deletes this file' : r?.action === 'remove' ? 'removes this version' : r?.action === 'replace' ? 'replaces this version' : r && r.action !== 'none' ? 'updates this version' : null
+  const verb = r?.action === 'remove_file' ? 'deletes' : r?.action === 'remove' ? 'removes' : r?.action === 'replace' ? 'replaces' : 'updates'
   const inNews = Math.min(news ?? 0, vulns)
   const clears = !!r && r.action !== 'none' && kindOf !== 'none' && !isDone && vulns > 0
 
@@ -998,7 +998,7 @@ export function BasketBar({ v, scope }: { v: FixView; scope?: string[] }) {
                 <ul className="divide-y divide-hairline">
                   {rs.map((r) => (
                     <li key={r.fix_id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                      <span>{r.action === 'setting' ? 'Change setting:' : r.action === 'respond' ? 'Scan and clean after:' : r.action === 'remove' ? 'Remove' : r.action === 'replace' ? 'Replace' : 'Update'} {r.app} <span className="text-ink-3">{r.version}</span></span>
+                      <span>{r.action === 'setting' ? 'Change setting:' : r.action === 'respond' ? 'Scan and clean after:' : r.action === 'remove_file' ? 'Delete' : r.action === 'remove' ? 'Remove' : r.action === 'replace' ? 'Replace' : 'Update'} {r.app} <span className="text-ink-3">{r.version}</span></span>
                       <button onClick={() => act.mutate({ action: 'unapprove', ids: [r.fix_id] })} className="text-xs font-medium text-ink-2 hover:text-ink">Remove</button>
                     </li>
                   ))}

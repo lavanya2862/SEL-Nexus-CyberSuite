@@ -21,7 +21,8 @@ from threat_intel.fix.state import FixState, event
 from threat_intel.store import Store, utcnow
 
 STAGES = {1: "High priority", 2: "End of support", 3: "Routine update", 4: "No action needed"}
-ACTIONS = {"upgrade", "remove", "replace", "none"}
+ACTIONS = {"upgrade", "remove", "replace", "remove_file", "none"}
+JAR_FILE = re.compile(r"^[A-Za-z0-9._-]{1,50}(\{ver3\})?[A-Za-z0-9._-]{0,20}\.jar$")   # remove_file: one library file name
 PACKAGE_ID = re.compile(r"^[A-Za-z0-9.+_-]{1,80}$")
 PATTERN = re.compile(r"^[A-Za-z0-9 .+_()*{}-]{1,60}$")
 PROCESS = re.compile(r"^[A-Za-z0-9 .+_-]{1,40}$")
@@ -41,7 +42,9 @@ def load_catalog() -> dict[str, dict]:
         for key in ("winget_id", "choco_id"):
             if row.get(key) and not PACKAGE_ID.match(row[key]):
                 raise ValueError(f"fix_catalog.csv: bad {key} for {name}")
-        if row.get("match") and not PATTERN.match(row["match"]):
+        if action == "remove_file" and not JAR_FILE.match(row.get("match", "")):
+            raise ValueError(f"fix_catalog.csv: remove_file needs a .jar file name for {name}")
+        if action != "remove_file" and row.get("match") and not PATTERN.match(row["match"]):
             raise ValueError(f"fix_catalog.csv: bad match pattern for {name}")
         procs = [p for p in row.get("processes", "").split(";") if p]
         if any(not PROCESS.match(p) for p in procs):
@@ -97,6 +100,10 @@ def ver2(version: str) -> str:
     return ".".join((version or "").split(".")[:2])
 
 
+def ver3(version: str) -> str:
+    return ".".join((version or "").split(".")[:3])
+
+
 def build_spec(item: dict, allow_choco: bool = True) -> dict:
     """What the script on the VM gets (base64 JSON). Built from the catalogue row only."""
     action = item["action"]
@@ -107,6 +114,9 @@ def build_spec(item: dict, allow_choco: bool = True) -> dict:
     if action == "setting":
         return {"id": item["fix_id"], "action": "setting", "kind": item["setting_kind"], "target": item["setting_target"],
                 "value": item["setting_value"], "check": [], "remove": [], "procs": [], "allow_choco": False}
+    if action == "remove_file":           # a library file without an installer: the file name, with this version in it
+        return {"id": item["fix_id"], "action": action, "files": [item["match"].replace("{ver3}", ver3(item["version"]))],
+                "check": [], "remove": [], "procs": item.get("processes") or [], "allow_choco": False}
     match = (item.get("match") or "").replace("{ver2}", ver2(item["version"]))
     check = [match] if action != "replace" else [match.split()[0] + "*"]
     return {"id": item["fix_id"], "action": action, "winget": item.get("winget_id") or "",
@@ -116,7 +126,8 @@ def build_spec(item: dict, allow_choco: bool = True) -> dict:
 
 
 def probe_spec(catalog: dict[str, dict]) -> dict:
-    patterns = sorted({(c["match"].replace("{ver2}", "*") if c.get("match") else "") for c in catalog.values()} - {""})
+    patterns = sorted({(c["match"].replace("{ver2}", "*") if c.get("match") else "") for c in catalog.values()
+                       if c["action"] != "remove_file"} - {""})
     return {"id": "probe", "action": "probe", "check": patterns, "procs": [], "remove": []}
 
 

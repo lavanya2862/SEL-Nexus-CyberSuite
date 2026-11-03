@@ -4,11 +4,14 @@
 // technique: T....  // attack: 1-12 (the attack in the plain-language guide)   // needs: domain
 
 Placeholders: {{LOOKBACK}} (days), {{VALUES}} (a comma-separated list of KQL string literals) and {{HOT_CVES}} (the
-Critical/High CVEs with a public exploit that Defender lists on our devices).
+Critical/High CVEs with a public exploit that Defender lists on our devices). {{WORK_TZ}} is the time zone that
+"working hours" means (ATTACK_WORK_TZ, an IANA name; default Asia/Kolkata): Defender's Timestamp is UTC.
 """
 
 from __future__ import annotations
 
+import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,6 +37,9 @@ class Template:
             query = query.replace("{{VALUES}}", kql_list(values or []))
         if "{{HOT_CVES}}" in query:
             query = query.replace("{{HOT_CVES}}", kql_list(hot_cves or []))
+        if "{{WORK_TZ}}" in query:
+            tz = os.environ.get("ATTACK_WORK_TZ", "").strip() or "Asia/Kolkata"
+            query = query.replace("{{WORK_TZ}}", tz if re.fullmatch(r"[A-Za-z_]+(/[A-Za-z_+-]+)*", tz) else "Asia/Kolkata")
         return query
 
 

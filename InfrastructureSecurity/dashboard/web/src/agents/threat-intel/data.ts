@@ -29,6 +29,9 @@ export interface Hit {
   users: string[]; alerts: string[]; timeline: { time: string; what: string; account: string | null }[]
   is_test: boolean; first_hit: string; created_at: string; title: string
   resolution?: Resolution | null
+  /** an indicator hit: the indicator, the feed that lists it, and the Defender event that matched */
+  indicator?: { type: string; value: string; source: string | null; malware: string | null; confidence: number | null; first_seen: string | null
+    reference: string | null; tags: string | null; search: string | null; event: Record<string, string> } | null
 }
 /** How to resolve a sign of attack: written by AI and checked by Threat Intel, or standard steps when the AI was unavailable */
 export interface Resolution { title?: string | null; why_it_matters?: string | null; what_happened: string; steps: string[]; done_when: string; source: 'ai' | 'standard'; model: string | null }
