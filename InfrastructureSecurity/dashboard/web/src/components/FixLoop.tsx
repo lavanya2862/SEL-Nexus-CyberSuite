@@ -8,7 +8,7 @@ import { AGENT_NAME } from '@/lib/runs'
 import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import {
-  ACTION_LABEL, FixDown, METHOD_LABEL, SOURCE_AGENT, STATUS, canApprove, canWithdraw, fixTime, useFix, useFixAction,
+  ACTION_LABEL, FixDown, METHOD_LABEL, SOURCE_AGENT, STATUS, canApprove, statusOf, canWithdraw, fixTime, useFix, useFixAction,
   type FixMethod, type FixRow, type FixSource, type FixStatus, type FixView,
 } from '@/agents/fixes/data'
 
@@ -268,7 +268,7 @@ function StepIcon({ s }: { s: FixStatus }) {
 }
 
 export function StatusPill({ r }: { r: FixRow }) {
-  const s = STATUS[r.status]
+  const s = statusOf(r)
   const color = { muted: 'var(--ink-3)', sky: 'var(--sky)', run: 'var(--sky)', teal: 'var(--teal)', good: statusColor.good, bad: statusColor.critical, warn: '#b37400' }[s.tone]
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium" style={{ color }} title={r.message ?? undefined}>

@@ -16,7 +16,6 @@ import { AgentTags, RowFound, RunBanner, belongs, useAgentFilter } from '@/compo
 import { VulnList } from '@/components/VulnList'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { FixDown, canApprove, isSetting, settingChange, useFix, useFixAction, type FixRow, type FixView } from '@/agents/fixes/data'
-import { FixProgress } from '@/agents/fixes/FixProgress'
 import { ManualAction, PersonLine } from '@/components/ManualAction'
 import { QuickActions } from '@/agents/fixes/QuickActions'
 import { RecordLink } from '@/components/FixRecord'
@@ -44,8 +43,8 @@ const findApp = (apps: VulnFixApp[], focus: string) => {
     ?? apps.find((a) => softwareOf(a).startsWith(f))
 }
 
-type View = 'cards' | 'settings' | 'indicators' | 'attacks' | 'progress' | 'history'
-const VIEWS: [View, string][] = [['cards', 'Updates & upgrades'], ['settings', 'Security configuration'], ['indicators', 'Indicator responses'], ['attacks', 'Attack responses'], ['progress', 'Remediation progress'], ['history', 'Remediation history']]
+type View = 'cards' | 'settings' | 'indicators' | 'attacks' | 'history'
+const VIEWS: [View, string][] = [['cards', 'Updates & upgrades'], ['settings', 'Security configuration'], ['indicators', 'Indicator responses'], ['attacks', 'Attack responses'], ['history', 'Remediation history']]
 
 /** The fix-type chips on Updates & upgrades (?type= picks one, e.g. from the Vulnerabilities overview). */
 const KINDS: [FixKind, string, string][] = [
@@ -69,7 +68,7 @@ export function FixCentre() {
         </div>
       </div>
       <Tabs<View> tabs={VIEWS} value={view} onChange={(t) => navigate(t === 'cards' ? '/fixes' : `/fixes/${t}`)} />
-      {view === 'attacks' ? <AttackResponses /> : view === 'indicators' ? <AttackResponses owner="threat_intel" /> : view === 'history' ? <FixHistory /> : view === 'progress' ? <FixProgress embedded /> : view === 'settings' ? <SettingsCards /> : <FixCards />}
+      {view === 'attacks' ? <AttackResponses /> : view === 'indicators' ? <AttackResponses owner="threat_intel" /> : view === 'history' ? <FixHistory /> : view === 'settings' ? <SettingsCards /> : <FixCards />}
     </div>
   )
 }
@@ -285,7 +284,7 @@ function FixCards() {
         accent={LEVEL[u.a.urgency.level].color} title={`${u.a.app} ${u.version}`.trim()} subtitle={[u.device, u.opco && u.opco !== u.device ? u.opco : null].filter(Boolean).join(' · ')}
         eyebrow={<><span className="font-medium" style={{ color: LEVEL[u.a.urgency.level].color }}>{LEVEL[u.a.urgency.level].label} priority</span><span className="text-ink-3">{KINDS.find(([k]) => k === fixKind(u.a))?.[1]}</span></>}
         summary={<UnitSummary u={unitWithRow} today={today} />}
-        actions={v ? <QuickActions rows={[r]} busy={act.isPending} onApprove={approve} onWithdraw={withdraw} onSave={(ids) => act.mutate({ action: 'save', ids })} onHandOver={handOver} /> : null}>
+        actions={v ? <QuickActions rows={[r]} busy={act.isPending} onApprove={approve} onWithdraw={withdraw} onHandOver={handOver} /> : null}>
         <VmCard u={unitWithRow} rank={i + 1} today={today} engine={!!v} busy={act.isPending} highlight={false} anchor={false}
           onApprove={approve} onWithdraw={withdraw} onList={() => showList(u.a, u.device)} fresh={!!u.r && agentFilter.isNew(u.r)}
           news={newsOn(u) ?? (u.r?.threats?.length ? newsOf(u.a) : 0)} agent={agentFilter.agent}
@@ -460,7 +459,7 @@ function UnitSummary({ u, today }: { u: Unit; today: string }) {
 /** The small card in the Security configuration grid: the setting, three numbers and the state; the full SettingCard opens on click. */
 function SettingSummary({ s, rows }: { s: VulnFixSetting; rows: FixRow[] }) {
   const lv = LEVEL[s.urgency.level]
-  const fixes = rows.filter((r) => r.action === 'setting')
+  const fixes = rows.filter((r) => r.action === 'setting' || r.action === 'none')
   const devices = new Set(rows.map((r) => r.device_name)).size
   const open = fixes.filter((r) => !cleared(r)).length
   const shown = fixes.find((x) => x.status === 'manual_required') ?? fixes.find((x) => x.status !== 'proposed') ?? fixes[0]
@@ -817,7 +816,7 @@ function SettingsCards() {
               subtitle={[s.category, s.subcategory].filter(Boolean).join(' · ')}
               eyebrow={<><span className="font-medium" style={{ color: LEVEL[s.urgency.level].color }}>{LEVEL[s.urgency.level].label} priority</span><span className="text-ink-3">Configuration change · impact {s.impact}/10</span></>}
               summary={<SettingSummary s={s} rows={settingRows(s)} />}
-              actions={v ? <QuickActions rows={settingRows(s).filter((r) => r.action === 'setting' || r.action === 'none')} busy={act.isPending} onApprove={approve} onWithdraw={withdraw} onSave={(ids) => act.mutate({ action: 'save', ids })} onHandOver={(ids) => act.mutate({ action: 'handover', ids })} /> : null}>
+              actions={v ? <QuickActions rows={settingRows(s).filter((r) => r.action === 'setting' || r.action === 'none')} busy={act.isPending} onApprove={approve} onWithdraw={withdraw} onHandOver={(ids) => act.mutate({ action: 'handover', ids })} /> : null}>
               <SettingCard s={s} rows={settingRows(s)} engine={!!v} busy={act.isPending} isNew={agentFilter.isNew}
                 onApprove={approve} onWithdraw={withdraw} />
             </ExpandableCard>
@@ -928,7 +927,7 @@ export function BasketBar({ v, scope }: { v: FixView; scope?: string[] }) {
   const act = useFixAction()
   const [review, setReview] = useState(false)
   const navigate = useNavigate()
-  const watch = () => navigate('/fixes/progress')
+  const watch = () => navigate('/fixes/history')
   const [confirm, setConfirm] = useState(false)
   const [hideDone, setHideDone] = useState('')
   const queued = v.rows.filter((r) => r.status === 'approved')

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, ArrowRight, Bookmark, Bot, CheckCircle2, ListChecks, Newspaper, ShieldAlert, ShieldCheck, Sparkles, Undo2, Wrench, Zap } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Bot, CheckCircle2, ListChecks, Newspaper, ShieldAlert, ShieldCheck, Sparkles, Undo2, Wrench, Zap } from 'lucide-react'
 import { StatusPill } from '@/components/FixLoop'
 import { Panel, SevTag } from '@/components/kit'
 import { VulnList } from '@/components/VulnList'
@@ -135,22 +135,13 @@ export function NewFixes({ fix, uc, since }: { fix: RunFix; uc: AgentKey; since:
               </h2>
               {fix.new > 0 && (
                 <p className="mt-1 max-w-[70ch] text-sm text-ink-3">
-                  Review each item. <b className="text-ink-2">Approve</b> adds it to the remediation queue; no device is changed until you select <b className="text-ink-2">Execute remediation</b> and confirm. <b className="text-ink-2">Defer</b> keeps it in Remediation for later.
+                  Review each item. <b className="text-ink-2">Approve</b> adds it to the remediation queue; no device is changed until you select <b className="text-ink-2">Execute remediation</b> and confirm. Anything not approved stays in Remediation.
                 </p>
               )}
             </div>
           </div>
           {open.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {fresh.length > 0 && (
-                <button
-                  onClick={() => act.mutate({ action: 'save', ids: fresh.map((r) => r.fix_id) })}
-                  disabled={busy}
-                  className="inline-flex items-center gap-2 rounded-xl border border-hairline px-4 py-2.5 text-sm font-medium hover:bg-well disabled:opacity-50"
-                >
-                  <Bookmark className="size-4" /> Defer all {fresh.length}
-                </button>
-              )}
               <button
                 onClick={() => approve(open.map((r) => r.fix_id))}
                 disabled={busy}
@@ -364,9 +355,7 @@ export function FixCardSmall({ r, busy, onFix, onAutoFix, onSave, onUndo, detail
         <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2">
           {r.status === 'proposed' ? (
             <>
-              <button onClick={onSave} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-hairline px-3 py-1.5 text-xs font-medium hover:bg-well disabled:opacity-50">
-                <Bookmark className="size-3.5" /> Defer
-              </button>
+              <span />
               <span className="flex gap-1.5">
                 <button onClick={onFix} disabled={busy} className="btn-blue inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold disabled:opacity-50">
                   <Zap className="size-3.5" /> Approve
@@ -401,7 +390,7 @@ export function FixCardSmall({ r, busy, onFix, onAutoFix, onSave, onUndo, detail
  * result once it has run, and the decision buttons. The evidence, hunt results and full agent log stay on the
  * Attack detection and Remediation pages, one click away.
  */
-function ResponseCard({ r, busy, onFix, onAutoFix, onSave, onUndo }: {
+function ResponseCard({ r, busy, onFix, onAutoFix, onUndo }: {
   r: FixRow; busy: boolean; onFix: () => void; onAutoFix?: () => void; onSave: () => void; onUndo: (action: 'unapprove' | 'unsave') => void
 }) {
   const { theme } = useTheme()
@@ -444,7 +433,7 @@ function ResponseCard({ r, busy, onFix, onAutoFix, onSave, onUndo }: {
         <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2">
           {r.status === 'proposed' ? (
             <>
-              <button onClick={onSave} disabled={busy} className={cn(btn, 'border border-hairline font-medium hover:bg-well')}><Bookmark className="size-3.5" /> Defer</button>
+              <span />
               <span className="flex gap-1.5">
                 <button onClick={onFix} disabled={busy} className={cn(btn, 'btn-blue')}><Zap className="size-3.5" /> Approve</button>
               </span>

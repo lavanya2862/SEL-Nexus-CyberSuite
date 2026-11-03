@@ -147,8 +147,8 @@ def setting_items(store: Store, settings: Settings, catalog: dict[str, dict] | N
                         setting_value=cat["value"], note=cat["note"])
         else:
             # not in config/setting_fix_catalog.csv (add a row there to make it fixable)
-            item.update(action="none", stage=4, note="Needs an IT person: changing it on one computer could lock "
-                                                     "people out, so CyberSuite leaves it alone")
+            item.update(action="none", stage=4, note="No automated remediation: change it centrally through Group Policy or Intune; changing it on one device could lock "
+                                                     "users out")
         items.append(item)
     return items
 
@@ -241,7 +241,7 @@ def compute(store: Store, settings: Settings, catalog: dict[str, dict] | None = 
                         stage=cat["stage"], note=cat.get("note", ""))
         else:
             item.update(app=r["software_name"], action="none", winget_id="", choco_id="", match="", processes=[],
-                        stage=4, note="No remediation defined yet: add a row to config/fix_catalog.csv to enable automated remediation")
+                        stage=4, note="No automated remediation: this software has no vetted package or uninstall rule, so the agent will not run commands for it. Hand it over to IT with the agent's steps")
         items.append(item)
     threats = threats_by_fix(store)
     for item in items:

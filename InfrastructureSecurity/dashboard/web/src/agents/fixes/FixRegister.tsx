@@ -9,29 +9,30 @@ import {
   Card, DTable, DateFilter, Empty, FilterBar, FilterChoice, FilterMenu, FilterSearch, choiceChip, dateChip, inDateRange, menuChips,
   type ActiveFilter, type ChoiceOption, type DateRange,
 } from '@/components/kit'
-import { ACTION_LABEL, STATUS, isSetting, versionOf, type FixRow, type FixStatus } from '@/agents/fixes/data'
+import { ACTION_LABEL, STATUS, agentCouldNotFix, isSetting, versionOf, type FixRow, type FixStatus } from '@/agents/fixes/data'
 import { AGENT_NAME } from '@/lib/runs'
 import { dateTime, num, utc } from '@/lib/format'
 import { statusColor } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
-type ViewKey = 'acted' | 'person' | 'progress' | 'vendor' | 'completed' | 'verified' | 'problems' | 'deferred' | 'proposed' | 'all'
+type ViewKey = 'acted' | 'couldnt' | 'person' | 'progress' | 'vendor' | 'completed' | 'verified' | 'problems' | 'proposed' | 'all'
 const VIEWS: [ViewKey, string, FixStatus[] | null][] = [
   ['acted', 'All acted on', null],
-  ['person', 'Awaiting manual remediation', ['manual_required']],
+  ['couldnt', 'Agent could not remediate', ['manual_required']],
+  ['person', 'With IT for manual fix', ['manual_required']],
   ['progress', 'In progress', ['approved', 'queued', 'running']],
   ['vendor', 'Awaiting vendor', ['awaiting_vendor']],
   ['completed', 'Pending verification', ['done']],
   ['verified', 'Verified', ['verified', 'gone']],
   ['problems', 'Problems', ['failed', 'still_there']],
-  ['deferred', 'Deferred', ['saved']],
-  ['proposed', 'Proposed', ['proposed']],
+  ['proposed', 'Proposed', ['proposed', 'saved']],
   ['all', 'Everything', null],
 ]
 const inView = (k: ViewKey, r: FixRow) => {
   if (r.status === 'info') return false
   if (k === 'all') return true
-  if (k === 'acted') return r.status !== 'proposed'
+  if (k === 'acted') return r.status !== 'proposed' && r.status !== 'saved'
+  if (k === 'couldnt' || k === 'person') return r.status === 'manual_required' && agentCouldNotFix(r) === (k === 'couldnt')
   return (VIEWS.find(([v]) => v === k)?.[2] ?? []).includes(r.status)
 }
 const TONE: Record<string, string> = { muted: 'var(--ink-3)', sky: 'var(--sky)', run: 'var(--sky)', teal: 'var(--teal)', good: statusColor.good, bad: statusColor.critical, warn: '#b37400' }
@@ -66,7 +67,7 @@ export function FixRegister({ rows, opco }: { rows: FixRow[]; opco: string }) {
       && inDateRange(utc(lastActivity(r)), when))
     .sort((a, b) => Number(b.status === 'manual_required') - Number(a.status === 'manual_required') || (lastActivity(b) ?? '').localeCompare(lastActivity(a) ?? ''))
 
-  const statusOptions: ChoiceOption[] = (Object.keys(STATUS) as FixStatus[]).filter((s) => s !== 'info' && base.some((r) => r.status === s))
+  const statusOptions: ChoiceOption[] = (Object.keys(STATUS) as FixStatus[]).filter((s) => s !== 'info' && s !== 'saved' && base.some((r) => r.status === s))
     .map((s) => ({ value: s, label: STATUS[s].label, dot: TONE[STATUS[s].tone], count: base.filter((r) => r.status === s).length }))
   const deviceOptions = [{ value: 'all', label: 'All devices', count: base.length },
     ...[...new Set(base.map((r) => r.device_name))].sort().map((d) => ({ value: d, label: d, count: base.filter((r) => r.device_name === d).length }))]

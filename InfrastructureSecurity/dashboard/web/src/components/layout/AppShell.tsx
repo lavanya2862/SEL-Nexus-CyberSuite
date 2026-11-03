@@ -32,7 +32,7 @@ const TAB_NAMES: Record<string, string> = {
   affects: 'Applicable threats', explorer: 'Explorer', health: 'Health & metrics',
   threat: 'Threat detail', opco: 'By VM', age: 'Age & SLA', trends: 'Trends', devices: 'Devices',
   quality: 'Data quality',
-  threat_intel: 'Threat Intel Agent', vulnerability: 'Vulnerability Agent', alert_triage: 'Alert Triage Agent', attack_detection: 'Attack Detection Agent', progress: 'Remediation progress',
+  threat_intel: 'Threat Intel Agent', vulnerability: 'Vulnerability Agent', alert_triage: 'Alert Triage Agent', attack_detection: 'Attack Detection Agent',
 }
 
 const NAV_KEY = 'portal-nav-collapsed'

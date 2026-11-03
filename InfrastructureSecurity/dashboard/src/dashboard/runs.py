@@ -197,10 +197,10 @@ def advice_summary(info: dict, stopped: str = "") -> str:
     AI was not available (then the cards keep their last AI text and new ones have none)."""
     if stopped:
         return f"AI not available: {_short(stopped)}"
-    asked, reused = info.get("asked"), info.get("reused")
-    if asked is None and reused is None:
-        return "Remediation steps drafted"
-    return f"{int(asked or 0)} drafted · {int(reused or 0)} unchanged"
+
+
+
+    return "Remediation steps drafted"
 
 
 def fix_words(info: dict, uc: str = "vulnerability") -> str:
@@ -774,7 +774,11 @@ class RunState:
             adv = r.get("advice") if isinstance(r.get("advice"), dict) else {}
             if adv:
                 settings = adv.get("settings", 0)
-                add("Remediation cards written", f"{adv.get('apps', 0) + settings:,}",
+                total = int(adv.get("apps", 0) + settings)
+                reused = adv.get("reused")
+                asked = adv.get("asked")
+                changes = int(asked) if asked is not None else (max(0, total - int(reused)) if reused is not None else total)
+                add("Remediation cards written", f"{changes:,}",
                     f"applying them resolves {adv.get('vulnerabilities', 0):,} vulnerabilities"
                     + (f" and {settings:,} misconfiguration{'s' if settings != 1 else ''}" if settings else ""))
             fx = self.fix_result()

@@ -183,6 +183,14 @@ web/src/
    dashboard adapter. A needed change to infra_core, contracts, the Fix Centre or the dashboard shell is its own
    small change, described in the agent's notes below, and agreed before it lands.
 
+## Remediation decisions
+
+Approve appears only where the agent has a vetted move (`fix_catalog.csv`, `setting_fix_catalog.csv`, scan-and-clean).
+Otherwise the card shows No automated fix and Hand over to IT. Handed-over items show With IT for manual fix, and
+items the agent tried and could not remediate show Agent could not remediate. Both close with Mark as fixed manually.
+Remediations cannot be deferred; older deferred rows show as Proposed. The full list and reasons are in
+[MANUAL_REMEDIATION.md](MANUAL_REMEDIATION.md).
+
 ## Sharing data in the team
 
 `data/` and `logs/` are never in git (tenant data). To give teammates the same data, one person exports a snapshot and

@@ -107,18 +107,27 @@ export function autoFix(act: ReturnType<typeof useFixAction>, ids: string[], met
 
 export const STATUS: Record<FixStatus, { label: string; tone: 'muted' | 'sky' | 'run' | 'teal' | 'good' | 'bad' | 'warn' }> = {
   proposed: { label: 'Proposed', tone: 'muted' },
-  saved: { label: 'Deferred', tone: 'muted' },
+  saved: { label: 'Proposed', tone: 'muted' },                          // older "deferred" rows: deferring is gone
   approved: { label: 'Approved', tone: 'sky' },
   queued: { label: 'Queued', tone: 'sky' },
   running: { label: 'Running…', tone: 'run' },
   done: { label: 'Pending verification', tone: 'teal' },
   verified: { label: 'Verified by Defender', tone: 'good' },
   failed: { label: 'Failed', tone: 'bad' },
-  manual_required: { label: 'Awaiting manual remediation', tone: 'bad' },
+  manual_required: { label: 'Manual fix needed', tone: 'bad' },
   awaiting_vendor: { label: 'Awaiting vendor package', tone: 'warn' },
   still_there: { label: 'Still listed by Defender', tone: 'warn' },
   gone: { label: 'Resolved before remediation', tone: 'muted' },
-  info: { label: 'Manual remediation', tone: 'muted' },
+  info: { label: 'No automated fix', tone: 'warn' },
+}
+
+/** The agent ran and none of its allowed moves worked (vs. handed to IT without a run). */
+export const agentCouldNotFix = (r: FixRow) => r.status === 'manual_required' && !!r.started_at
+
+/** The label a person reads: the two kinds of "manual" are told apart. */
+export function statusOf(r: FixRow): { label: string; tone: (typeof STATUS)[FixStatus]['tone'] } {
+  if (r.status === 'manual_required') return agentCouldNotFix(r) ? { label: 'Agent could not remediate', tone: 'bad' } : { label: 'With IT for manual fix', tone: 'warn' }
+  return STATUS[r.status]
 }
 
 export const ACTION_LABEL: Record<FixRow['action'], string> = { upgrade: 'Update', remove: 'Remove', replace: 'Replace', setting: 'Change setting', respond: 'Scan and clean', none: 'No action' }
@@ -142,5 +151,6 @@ export function settingChange(r: Pick<FixRow, 'setting_kind' | 'setting_target' 
   return 'Changes it to what Microsoft recommends'
 }
 export const METHOD_LABEL: Record<FixMethod, string> = { runcommand: 'Azure Run Command', liveresponse: 'Defender Live Response' }
-export const canApprove = (r: FixRow) => ['proposed', 'saved', 'failed', 'still_there', 'gone', 'manual_required', 'info'].includes(r.status)
+/** Only what the agent can run: never a remediation without an automated fix, or one already with a person. */
+export const canApprove = (r: FixRow) => r.action !== 'none' && ['proposed', 'saved', 'failed', 'still_there', 'gone'].includes(r.status)
 export const canWithdraw = (r: FixRow) => ['approved', 'failed', 'awaiting_vendor', 'still_there'].includes(r.status)
