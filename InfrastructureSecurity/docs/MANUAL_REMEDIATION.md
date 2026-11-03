@@ -28,13 +28,14 @@ a gap in the agent: adding a row after review is how a new item becomes automata
 | Status on the card | Meaning | Action on the card |
 | --- | --- | --- |
 | **No automated fix** | No vetted move exists. The agent has prepared the steps. | **Hand over to IT** |
-| **With IT for manual fix** | Handed over. Nobody has run it yet. | None. Open **Details**, follow the steps, select **Mark as fixed manually**. |
+| **Waiting for manual remediation** | Handed over. Nobody has run it yet. | None. Open **Details**, follow the steps, select **Mark as fixed manually**. |
 | **Agent could not remediate** | The agent ran its allowed moves and none of them removed the finding. | None. Open **Details** to see what it tried, the evidence and the steps, then select **Mark as fixed manually**. |
 | **Failed** / **Still listed by Defender** | The run did not finish, or Defender still lists the finding afterwards. | **Retry** |
 
 **Approve** appears only where the agent can run the fix itself. A manually fixed item shows as Pending verification
 until Microsoft Defender's next scan confirms it, and then shows as Verified. The Remediation history has separate
-views for **Agent could not remediate** and **With IT for manual fix**.
+views for **Agent could not remediate** and **Waiting for manual remediation
+**.
 
 ## Software (Updates & upgrades)
 

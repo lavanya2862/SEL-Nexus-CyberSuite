@@ -19,7 +19,7 @@ type ViewKey = 'acted' | 'couldnt' | 'person' | 'progress' | 'vendor' | 'complet
 const VIEWS: [ViewKey, string, FixStatus[] | null][] = [
   ['acted', 'All acted on', null],
   ['couldnt', 'Agent could not remediate', ['manual_required']],
-  ['person', 'With IT for manual fix', ['manual_required']],
+  ['person', 'Waiting for manual remediation', ['manual_required']],
   ['progress', 'In progress', ['approved', 'queued', 'running']],
   ['vendor', 'Awaiting vendor', ['awaiting_vendor']],
   ['completed', 'Pending verification', ['done']],
@@ -70,15 +70,15 @@ export function FixRegister({ rows, opco }: { rows: FixRow[]; opco: string }) {
   const statusOptions: ChoiceOption[] = (Object.keys(STATUS) as FixStatus[]).filter((s) => s !== 'info' && s !== 'saved' && base.some((r) => r.status === s))
     .map((s) => ({ value: s, label: STATUS[s].label, dot: TONE[STATUS[s].tone], count: base.filter((r) => r.status === s).length }))
   const deviceOptions = [{ value: 'all', label: 'All devices', count: base.length },
-    ...[...new Set(base.map((r) => r.device_name))].sort().map((d) => ({ value: d, label: d, count: base.filter((r) => r.device_name === d).length }))]
+  ...[...new Set(base.map((r) => r.device_name))].sort().map((d) => ({ value: d, label: d, count: base.filter((r) => r.device_name === d).length }))]
   const typeOptions = [{ value: 'all', label: 'All types', count: base.length },
-    ...TYPES.filter(([t]) => base.some((r) => typeOf(r) === t)).map(([t, l]) => ({ value: t, label: l, count: base.filter((r) => typeOf(r) === t).length }))]
+  ...TYPES.filter(([t]) => base.some((r) => typeOf(r) === t)).map(([t, l]) => ({ value: t, label: l, count: base.filter((r) => typeOf(r) === t).length }))]
   const agents = [...new Set(base.flatMap((r) => Object.keys(r.found_by ?? {})))]
   const agentOptions = [{ value: 'all', label: 'All agents', count: base.length },
-    ...agents.map((a) => ({ value: a, label: AGENT_NAME[a as keyof typeof AGENT_NAME] ?? a, count: base.filter((r) => a in (r.found_by ?? {})).length }))]
+  ...agents.map((a) => ({ value: a, label: AGENT_NAME[a as keyof typeof AGENT_NAME] ?? a, count: base.filter((r) => a in (r.found_by ?? {})).length }))]
   const people = [...new Set(base.flatMap((r) => [r.approved_by, r.manual?.by]).filter((x): x is string => !!x))].sort()
   const approverOptions = [{ value: 'all', label: 'Anyone', count: base.length },
-    ...people.map((p) => ({ value: p, label: p, count: base.filter((r) => r.approved_by === p || r.manual?.by === p).length }))]
+  ...people.map((p) => ({ value: p, label: p, count: base.filter((r) => r.approved_by === p || r.manual?.by === p).length }))]
   const chips: ActiveFilter[] = [
     ...(q ? [{ key: 'q', label: `“${q}”`, onRemove: () => setQ('') }] : []),
     ...menuChips('st', statusOptions, status, setStatus),
@@ -139,7 +139,7 @@ export function FixRegister({ rows, opco }: { rows: FixRow[]; opco: string }) {
                   <td>
                     <StatusPill r={r} />
                     {r.status === 'gone' && r.message && <div className="mt-0.5 line-clamp-2 max-w-md text-[11px] leading-snug text-ink-3">{r.message}</div>}
-                    
+
                     {r.manual && <div className="text-[11px] text-ink-3">Fixed by hand: {r.manual.by}</div>}
                   </td>
                   <td className="whitespace-nowrap text-xs">{r.approved_by ? <>{r.approved_by}<div className="text-ink-3">{dateTime(utc(r.approved_at))}</div></> : <span className="text-ink-3">–</span>}</td>
