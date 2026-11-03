@@ -64,7 +64,7 @@ export function FixCentre() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Remediation</h1>
-          <p className="mt-1 text-sm text-ink-3">Remediate vulnerabilities and strengthen security through software updates, upgrades, configuration changes, and automated remediation.</p>
+          <p className="mt-1 text-sm text-ink-3">Strengthen security by managing updates and upgrades, security configurations, indicator and attack responses, and tracking remediation progress and history.</p>
         </div>
       </div>
       <Tabs<View> tabs={VIEWS} value={view} onChange={(t) => navigate(t === 'cards' ? '/fixes' : `/fixes/${t}`)} />
@@ -233,7 +233,7 @@ function FixCards() {
   const withdraw = (ids: string[]) => act.mutate({ action: 'unapprove', ids })
   const handOver = (ids: string[]) => act.mutate({ action: 'handover', ids })
   const highlighted = focus ? findApp(X.apps, focus) : undefined
-  const settings = (X.settings ?? []).filter((s) => opco === 'all' || s.opcos.includes(opco)).length
+  // settings count removed as per card description update
   const verified = (v?.rows ?? []).filter((r) => r.status === 'verified')
   // the first card of each app carries its anchor (#fix-<software>) for "Fix this" links
   const anchors = new Set<string>()
@@ -307,7 +307,7 @@ function FixCards() {
             {num(inVm.length)} Remediations · {num(new Set(inVm.map((u) => u.device)).size)} Virtual Machines
           </h2>
           <p className="mt-2">
-            Address all {num(shownVulns)} Defender-identified vulnerabilities through {num(ofKind('update'))} updates, {num(ofKind('upgrade'))} upgrades, and {num(settings)} security settings, including {num(count(1))} high-priority remediations. VM-specific remediation cards with deadlines, backed by Defender data and predefined catalogues.
+            Address all {num(shownVulns)} Defender-identified vulnerabilities through {num(ofKind('update'))} updates and {num(ofKind('upgrade'))} upgrades.
           </p>
           <p className="mt-2 text-xs text-ink-3">
             Last updated {ago(X.built_at)}.
@@ -777,14 +777,8 @@ function SettingsCards() {
         </div>
         <div className="text-sm text-ink-2 text-justify">
           <p>
-            Windows and Defender settings that are weaker than Microsoft recommends. These are <b>configuration findings</b>, tracked separately from software vulnerabilities,
-            and <b>not alerts</b>: no malicious activity has occurred, but each one weakens the security baseline.
+            Identify Windows and Microsoft Defender settings that fall below Microsoft's recommended security baseline.
           </p>
-          <p className="mt-1.5">
-            <b>{num(autoCount)}</b> can be changed with <b>⚡ Remediate</b>. The other <b>{num(inOpco.length - autoCount)}</b> require manual change by IT,
-            usually through Group Policy or Intune, because changing them on a single device could lock users out.
-          </p>
-          <p className="mt-1.5 text-xs text-ink-3">Defender re-assesses settings automatically, usually within a day; the card then shows Verified.</p>
         </div>
       </Panel>
 

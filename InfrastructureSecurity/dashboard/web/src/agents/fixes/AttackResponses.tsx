@@ -116,12 +116,25 @@ export function AttackResponses({ owner = 'attack_detection' }: { owner?: Owner 
         </div>
         <div className="text-sm text-ink-2 text-justify">
           <p>
-            For every {owner === 'threat_intel' ? 'collected indicator (a bad IP, domain, URL or file hash from the news) seen on a managed device' : 'suspicious behaviour'} the <span className="inline-flex items-center gap-1.5 font-medium"><span className={cn('size-2 rounded-full', AGENT_DOT[owner])} />{AGENT_NAME[owner]}</span> finds,
-            it proposes a standard response: <b>update Defender, scan and remove any threats found</b> on the affected device, repeating with a full scan until Defender lists no active threat.{' '}
-            Nothing runs until you approve it: <b>Approve</b> then Execute remediation.
-          </p>
-          <p className="mt-1.5 text-xs text-ink-3">
-            Device isolation is outside this agent's scope; perform it in Microsoft Defender. The evidence on each card comes directly from Defender.
+            {owner === 'threat_intel' ? (
+              <>
+                For each collected threat indicator (malicious IP, domain, URL, or file hash) identified on a managed device, the{' '}
+                <span className="inline-flex items-center gap-1.5 font-medium">
+                  <span className={cn('size-2 rounded-full', AGENT_DOT[owner])} />
+                  {AGENT_NAME[owner]}
+                </span>{' '}
+                recommends a standardized response.
+              </>
+            ) : (
+              <>
+                For each suspicious behaviour identified by the{' '}
+                <span className="inline-flex items-center gap-1.5 font-medium">
+                  <span className={cn('size-2 rounded-full', AGENT_DOT[owner])} />
+                  {AGENT_NAME[owner]}
+                </span>
+                , a standardized response is proposed.
+              </>
+            )}
           </p>
         </div>
       </Panel>
