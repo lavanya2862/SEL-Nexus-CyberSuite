@@ -26,8 +26,10 @@ export interface FixRow {
   /** The Remediation Agent's moves (scans for attack responses; winget / choco / uninstall / apply retries for the rest), why, and the result */
   agent?: { action: 'quick_scan' | 'full_scan' | 'winget' | 'choco' | 'uninstall' | 'apply' | 'stop'; reason: string; result: string; status?: FixStatus }[] | null
   /** When no allowed move remediated it: what the person who takes over needs (the Remediation Agent's, or standard steps) */
-  handover?: { cause: string; steps: string[]; reason?: string; result?: string; summary?: string; by_ai?: boolean; model?: string
-    ai_unavailable?: string; evidence: string[]; at: string } | null
+  handover?: {
+    cause: string; steps: string[]; reason?: string; result?: string; summary?: string; by_ai?: boolean; model?: string
+    ai_unavailable?: string; evidence: string[]; at: string
+  } | null
   /** the Remediation Agent's brief for a remediation it cannot run (action none): or why the AI could not write it */
   brief?: { reason?: string; cause?: string; steps?: string[]; model?: string; unavailable?: string } | null
   /** A person remediated it by hand (then Defender verifies it as usual) */
@@ -53,7 +55,7 @@ export interface FixView {
   worker: { running: boolean; elsewhere: boolean; task: string; step: string; message: string }
 }
 
-export class FixDown extends Error {}
+export class FixDown extends Error { }
 
 async function fetchFix(): Promise<FixView> {
   const res = await fetch('/api/fix')
@@ -102,7 +104,7 @@ export const isIndicatorResponse = (r: FixRow) => r.action === 'respond' && (r.c
 
 export function autoFix(act: ReturnType<typeof useFixAction>, ids: string[], method: FixMethod) {
   if (!ids.length) return
-  act.mutateAsync({ action: 'approve', ids, method }).then(() => act.mutate({ action: 'run', ids })).catch(() => {})   // errors show via act.error
+  act.mutateAsync({ action: 'approve', ids, method }).then(() => act.mutate({ action: 'run', ids })).catch(() => { })   // errors show via act.error
 }
 
 export const STATUS: Record<FixStatus, { label: string; tone: 'muted' | 'sky' | 'run' | 'teal' | 'good' | 'bad' | 'warn' }> = {
@@ -126,7 +128,7 @@ export const agentCouldNotFix = (r: FixRow) => r.status === 'manual_required' &&
 
 /** The label a person reads: the two kinds of "manual" are told apart. */
 export function statusOf(r: FixRow): { label: string; tone: (typeof STATUS)[FixStatus]['tone'] } {
-  if (r.status === 'manual_required') return agentCouldNotFix(r) ? { label: 'Agent could not remediate', tone: 'bad' } : { label: 'With IT for manual fix', tone: 'warn' }
+  if (r.status === 'manual_required') return agentCouldNotFix(r) ? { label: 'Agent could not remediate', tone: 'bad' } : { label: 'Waiting for manual remediation', tone: 'warn' }
   return STATUS[r.status]
 }
 

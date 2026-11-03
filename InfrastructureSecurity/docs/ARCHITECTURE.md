@@ -186,7 +186,7 @@ web/src/
 ## Remediation decisions
 
 Approve appears only where the agent has a vetted move (`fix_catalog.csv`, `setting_fix_catalog.csv`, scan-and-clean).
-Otherwise the card shows No automated fix and Hand over to IT. Handed-over items show With IT for manual fix, and
+Otherwise the card shows No automated fix and Hand over to IT. Handed-over items show Waiting for manual remediation, and
 items the agent tried and could not remediate show Agent could not remediate. Both close with Mark as fixed manually.
 Remediations cannot be deferred; older deferred rows show as Proposed. The full list and reasons are in
 [MANUAL_REMEDIATION.md](MANUAL_REMEDIATION.md).
