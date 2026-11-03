@@ -99,7 +99,7 @@ function useCounts(): Counts {
 export function AppShell() {
   const { pathname } = useLocation()
   const { theme, toggle } = useTheme()
-  const { loginUrl } = useAuth()
+  useAuth()
   const keys = useKeysPrompt()
   const [collapsed, setCollapsed] = useCollapsedNav()
   const counts = useCounts()
@@ -138,18 +138,6 @@ export function AppShell() {
             {counts.live ? 'Scan in progress…' : 'New scan'}
           </NavLink>
           <AttentionBell />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={() => { window.location.href = `${loginUrl || 'http://127.0.0.1:8000'}/?switch=1` }}
-                className="grid size-9 place-items-center rounded-lg text-ink-2 hover:bg-well hover:text-ink"
-                aria-label="Switch workspace"
-              >
-                <Grip className="size-[18px]" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Switch workspace</TooltipContent>
-          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <button onClick={toggle} className="grid size-9 place-items-center rounded-lg text-ink-2 hover:bg-well hover:text-ink" aria-label="Switch between light and dark mode">

@@ -35,7 +35,7 @@ export function FixesNeeded() {
   const ql = q.toLowerCase()
   const rows = items.filter((f) => (!reason || f.reason === reason) && (!repo || f.repo === repo) && (!sev || f.severity === sev)
     && (!ql || `${f.title} ${f.location}`.toLowerCase().includes(ql)))
-  const urgent = items.filter((f) => f.severity === 'critical' || f.severity === 'high').length
+  const urgent = items.filter((f) => f.severity === 'critical').length
   const agentHeld = items.filter((f) => hueOf(f.reason_key) === 'violet').length
   const external = items.filter((f) => hueOf(f.reason_key) === 'orange').length
 
@@ -46,7 +46,7 @@ export function FixesNeeded() {
         <>
           <div className="card-row gap-4 [--card-min:170px]">
             <HeroTile hue="blue" label="Manual remediation required" value={items.length} hint={`in ${repos.length} ${repos.length === 1 ? 'repository' : 'repositories'}`} />
-            <HeroTile hue="red" label="Critical or high" value={urgent} hint={`${items.length ? Math.round((urgent / items.length) * 100) : 0}% of the total · prioritise these`} />
+            <HeroTile hue="red" label="Critical" value={urgent} hint={`${items.length ? Math.round((urgent / items.length) * 100) : 0}% of the total · prioritise these`} />
             <HeroTile hue="violet" label="Automated remediation blocked" value={agentHeld} hint="Resolve the configuration issue and re-run the scan" />
             <HeroTile hue="orange" label="Dependent on upstream packages" value={external} hint="Transitive dependencies or no patched release available" />
           </div>

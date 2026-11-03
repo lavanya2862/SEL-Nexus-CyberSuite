@@ -59,7 +59,7 @@ function useView(findings: Finding[], repos: Repository[], att: Attention | unde
     const shownRepos = repos.filter((r) => all || r.repo === repo)
     const fixed = rows.filter(isFixed)
     const open = rows.filter((f) => !isFixed(f))
-    const urgent = rows.filter((f) => f.severity === 'critical' || f.severity === 'high')
+    const urgent = rows.filter((f) => f.severity === 'critical')
     return {
       repo,
       rows,
@@ -150,19 +150,11 @@ function AgentPill({ id, repo }: { id: AgentId; repo: string }) {
   const st = last ? AGENT_STATUS[last.status] ?? AGENT_STATUS.pending : { label: 'No scans yet', tone: 'idle' as const }
   const p = PILL[st.tone]
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Link to={`/agents/${id}`} className="flex items-center gap-2 rounded-full border border-hairline bg-panel py-1.5 pl-2.5 pr-3.5 text-xs hover:border-hairline-strong">
-          <p.icon className="size-3.5" style={{ color: p.color }} />
-          <span className="font-medium">{AGENTS[id].name.replace(' Agent', '')}</span>
-          <span className="text-ink-3">{st.label}{last ? ` · ${ago(last.when)}` : ''}</span>
-        </Link>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-64">
-        <div>{AGENTS[id].name}: {AGENTS[id].short.toLowerCase()}.</div>
-        {last ? <div className="mt-1 text-ink-3">Last scan: {last.repo}</div> : null}
-      </TooltipContent>
-    </Tooltip>
+    <div className="flex items-center gap-2 rounded-full border border-hairline bg-panel py-1.5 pl-2.5 pr-3.5 text-xs select-none">
+      <p.icon className="size-3.5" style={{ color: p.color }} />
+      <span className="font-medium">{AGENTS[id].name.replace(' Agent', '')}</span>
+      <span className="text-ink-3">{st.label}{last ? ` · ${ago(last.when)}` : ''}</span>
+    </div>
   )
 }
 
@@ -176,7 +168,7 @@ function FiltersButton({ repos, findings, repo, setRepo }: { repos: Repository[]
           {repo !== 'all' ? <span className="tabular grid size-4 place-items-center rounded-full btn-blue text-[10px] text-white">1</span> : null}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-max min-w-[280px] max-w-[90vw]">
+      <DropdownMenuContent align="start" collisionPadding={{ left: 16, right: 16 }} className="w-max min-w-[280px] max-w-[90vw]">
         <DropdownMenuLabel>Repository</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={repo} onValueChange={setRepo}>
           <DropdownMenuRadioItem value="all"><span className="whitespace-nowrap">All repositories</span></DropdownMenuRadioItem>
@@ -211,8 +203,8 @@ function UrgentCard({ v }: { v: View }) {
   return (
     <Link to="/vulnerabilities" className="glass-card card-hero flex flex-col rounded-[20px] p-6">
       <div className="flex items-start justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm">Critical and high findings <InfoTip text="The proportion of findings in the latest scan of each repository rated critical or high severity. These are remediated first. The chip shows the count." /></h3>
-        <Chip>{num(v.urgent.length)} urgent</Chip>
+        <h3 className="flex items-center gap-1.5 text-sm">Critical findings <InfoTip text="The proportion of findings in the latest scan of each repository rated critical severity. These are remediated first." /></h3>
+        <Chip>{num(v.urgent.length)} critical</Chip>
       </div>
       <div className="mt-2 text-[34px] font-normal leading-none tracking-tight tabular">{pct.toFixed(1)}%</div>
       <div className="mt-auto pt-7">
@@ -235,7 +227,7 @@ function FixedCard({ v }: { v: View }) {
   return (
     <Panel className="flex flex-col p-6">
       <div className="flex items-start justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm">Remediated automatically <InfoTip text="Findings remediated by the Remediation Agent on an isolated branch. 'Verified' means the Validation Agent's confirmation scan no longer reports them. Changes reach the codebase once the pull request is approved and merged." /></h3>
+        <h3 className="flex items-center gap-1.5 text-sm">Remediated automatically <InfoTip text="Vulnerabilities resolved automatically by security remediation agents. Confirmed fixes are verified through regression scans and applied to the target codebase upon pull request approval." /></h3>
         <Chip>{num(open)} open</Chip>
       </div>
       <div className="mt-2 flex flex-1 items-end justify-between gap-4">
@@ -434,7 +426,7 @@ function ReposView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
   if (!v.repos.length) return <Empty text="No repositories have been scanned yet."><LinkBtn to="/scan" kind="primary">Start a scan</LinkBtn></Empty>
   const stats = (r: Repository) => {
     const rows = v.rows.filter((f) => f.repo === r.repo)
-    return { total: rows.length, urgent: rows.filter((f) => f.severity === 'critical' || f.severity === 'high').length, fixed: rows.filter(isFixed).length }
+    return { total: rows.length, urgent: rows.filter((f) => f.severity === 'critical').length, fixed: rows.filter(isFixed).length }
   }
   if (layout === 'grid')
     return (
@@ -447,7 +439,7 @@ function ReposView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
               <div className="text-xs text-ink-3">last scan {ago(r.latest.finished_at ?? r.latest.created_at)} · {plural(r.runs, 'scan')}</div>
               <div className="mt-3 grid grid-cols-3 text-sm">
                 <div><div className="tabular font-medium">{num(s.total)}</div><div className="text-xs text-ink-3">findings</div></div>
-                <div><div className="tabular font-medium">{num(s.urgent)}</div><div className="text-xs text-ink-3">critical/high</div></div>
+                <div><div className="tabular font-medium">{num(s.urgent)}</div><div className="text-xs text-ink-3">critical</div></div>
                 <div><div className="tabular font-medium" style={{ color: s.fixed ? statusColor.good : undefined }}>{num(s.fixed)}</div><div className="text-xs text-ink-3">remediated</div></div>
               </div>
             </Link>
@@ -456,7 +448,7 @@ function ReposView({ v, layout }: { v: View; layout: 'list' | 'grid' }) {
       </div>
     )
   return (
-    <DTable head={[['Repository'], ['Findings', 'right'], ['Critical / high', 'right'], ['Remediated', 'right'], ['Validation'], ['Last scan']]} minWidth={760}>
+    <DTable head={[['Repository'], ['Findings', 'right'], ['Critical', 'right'], ['Remediated', 'right'], ['Validation'], ['Last scan']]} minWidth={760}>
       {v.repos.map((r) => {
         const s = stats(r)
         return (
@@ -488,7 +480,7 @@ function RankingPanel({ v }: { v: View }) {
       const k = kindName(f.category)
       const row = m.get(k) ?? { kind: k, n: 0, urgent: 0 }
       row.n++
-      if (f.severity === 'critical' || f.severity === 'high') row.urgent++
+      if (f.severity === 'critical') row.urgent++
       m.set(k, row)
     }
     return [...m.values()].sort((a, b) => b.n - a.n).slice(0, 14)
@@ -511,14 +503,14 @@ function RankingPanel({ v }: { v: View }) {
                   <span className="flex items-center gap-2">
                     <span className="rank-bar h-2.5 rounded-full" style={{ width: `${Math.max(3, (k.n / max) * 78)}%`, background: t.series[i % t.series.length], animationDelay: `${i * 40}ms` }} />
                     <span className="tabular font-medium">{num(k.n)}</span>
-                    {k.urgent > 0 && <AlertTriangle className="size-3" style={{ color: statusColor.critical }} aria-label={`${k.urgent} critical or high`} />}
+                    {k.urgent > 0 && <AlertTriangle className="size-3" style={{ color: statusColor.critical }} aria-label={`${k.urgent} critical`} />}
                   </span>
                 </li>
               ))}
             </ul>
           ) : <div className="mt-5"><Empty text="No findings for the selected filter." /></div>}
           <p className="mt-5 flex items-center gap-1.5 text-xs text-ink-3">
-            <AlertTriangle className="size-3" style={{ color: statusColor.critical }} /> Includes critical or high findings
+            <AlertTriangle className="size-3" style={{ color: statusColor.critical }} /> Includes critical findings
           </p>
         </>
       ) : (
@@ -571,7 +563,7 @@ const LEARN = {
 /** What each agent delivers across the findings on this page (the same numbers for every repository filter). */
 function agentStats(id: AgentId, v: View): [string, string][] {
   const types = (k: string) => v.rows.filter((f) => findingType(f) === k).length
-  if (id === 'analysis') return [[num(v.rows.length), 'Vulnerabilities identified'], [num(v.urgent.length), 'Critical or high'], [num(types('dependency')), 'In dependencies']]
+  if (id === 'analysis') return [[num(v.rows.length), 'Vulnerabilities identified'], [num(v.urgent.length), 'Critical'], [num(types('dependency')), 'In dependencies']]
   if (id === 'remediation') {
     const commits = v.repos.reduce((a, r) => a + (r.latest_completed?.summary?.fixes_applied ?? 0), 0)
     return [[num(v.fixed.length), 'Vulnerabilities remediated'], [num(commits), 'Remediation commits'], [num(v.needed.length), 'Require manual remediation']]

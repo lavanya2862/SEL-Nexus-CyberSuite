@@ -472,7 +472,7 @@ input, textarea { caret-color: var(--sky); }
 .md th { background: var(--well); color: var(--ink-3); font-weight: 500; text-align: left; padding: 8px 12px; white-space: nowrap; }
 .md td { border-top: 1px solid var(--hairline); padding: 8px 12px; vertical-align: top; }
 
-.codebox { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 12.5px; line-height: 1.55; background: var(--field); border: 1px solid var(--hairline); border-radius: 12px; padding: 10px 0; overflow: auto; max-height: 520px; }
+.codebox { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 12.5px; line-height: 1.55; background: var(--field); border: 1px solid var(--hairline); border-radius: 12px; padding: 10px 0; overflow: auto; max-height: 520px; max-width: 100%; box-sizing: border-box; }
 .codebox > span { display: block; padding: 0 14px; white-space: pre; min-width: max-content; }
 .codebox .ln { display: inline-block; width: 3.2em; color: var(--ink-3); user-select: none; }
 .codebox .hl { background: color-mix(in oklab, var(--rose) 18%, transparent); box-shadow: inset 3px 0 0 var(--rose); }
