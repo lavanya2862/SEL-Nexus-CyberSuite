@@ -1,7 +1,8 @@
-// The details of one finding, in a drawer from the right: first the problem (what it is, where, the code, why it ranks
+// The details of one finding, in an extendable drawer from the right: first the problem (what it is, where, the code, why it ranks
 // where it does), then what our agents did about it (the Remediation Agent's fix and diff, the Validation Agent's
 // checks). Opened from any table on any page.
-import { ExternalLink, Sparkles, X } from 'lucide-react'
+import { useState } from 'react'
+import { ExternalLink, Maximize2, Minimize2, Sparkles, X } from 'lucide-react'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { CodeView, Diff, Markdown } from '@/components/Code'
 import { Chip, FixStatusTag, Loading, Notice, RiskScore, SevTag, StatusTag, VerdictTag } from '@/components/kit'
@@ -10,18 +11,59 @@ import { FIX_STATUS, METHOD, detectedBy, findingType } from '@/lib/labels'
 import { usePanels } from '@/lib/panels'
 import type { Check, Finding } from '@/lib/types'
 
+function cleanSummary(s?: string | null) {
+  if (!s) return ''
+  const m = s.match(/^(?:Semgrep Finding:\s*)?([a-zA-Z0-9_.-]+)\s+in\s+(\S+)$/)
+  if (m) {
+    const file = m[2].split('/').pop() ?? m[2]
+    const rule = m[1].split('.').pop()?.replace(/[-_]/g, ' ') || m[1]
+    return `Remediation for ${rule} in ${file}`
+  }
+  return s
+}
+
 export function FindingDrawer() {
   const { finding, closeFinding } = usePanels()
+  const [expanded, setExpanded] = useState(false)
+
   return (
-    <Sheet open={!!finding} onOpenChange={(o) => !o && closeFinding()}>
-      <SheetContent side="right" className="w-full gap-0 overflow-y-auto border-hairline bg-panel p-0 sm:max-w-[min(880px,82vw)]">
-        {finding && <Body jobId={finding.jobId} findingId={finding.findingId} closeFinding={closeFinding} />}
+    <Sheet open={!!finding} onOpenChange={(o) => { if (!o) { closeFinding(); setExpanded(false) } }}>
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        style={{
+          width: expanded ? '95vw' : 'min(900px, 85vw)',
+          maxWidth: expanded ? '95vw' : 'min(900px, 85vw)',
+        }}
+        className="gap-0 overflow-y-auto overflow-x-hidden border-hairline bg-panel p-0 transition-[width,max-width] duration-300 ease-in-out"
+      >
+        {finding && (
+          <Body
+            jobId={finding.jobId}
+            findingId={finding.findingId}
+            closeFinding={closeFinding}
+            expanded={expanded}
+            onToggleExpand={() => setExpanded(!expanded)}
+          />
+        )}
       </SheetContent>
     </Sheet>
   )
 }
 
-function Body({ jobId, findingId, closeFinding }: { jobId: string; findingId: string; closeFinding: () => void }) {
+function Body({
+  jobId,
+  findingId,
+  closeFinding,
+  expanded,
+  onToggleExpand,
+}: {
+  jobId: string
+  findingId: string
+  closeFinding: () => void
+  expanded: boolean
+  onToggleExpand: () => void
+}) {
   const { openChat } = usePanels()
   const job = useJob(jobId)
   const { report, findings } = useJobResults(jobId, true)
@@ -38,9 +80,27 @@ function Body({ jobId, findingId, closeFinding }: { jobId: string; findingId: st
   const fixInfo = FIX_STATUS[f.fix_status]
 
   return (
-    <div className="flex flex-col">
-      <div className="sticky top-0 z-10 border-b border-hairline bg-panel px-6 pb-4 pt-6 pr-14">
-        <button onClick={() => closeFinding()} aria-label="Close" className="absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg text-ink-3 hover:bg-well hover:text-ink transition-colors"><X className="size-4" /></button>
+    <div className="flex flex-col w-full max-w-full min-w-0 overflow-x-hidden">
+      <div className="sticky top-0 z-10 border-b border-hairline bg-panel px-6 pb-4 pt-6 pr-24">
+        <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onToggleExpand}
+            aria-label={expanded ? "Restore drawer width" : "Expand drawer width"}
+            title={expanded ? "Restore standard width" : "Expand drawer to wide view"}
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-ink-3 hover:bg-well hover:text-ink transition-colors"
+          >
+            {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={() => closeFinding()}
+            aria-label="Close"
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-ink-3 hover:bg-well hover:text-ink transition-colors"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <SevTag sev={f.severity} />
           <Chip>Risk <span className="ml-1"><RiskScore score={f.priority_score} /></span></Chip>
@@ -48,8 +108,8 @@ function Body({ jobId, findingId, closeFinding }: { jobId: string; findingId: st
           <FixStatusTag s={f.fix_status} />
           <Chip>{findingType(f)}</Chip>
         </div>
-        <SheetTitle className="mt-3 text-lg leading-snug">{f.title}</SheetTitle>
-        <SheetDescription className="mt-1">{j ? `${j.repo} · detected by ${detectedBy(f)}` : `Detected by ${detectedBy(f)}`}</SheetDescription>
+        <SheetTitle className="mt-3 text-lg leading-snug break-words [overflow-wrap:anywhere]">{f.title}</SheetTitle>
+        <SheetDescription className="mt-1 break-words [overflow-wrap:anywhere]">{j ? `${j.repo} · detected by ${detectedBy(f)}` : `Detected by ${detectedBy(f)}`}</SheetDescription>
         <div className="mt-3 flex flex-wrap gap-2">
           <button onClick={() => openChat({ type: 'finding', jobId, findingId, label: f.title })} className="btn-blue inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium">
             <Sparkles className="size-3.5" /> Ask the Security Assistant
@@ -63,24 +123,24 @@ function Body({ jobId, findingId, closeFinding }: { jobId: string; findingId: st
         </div>
       </div>
 
-      <div className="flex flex-col gap-6 px-6 py-5">
-
-
+      <div className="flex flex-col gap-6 px-6 py-5 w-full max-w-full min-w-0 overflow-x-hidden">
         {f.package_name && (
           <Section title="Vulnerable dependency">
             <dl className="grid grid-cols-[140px_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
               <Row k="Package" v={<span className="font-mono">{f.package_name} <span className="text-ink-3">({f.ecosystem})</span></span>} />
               <Row k="Installed" v={<span className="font-mono">{f.installed_version}</span>} />
               <Row k="Fixed in" v={<span className="font-mono">{f.fixed_version || 'no patched release published'}</span>} />
-              <Row k="Manifest" v={<span className="font-mono">{f.file_path}</span>} />
+              <Row k="Manifest" v={<span className="font-mono break-all">{f.file_path}</span>} />
             </dl>
           </Section>
         )}
 
-        {f.description && <Section title={f.package_name ? 'Impact' : 'Description'}><Markdown text={f.description.slice(0, 4000)} className="text-[13px]" /></Section>}
+        {f.description && <Section title={f.package_name ? 'Impact' : 'Description'}><Markdown text={f.description.slice(0, 4000)} className="text-[13px] break-words [overflow-wrap:anywhere]" /></Section>}
         {f.code_context && (
           <Section title="Affected code">
-            <CodeView code={f.code_context} start={f.context_start_line ?? 1} from={f.line ?? 0} to={f.end_line ?? f.line ?? 0} />
+            <div className="w-full max-w-full min-w-0 overflow-hidden">
+              <CodeView code={f.code_context} start={f.context_start_line ?? 1} from={f.line ?? 0} to={f.end_line ?? f.line ?? 0} />
+            </div>
           </Section>
         )}
         {!!f.priority_reasons?.length && (
@@ -90,20 +150,20 @@ function Body({ jobId, findingId, closeFinding }: { jobId: string; findingId: st
         )}
         <Section title="Remediation status">
           <Notice tone={fixInfo?.tone === 'good' ? 'good' : fixInfo?.tone === 'warn' || fixInfo?.tone === 'bad' ? 'warn' : 'info'} title={fixInfo?.label ?? f.fix_status}>
-            {f.fix_note || fixInfo?.hint || 'Not attempted.'}
+            <div className="break-words [overflow-wrap:anywhere]">{f.fix_note || fixInfo?.hint || 'Not attempted.'}</div>
           </Notice>
           {fix && (
-            <div className="mt-3 rounded-xl border border-hairline p-4">
+            <div className="mt-3 rounded-xl border border-hairline p-4 w-full max-w-full min-w-0 overflow-hidden">
               <div className="break-words text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-3">Remediation {idx + 1} · Remediation Agent</div>
-              <div className="mt-1 text-sm font-semibold">{fix.summary}</div>
+              <div className="mt-1 text-sm font-semibold break-words [overflow-wrap:anywhere]">{cleanSummary(fix.summary)}</div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                 <StatusTag tone="info" label={METHOD[fix.method]?.label ?? fix.method} />
                 <VerdictTag v={fix.validation_status} />
                 <span className="font-mono text-ink-3">{(fix.commit ?? '').slice(0, 10)}</span>
               </div>
-              {fix.explanation && <p className="mt-2 text-sm text-ink-2">{fix.explanation}</p>}
+              {fix.explanation && <p className="mt-2 text-sm text-ink-2 break-words [overflow-wrap:anywhere]">{fix.explanation}</p>}
               {checks.length > 0 && <><div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-3">Verified by the Validation Agent</div><ChecksList checks={checks} /></>}
-              <div className="mt-3"><Diff diff={fix.diff} /></div>
+              <div className="mt-3 w-full max-w-full min-w-0 overflow-hidden"><Diff diff={fix.diff} /></div>
             </div>
           )}
         </Section>
@@ -112,10 +172,10 @@ function Body({ jobId, findingId, closeFinding }: { jobId: string; findingId: st
           <dl className="grid grid-cols-[140px_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
             <Row k="Detected by" v={detectedBy(f)} />
             <Row k="Category" v={f.category.replace(/_/g, ' ')} />
-            {f.rule_id && <Row k="Rule" v={<span className="font-mono">{f.rule_id}</span>} />}
+            {f.rule_id && <Row k="Rule" v={<span className="font-mono break-all">{f.rule_id}</span>} />}
             {!!f.cwe?.length && <Row k="CWE" v={f.cwe.map((c) => <a key={c} className="mr-2 text-sky underline" target="_blank" rel="noopener noreferrer" href={`https://cwe.mitre.org/data/definitions/${encodeURIComponent(c)}.html`}>CWE-{c}</a>)} />}
-            {f.advisory_id && <Row k="Advisory" v={<span className="font-mono">{[f.advisory_id, ...(f.aliases ?? [])].join(', ')}</span>} />}
-            {f.file_path && <Row k="Location" v={<span className="font-mono">{f.file_path}{f.line ? `:${f.line}` : ''}</span>} />}
+            {f.advisory_id && <Row k="Advisory" v={<span className="font-mono break-all">{[f.advisory_id, ...(f.aliases ?? [])].join(', ')}</span>} />}
+            {f.file_path && <Row k="Location" v={<span className="font-mono break-all">{f.file_path}{f.line ? `:${f.line}` : ''}</span>} />}
             {f.confidence && <Row k="Confidence" v={f.confidence} />}
           </dl>
         </Section>
@@ -137,7 +197,7 @@ export function ChecksList({ checks }: { checks: Check[] }) {
       {checks.map((c, i) => (
         <li key={i} className="flex flex-wrap items-start gap-2 text-sm">
           <StatusTag tone={tone[c.status]} label={c.status} />
-          <span className="min-w-0 flex-1"><b className="font-medium">{c.name}</b> <span className="text-ink-3">{c.detail}</span></span>
+          <span className="min-w-0 flex-1 break-words"><b className="font-medium">{c.name}</b> <span className="text-ink-3">{c.detail}</span></span>
         </li>
       ))}
     </ul>
@@ -146,7 +206,7 @@ export function ChecksList({ checks }: { checks: Check[] }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section>
+    <section className="w-full max-w-full min-w-0">
       <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.1em] text-ink-3">{title}</h4>
       {children}
     </section>
@@ -154,7 +214,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function Row({ k, v }: { k: string; v: React.ReactNode }) {
-  return <><dt className="text-ink-3">{k}</dt><dd className="min-w-0 break-words">{v}</dd></>
+  return <><dt className="text-ink-3">{k}</dt><dd className="min-w-0 break-words [overflow-wrap:anywhere]">{v}</dd></>
 }
 
 export type { Finding }

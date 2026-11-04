@@ -8,7 +8,7 @@ export const sevLabel = (s: string) => (s === 'unknown' || s === 'info' ? (s ===
 /** Map a min_severity value to a human-readable scope label shown on the scan detail page. */
 export const SCOPE_LABELS: Record<string, string> = {
   critical: 'Critical only',
-  high: 'Critical and high',
+  high: 'High & above',
   medium: 'Critical, high and medium',
   low: 'All severities (critical to low)',
   info: 'All severities including informational',

@@ -13,6 +13,7 @@ import { ACTION_LABEL, METHOD_LABEL, STATUS, isSetting, versionOf, type FixRow }
 import { AGENT_NAME } from '@/lib/runs'
 import { dateTime, num, utc } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useShownName } from '@/lib/deviceNames'
 
 export interface FixDetail {
   row: FixRow
@@ -75,6 +76,7 @@ const MOVE: Record<string, string> = {
 }
 
 function FixRecord({ id, onClose }: { id: string; onClose: () => void }) {
+  const shownName = useShownName()
   const { data: d, error, isLoading } = useFixDetail(id)
   const r = d?.row
   const res = r?.result
@@ -83,11 +85,12 @@ function FixRecord({ id, onClose }: { id: string; onClose: () => void }) {
   const after = res && !setting ? versionOf(res.after) : undefined
   const available = (res as { available?: string } | null | undefined)?.available
   const found = Object.entries(r?.found_by ?? {}).map(([a, t]) => `${AGENT_NAME[a as keyof typeof AGENT_NAME] ?? a}${t ? ` (${when(t)})` : ''}`)
+  const diffOpco = r?.opco && shownName(r.opco).toLowerCase() !== shownName(r.device_name).toLowerCase() ? r.opco : null
   return (
     <DetailDialog onClose={onClose}
       title={r ? `${ACTION_LABEL[r.action]} ${r.app}${!setting && r.version ? ` ${r.version}` : ''}` : 'Remediation record'}
       eyebrow={r && <><StatusPill r={r} /><span className="text-ink-3">Full record</span></>}
-      subtitle={r ? `${r.device_name}${r.opco ? ` · ${r.opco}` : ''} · ${id}` : id}>
+      subtitle={r ? `${r.device_name}${diffOpco ? ` · ${diffOpco}` : ''} · ${id}` : id}>
       {isLoading ? <Skeleton className="h-64 rounded-xl" /> : error || !d || !r ? (
         <p className="text-sm text-ink-3">{(error as Error)?.message ?? 'This remediation could not be found.'}</p>
       ) : (

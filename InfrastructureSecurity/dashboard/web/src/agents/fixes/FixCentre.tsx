@@ -28,6 +28,7 @@ import { useThreatMatchCounts } from '@/agents/threat-intel/data'
 import { daysBetween, fixKind, nearEos, pastEos, useVulnData, vmDetails, vmKey, type FixKind, type VulnFixApp, type VulnFixSetting, type VmDetail } from '@/agents/vulnerability/data'
 import { GettingReady, useAutoStart } from '@/lib/services'
 import { VulnLoading } from '@/agents/vulnerability/common'
+import { useShownName } from '@/lib/deviceNames'
 
 const LEVEL = {
   1: { label: 'High', color: statusColor.critical },
@@ -83,6 +84,7 @@ function FixCards() {
   const fix = useFix()
   const act = useFixAction()
   const { opco } = useFilters()
+  const shownName = useShownName()
   const [params, setParams] = useSearchParams()
   const matchCounts = useThreatMatchCounts().data
   const inNews = matchCounts?.counts
@@ -281,7 +283,7 @@ function FixCards() {
     const unitWithRow = { ...u, r }
     return (
       <ExpandableCard key={u.key} id={anchors.has(u.key) ? `fix-${softwareOf(u.a)}` : undefined} highlight={highlighted === u.a}
-        accent={LEVEL[u.a.urgency.level].color} title={`${u.a.app} ${u.version}`.trim()} subtitle={[u.device, u.opco && u.opco !== u.device ? u.opco : null].filter(Boolean).join(' · ')}
+        accent={LEVEL[u.a.urgency.level].color} title={`${u.a.app} ${u.version}`.trim()} subtitle={[u.device, u.opco && shownName(u.opco).toLowerCase() !== shownName(u.device).toLowerCase() ? u.opco : null].filter(Boolean).join(' · ')}
         eyebrow={<><span className="font-medium" style={{ color: LEVEL[u.a.urgency.level].color }}>{LEVEL[u.a.urgency.level].label} priority</span><span className="text-ink-3">{KINDS.find(([k]) => k === fixKind(u.a))?.[1]}</span></>}
         summary={<UnitSummary u={unitWithRow} today={today} />}
         actions={v ? <QuickActions rows={[r]} busy={act.isPending} onApprove={approve} onWithdraw={withdraw} onHandOver={handOver} /> : null}>

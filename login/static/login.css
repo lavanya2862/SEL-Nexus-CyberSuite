@@ -96,7 +96,11 @@ body {
 .eyebrow::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 10px var(--teal); }
 .hero h2 { margin: 0; font-size: clamp(46px, 4.4vw, 62px); font-weight: 750; line-height: 1.05; letter-spacing: -0.035em; text-wrap: balance; }
 .hero h2 span {
-  display: block; margin-top: 6px;
+  display: block; margin-top: 14px;
+  font-size: clamp(24px, 2.2vw, 32px);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
   background: linear-gradient(90deg, var(--sky), #a78bfa 70%); -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .hero-lead { margin: 24px 0 0; max-width: 35rem; font-size: 18px; line-height: 1.6; color: var(--ink-2); text-wrap: pretty; }

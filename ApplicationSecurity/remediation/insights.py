@@ -131,7 +131,7 @@ def analysis_view(job: dict, report: dict | None, findings: list[dict]) -> dict:
         sev = r.get("severity_counts") or {}
         outputs = [_kv("Raw scanner results", m.get("raw_results", "–")),
                    _kv("Unique findings", m.get("unique", len(findings))),
-                   _kv("Critical / High", f"{sev.get('critical', 0)} / {sev.get('high', 0)}",
+                   _kv("Critical", sev.get("critical", 0),
                        "bad" if sev.get("critical") else ""),
                    _kv("In remediation scope", m.get("selected", r.get("findings_selected", "–")))]
         if findings:

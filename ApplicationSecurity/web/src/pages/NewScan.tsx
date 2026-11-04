@@ -12,7 +12,7 @@ import { Link } from 'react-router-dom'
 // Which findings the agents remediate: the chosen severity and everything more severe
 const SCOPES = [
   { value: 'critical', label: 'Critical only' },
-  { value: 'high', label: 'Critical and high' },
+  { value: 'high', label: 'High & above' },
   { value: 'medium', label: 'Critical, high and medium' },
   { value: 'low', label: 'All severities (critical to low)' },
   { value: 'info', label: 'All, including informational' },
@@ -66,7 +66,7 @@ export function NewScan() {
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <Panel className="p-6">
           <form onSubmit={submit} autoComplete="off" className="flex flex-col gap-5">
-            <Field label="GitHub repository URL" hint="For example https://github.com/owner/repository. Private repositories require a GitHub token in Settings.">
+            <Field label="GitHub repository URL">
               <input autoFocus required value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="https://github.com/owner/repository" className={cn(inputCls, 'h-12 text-[15px]')} />
             </Field>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -102,21 +102,40 @@ export function NewScan() {
 
         <div className="flex flex-col gap-5">
           <Card title="Assessment Pipeline">
-            <ol className="flex flex-col gap-3">
-              <Step id="analysis" title="Analysis Agent" text={`${sc.codeql?.available ? 'CodeQL' : 'Built-in SAST rules'}, ${sc.trivy?.available ? 'Trivy' : 'OSV'} and supporting scanners; findings are consolidated and prioritised by risk.`} />
-              <Step id="remediation" title="Remediation Agent" text={c?.llm.enabled ? 'Dependency upgrades, rule-based and AI-assisted remediations, one commit per remediation.' : 'Dependency upgrades and rule-based remediations (AI-assisted remediation requires an AI model).'} />
-              <Step id="validation" title="Validation Agent" text="Syntax checks, a security-regression guard and a confirmation scan." />
-              <Step id="reporting" title="Reporting Agent" text="Generates consolidated assessment reports, SARIF exports, remediation code diffs, and validation verdicts." />
+            <ol className="relative flex flex-col">
+              <StepItem
+                icon={<AgentTile id="analysis" size="sm" />}
+                title="Analysis Agent"
+                text={`${sc.codeql?.available ? 'CodeQL' : 'Built-in SAST rules'}, ${sc.trivy?.available ? 'Trivy' : 'OSV'} and supporting scanners; findings are consolidated and prioritised by risk.`}
+              />
+              <StepItem
+                icon={<AgentTile id="remediation" size="sm" />}
+                title="Remediation Agent"
+                text={c?.llm.enabled ? 'Dependency upgrades, rule-based and AI-assisted remediations, one commit per remediation.' : 'Dependency upgrades and rule-based remediations (AI-assisted remediation requires an AI model).'}
+              />
+              <StepItem
+                icon={<AgentTile id="validation" size="sm" />}
+                title="Validation Agent"
+                text="Syntax checks, a security-regression guard and a confirmation scan."
+              />
+              <StepItem
+                icon={<AgentTile id="reporting" size="sm" />}
+                title="Reporting Agent"
+                text="Generates consolidated assessment reports, SARIF exports, remediation code diffs, and validation verdicts."
+              />
               {github && (
-                <li className="flex items-start gap-3">
-                  <span className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-well text-sky"><FlaskConical className="size-4" /></span>
-                  <div className="text-sm"><div className="font-medium">CI test validation</div><div className="text-ink-3">The remediation branch is pushed and GitHub Actions runs the full test suite. The Remediation Agent resolves failures and re-runs them, up to 3 times.</div></div>
-                </li>
+                <StepItem
+                  icon={<span className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-well text-sky"><FlaskConical className="size-4" /></span>}
+                  title="CI test validation"
+                  text="The remediation branch is pushed and GitHub Actions runs the full test suite. The Remediation Agent resolves failures and re-runs them, up to 3 times."
+                />
               )}
-              <li className="flex items-start gap-3">
-                <span className="tile-signal grid size-8 shrink-0 place-items-center rounded-[10px]"><Check className="size-4" /></span>
-                <div className="text-sm"><div className="font-medium">Human approval</div><div className="text-ink-3">{c?.github_token_configured ? 'A pull request is raised for review (as a draft when a validation check fails).' : 'Download the patch, or configure a GitHub token to raise pull requests.'}</div></div>
-              </li>
+              <StepItem
+                isLast
+                icon={<span className="tile-signal grid size-8 shrink-0 place-items-center rounded-[10px]"><Check className="size-4" /></span>}
+                title="Human approval"
+                text={c?.github_token_configured ? 'A pull request is raised for review (as a draft when a validation check fails).' : 'Download the patch, or configure a GitHub token to raise pull requests.'}
+              />
             </ol>
           </Card>
           {c && !sc.codeql?.available && <Notice tone="warn" title="CodeQL is not installed in this environment">Code analysis falls back to Semgrep, Bandit and the built-in SAST rules. Run <code className="font-mono">scripts/install-codeql.ps1</code> to install it.</Notice>}
@@ -128,11 +147,32 @@ export function NewScan() {
   )
 }
 
-function Step({ id, title, text }: { id: 'analysis' | 'remediation' | 'validation' | 'reporting'; title: string; text: string }) {
+function StepItem({
+  icon,
+  title,
+  text,
+  isLast = false,
+}: {
+  icon: ReactNode
+  title: string
+  text: ReactNode
+  isLast?: boolean
+}) {
   return (
-    <li className="flex items-start gap-3">
-      <AgentTile id={id} size="sm" />
-      <div className="text-sm"><div className="font-medium">{title}</div><div className="text-ink-3">{text}</div></div>
+    <li className="relative flex items-start gap-3 pb-4 last:pb-0">
+      {!isLast && (
+        <span
+          className="absolute left-4 top-8 bottom-0 w-px -translate-x-1/2 bg-hairline-strong"
+          aria-hidden="true"
+        />
+      )}
+      <div className="relative z-10 shrink-0">
+        {icon}
+      </div>
+      <div className="text-sm pt-0.5">
+        <div className="font-medium leading-snug">{title}</div>
+        <div className="text-xs text-ink-3 mt-0.5 leading-relaxed">{text}</div>
+      </div>
     </li>
   )
 }
