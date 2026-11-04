@@ -30,6 +30,12 @@ def _facts(item: dict) -> dict:
 
 
 def _key(facts: dict) -> str:
+    """Written once per item: the key is what the item is (app and version, or setting), not its counts or note."""
+    ident = {k: facts.get(k) for k in ("type", "application", "version", "setting")}
+    return "id:" + hashlib.sha256(json.dumps([BRIEF_VERSION, ident], sort_keys=True).encode()).hexdigest()[:16]
+
+
+def _old_key(facts: dict) -> str:   # before briefs were written once: reused so no brief is asked for again
     return hashlib.sha256(json.dumps([BRIEF_VERSION, facts], sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -39,21 +45,23 @@ def attach_briefs(settings: Settings, items: list[dict], client=None) -> dict:
     targets = [i for i in items if i.get("action") == "none"]
     path = settings.fix_dir / "brief_cache.json"
     cache = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
-    need = {}
+    need, moved = {}, False
     for item in targets:
         facts = _facts(item)
         key = _key(facts)
+        if key not in cache and _old_key(facts) in cache:
+            cache[key], moved = cache[_old_key(facts)], True
         if key in cache:
             item["brief"] = cache[key]
         else:
             need.setdefault(key, (facts, []))[1].append(item)
     status = {"ai": "available", "asked": 0, "reused": len(targets) - sum(len(v[1]) for v in need.values())}
-    if not need:
+    if not need and not moved:
         return status
     from threat_intel.ai.gemini_client import AIUnavailable
     from threat_intel.ai.prompts import BRIEF_SYSTEM, brief_prompt
     from threat_intel.ai.schemas import ManualBrief
-    if client is None:
+    if client is None and need:
         try:
             from threat_intel.ai.azure_client import make_client
             client = make_client(settings)

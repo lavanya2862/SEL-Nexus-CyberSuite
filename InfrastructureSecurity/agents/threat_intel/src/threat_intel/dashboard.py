@@ -15,6 +15,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from threat_intel import fix_advice, metrics, resolve
+from threat_intel.metrics import lab_tests_macro, shown_as_test
 from threat_intel.config import Settings
 from threat_intel.report import defang
 from threat_intel.store import Store, utcnow
@@ -27,7 +28,6 @@ KILL_CHAIN = ["reconnaissance", "resource-development", "initial-access", "execu
               "privilege-escalation", "defense-evasion", "credential-access", "discovery", "lateral-movement",
               "collection", "command-and-control", "exfiltration", "impact"]
 RATING_ORDER = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
-
 
 def _j(v):
     return json.loads(v) if isinstance(v, str) else (v or [])
@@ -67,10 +67,10 @@ def _window(store: Store, since, now) -> dict:
     `since` (None = everything). One date decides: when we collected the threat, so every number adds up.
     A threat is never an IOC feed's daily bundle ("ThreatFox: X indicators", kind 'ioc'): those are counted as clues."""
     q = store.query
-    first_ever = store.scalar("SELECT MIN(first_seen_at) FROM threats WHERE NOT is_test") or now
+    first_ever = store.scalar("SELECT MIN(first_seen_at) FROM threats WHERE NOT hidden(is_test)") or now
     start = max(since, first_ever) if since else first_ever     # no empty days before the agent's first run
     cond, args = ("AND t.first_seen_at >= ?", [since]) if since else ("", [])
-    threat = f"NOT t.is_test AND t.kind <> 'ioc' {cond}"
+    threat = f"NOT hidden(t.is_test) AND t.kind <> 'ioc' {cond}"
     # per day by source type, on publication date; anything published before the window goes in one "earlier" bar
     first = start.date()
     days = [(first + timedelta(days=i)).isoformat() for i in range((now.date() - first).days + 1)]
@@ -92,7 +92,7 @@ def _window(store: Store, since, now) -> dict:
     assessed = store.scalar(f"""SELECT COUNT(*) FROM threats t JOIN analysis a USING (threat_id)
                                 WHERE {threat} AND a.ai_status IN ('done', 'skipped')""", args) or 0
     affecting = q(f"""SELECT s.rating FROM threats t JOIN scores s USING (threat_id)
-                      WHERE NOT t.is_test AND t.threat_id IN (SELECT threat_id FROM findings WHERE kind <> 'behaviour_hit') {cond}""", args)
+                      WHERE NOT hidden(t.is_test) AND t.threat_id IN (SELECT threat_id FROM findings WHERE kind <> 'behaviour_hit') {cond}""", args)
     urgent = sum(1 for r in affecting if r["rating"] in ("Critical", "High"))
     fixes_needed = store.scalar(f"""SELECT COUNT(DISTINCT e.recommended_update) FROM exposure e JOIN scores s USING (threat_id)
                                     JOIN threats t USING (threat_id)
@@ -115,7 +115,7 @@ def _window(store: Store, since, now) -> dict:
                for t, v in tactic_counts.items()]
     ioc_types: dict[str, int] = {}
     for r in q(f"""SELECT DISTINCT l.value FROM threat_links l JOIN threats t USING (threat_id)
-                   WHERE l.link_type = 'ioc' AND NOT t.is_test {cond}""", args):
+                   WHERE l.link_type = 'ioc' AND NOT hidden(t.is_test) {cond}""", args):
         kind = r["value"].split("|", 1)[0]
         ioc_types[kind] = ioc_types.get(kind, 0) + 1
     # per source: threats (no clue bundles), clues (distinct values), threats that affect us
@@ -124,7 +124,7 @@ def _window(store: Store, since, now) -> dict:
                COUNT(*) FILTER (WHERE t.threat_id IN (SELECT threat_id FROM findings)) AS affect
         FROM threats t WHERE {threat} GROUP BY 1""", args)}
     for r in q(f"""SELECT t.source, COUNT(DISTINCT l.value) AS clues FROM threat_links l JOIN threats t USING (threat_id)
-                   WHERE l.link_type = 'ioc' AND NOT t.is_test {cond} GROUP BY 1""", args):
+                   WHERE l.link_type = 'ioc' AND NOT hidden(t.is_test) {cond} GROUP BY 1""", args):
         sources.setdefault(r["source"], {"threats": 0, "clues": 0, "affect": 0})["clues"] = r["clues"]
     return {"start": start.isoformat(), "days": days, "series": series, "earlier": earlier, "ratings": ratings,
             "threats_collected": threats_collected, "sources": sources, "funnel": funnel, "tactics": tactics,
@@ -132,6 +132,7 @@ def _window(store: Store, since, now) -> dict:
 
 
 def gather(store: Store, settings: Settings | None = None) -> dict:
+    lab_tests_macro(store)
     now = utcnow()
     q = store.query
     week, month = now - timedelta(days=7), now - timedelta(days=30)
@@ -148,7 +149,7 @@ def gather(store: Store, settings: Settings | None = None) -> dict:
                             t.threat_id IN (SELECT threat_id FROM findings WHERE kind = 'exposure') AS vuln,
                             t.threat_id IN (SELECT threat_id FROM findings WHERE kind = 'ioc_hit') AS ioc
                      FROM threats t JOIN scores s USING (threat_id)
-                     WHERE NOT t.is_test AND t.threat_id IN (SELECT threat_id FROM findings WHERE kind <> 'behaviour_hit')""")
+                     WHERE NOT hidden(t.is_test) AND t.threat_id IN (SELECT threat_id FROM findings WHERE kind <> 'behaviour_hit')""")
     worst = min((r["rating"] for r in affecting), key=lambda r: RATING_ORDER.get(r, 9), default=None)
     urgent = [r for r in affecting if r["rating"] in ("Critical", "High")]
     posture = {"rating": worst or "Clear", "urgent": len(urgent), "affecting": len(affecting),
@@ -179,10 +180,10 @@ def gather(store: Store, settings: Settings | None = None) -> dict:
     # ---- IOC sweep: what the hunts searched for
     ioc_types: dict[str, int] = {}
     for r in q("""SELECT DISTINCT l.value FROM threat_links l JOIN threats t USING (threat_id)
-                  WHERE l.link_type = 'ioc' AND NOT t.is_test AND t.first_seen_at >= ?""", [week]):
+                  WHERE l.link_type = 'ioc' AND NOT hidden(t.is_test) AND t.first_seen_at >= ?""", [week]):
         kind = r["value"].split("|", 1)[0]
         ioc_types[kind] = ioc_types.get(kind, 0) + 1
-    ioc_hits = store.scalar("SELECT COUNT(*) FROM findings WHERE kind = 'ioc_hit' AND NOT is_test") or 0
+    ioc_hits = store.scalar("SELECT COUNT(*) FROM findings WHERE kind = 'ioc_hit' AND NOT hidden(is_test)") or 0
 
     # ---- top risk cards and the threat explorer
     rows = q("""
@@ -198,7 +199,7 @@ def gather(store: Store, settings: Settings | None = None) -> dict:
     # announced (NVD) -> we knew (first time any news named the CVE); the portal adds Defender's dates
     known = {r["cve"]: r["at"] for r in q("""SELECT l.value AS cve, MIN(t.first_seen_at) AS at FROM threat_links l
                                              JOIN threats t USING (threat_id)
-                                             WHERE l.link_type = 'cve' AND NOT t.is_test GROUP BY 1""")}
+                                             WHERE l.link_type = 'cve' AND NOT hidden(t.is_test) GROUP BY 1""")}
     on_us: dict[str, list] = {}
     for e in q("""SELECT e.threat_id, e.device_name, e.match_type, e.detail, c.published_at FROM exposure e
                   LEFT JOIN cves c ON c.cve_id = split_part(e.detail, ' ', 1)
@@ -213,7 +214,7 @@ def gather(store: Store, settings: Settings | None = None) -> dict:
     def match_of(r: dict, mine: list) -> str | None:
         """How the threat reaches us: an Attack Detection behaviour hit, a collected indicator seen on a device,
         confirmed by Defender, not in Defender yet, or closed."""
-        if r["kind"] in ("hunt", "test"):
+        if r["kind"] == "hunt" or (r["kind"] == "test" and not r["hits"]):
             return "behaviour"
         if r["hits"]:
             return "indicator"
@@ -238,7 +239,7 @@ def gather(store: Store, settings: Settings | None = None) -> dict:
         actions = ([r["fix"]] if r["fix"] else []) + _j(r["actions"])
         mine = on_us.get(r["threat_id"], [])
         explorer.append({"id": r["threat_id"], "title": r["title"], "source": r["source"], "kind": r["kind"],
-                         "url": r["url"], "test": r["is_test"], "published": str(r["published_at"] or "")[:10], "first_seen": str(r["first_seen_at"] or "")[:16],
+                         "url": r["url"], "test": shown_as_test(r["is_test"]), "published": str(r["published_at"] or "")[:10], "first_seen": str(r["first_seen_at"] or "")[:16],
                          "rating": r["rating"], "score": r["score"], "why": r["why"],
                          "chips": factor_chips(_j(r["factors"])), "action": actions[0] if actions else "",
                          "summary": (r["summary"] or "")[:420], "devices": r["devices"] or "", "hits": r["hits"],
@@ -266,15 +267,16 @@ def gather(store: Store, settings: Settings | None = None) -> dict:
                               "reference": ioc.get("reference"), "tags": ioc.get("tags"),
                               "search": re.sub(r"^Hunt '([^']*)'.*", r"\1", last.get("what") or "") or None,
                               "event": {k: v for k, v in fields.items() if v}}
+        h["is_test"] = shown_as_test(h["is_test"])
         h["users"] = list(dict.fromkeys(u["account"] for u in _j(h["users"])))[:3]
         h["alerts"] = [a["title"] for a in _j(h["alerts"])][:2]
         h["timeline"] = _j(h["timeline"])[:6]
     devices = q("""
         SELECT d.device_name, d.opco, d.os_platform, d.last_seen,
                COUNT(DISTINCT CASE WHEN f.kind = 'exposure' THEN f.threat_id END) AS exposed,
-               COUNT(DISTINCT CASE WHEN f.kind <> 'exposure' AND NOT f.is_test THEN f.finding_id END) AS hits,
-               COUNT(DISTINCT CASE WHEN f.kind <> 'exposure' AND f.is_test THEN f.finding_id END) AS test_hits,
-               COUNT(DISTINCT CASE WHEN f.kind = 'ioc_hit' AND NOT f.is_test THEN f.finding_id END) AS indicators,
+               COUNT(DISTINCT CASE WHEN f.kind <> 'exposure' AND NOT hidden(f.is_test) THEN f.finding_id END) AS hits,
+               COUNT(DISTINCT CASE WHEN f.kind <> 'exposure' AND hidden(f.is_test) THEN f.finding_id END) AS test_hits,
+               COUNT(DISTINCT CASE WHEN f.kind = 'ioc_hit' AND NOT hidden(f.is_test) THEN f.finding_id END) AS indicators,
                (SELECT COUNT(*) FROM device_vulns v WHERE v.device_id = d.device_id) AS vulns
         FROM devices d LEFT JOIN findings f ON f.device_id = d.device_id GROUP BY ALL ORDER BY exposed DESC""")
     alerts = q("SELECT * FROM alerts ORDER BY created_at DESC LIMIT 12")
@@ -337,7 +339,7 @@ def export_site_data(store: Store, settings: Settings) -> Path:
     threat_fixes = fix_advice.for_threats(store)
     for f in q("SELECT * FROM findings WHERE kind <> 'exposure' ORDER BY first_hit DESC NULLS LAST"):
         findings.setdefault(f["threat_id"], []).append({
-            "kind": f["kind"], "device": f["device_name"], "opco": f["opco"], "detail": f["detail"], "is_test": f["is_test"],
+            "kind": f["kind"], "device": f["device_name"], "opco": f["opco"], "detail": f["detail"], "is_test": shown_as_test(f["is_test"]),
             "first_hit": f["first_hit"], "hunt_id": f["hunt_id"], "users": _j(f["users"]), "alerts": _j(f["alerts"]),
             "timeline": _j(f["timeline"]), "resolution": resolutions.get(f["finding_id"])})
     hunt_ids = {f["hunt_id"] for fl in findings.values() for f in fl if f["hunt_id"]}
@@ -359,7 +361,7 @@ def export_site_data(store: Store, settings: Settings) -> Path:
         ai_tech = {x["id"]: x.get("reason", "") for x in _j(t["ai_techniques"])}
         out[tid] = {
             "id": tid, "title": t["title"], "source": t["source"], "kind": t["kind"], "url": t["url"],
-            "published": t["published_at"], "first_seen": t["first_seen_at"], "is_test": t["is_test"],
+            "published": t["published_at"], "first_seen": t["first_seen_at"], "is_test": shown_as_test(t["is_test"]),
             "text": (t["text"] or "")[:8000], "score": t["score"], "rating": t["rating"], "factors": _j(t["factors"]),
             "why": t["why"], "summary": t["summary"], "threat_type": t["threat_type"], "confidence": t["confidence"],
             "ai_status": t["ai_status"], "ai_model": t["ai_model"], "dropped": _j(t["dropped"]) or {},
@@ -403,7 +405,7 @@ def export_clues(store: Store, settings: Settings) -> Path:
         kind, _, value = key.partition("|")
         out[key] = {"type": kind, "value": defang(value), "malware": r["malware"] or "", "source": r["source"],
                     "first_seen": str(r["first_seen"] or r["first_seen_at"])[:16],
-                    "collected": str(r["first_seen_at"])[:16], "test": r["is_test"],
+                    "collected": str(r["first_seen_at"])[:16], "test": shown_as_test(r["is_test"]),
                     "threat_id": r["threat_id"], "threat": r["title"], "seen_on": sorted(seen.get(key, ()))}
     clues = sorted(out.values(), key=lambda c: c["first_seen"], reverse=True)
     clues.sort(key=lambda c: not c["seen_on"])      # stable: found on our computers first, each part newest first
@@ -421,13 +423,14 @@ def export_threat_matches(store: Store, settings: Settings) -> Path:
       {"built_at", "threats": {id: [title, found, published, score]},
        "cols": [...], "rows": [[device_name, software, version, cve, threat_id], ...]}
     """
+    lab_tests_macro(store)
     rows = store.query("""
         SELECT DISTINCT v.device_name, v.name AS software, v.version, v.cve_id, e.threat_id,
                t.title, t.first_seen_at, t.published_at, COALESCE(s.score, 0) AS score
         FROM device_vulns v
         JOIN exposure e ON e.device_id = v.device_id AND e.match_type = 'cve' AND e.detail LIKE v.cve_id || ' via %'
         JOIN threats t ON t.threat_id = e.threat_id LEFT JOIN scores s ON s.threat_id = e.threat_id
-        WHERE NOT COALESCE(t.is_test, FALSE)
+        WHERE NOT hidden(COALESCE(t.is_test, FALSE))
         ORDER BY v.device_name, v.name, v.cve_id, score DESC""")
     threats = {r["threat_id"]: [(r["title"] or r["threat_id"])[:200], str(r["first_seen_at"] or "")[:10] or None,
                                 str(r["published_at"] or "")[:10] or None, r["score"]] for r in rows}

@@ -7,6 +7,7 @@ everything else is measured.
 from __future__ import annotations
 
 import json
+import os
 import statistics
 from datetime import timedelta
 
@@ -16,17 +17,31 @@ from threat_intel.store import Store, utcnow
 DEFAULT_ASSUMPTIONS = {"manual_minutes_per_threat": 120, "manual_minutes_per_hunt": 45, "manual_minutes_per_report": 240}
 
 
+# The lab test indicators (config/lab_test_iocs.csv) prove the indicator sweep end to end. By default the portal
+# counts their hits like any other; THREAT_INTEL_COUNT_LAB_TESTS=0 hides them again. SQL marks test rows with hidden().
+COUNT_LAB_TESTS = os.getenv("THREAT_INTEL_COUNT_LAB_TESTS", "1").strip() != "0"
+
+
+def shown_as_test(is_test) -> bool:
+    return bool(is_test) and not COUNT_LAB_TESTS
+
+
+def lab_tests_macro(store: Store) -> None:
+    store.execute(f"CREATE OR REPLACE TEMP MACRO hidden(x) AS {'FALSE' if COUNT_LAB_TESTS else 'COALESCE(x, FALSE)'}")
+
+
 def _minutes(delta) -> float | None:
     return round(delta.total_seconds() / 60, 1) if delta is not None else None
 
 
 def compute(store: Store, settings: Settings | None = None, days: int = 30) -> dict:
+    lab_tests_macro(store)
     a = {**DEFAULT_ASSUMPTIONS, **read_policy("metrics_assumptions.csv")}
     since = utcnow() - timedelta(days=days)
     threats = store.query("""
         SELECT t.threat_id, t.first_seen_at, t.is_test, COALESCE(a.first_assessed_at, a.analysed_at) AS analysed_at, a.ai_status
         FROM threats t LEFT JOIN analysis a ON a.threat_id = t.threat_id
-        WHERE t.first_seen_at >= ? AND NOT t.is_test AND t.kind <> 'ioc'""", [since])   # IOC bundles are clues, not threats
+        WHERE t.first_seen_at >= ? AND NOT hidden(t.is_test) AND t.kind <> 'ioc'""", [since])   # IOC bundles are clues, not threats
     assessed = [t for t in threats if t["analysed_at"] and t["ai_status"] in ("done", "skipped")]
     to_assess = [_minutes(t["analysed_at"] - t["first_seen_at"]) for t in assessed if t["analysed_at"] >= t["first_seen_at"]]
     reports = store.query("SELECT created_at FROM reports WHERE created_at >= ? ORDER BY created_at", [since])
@@ -39,7 +54,7 @@ def compute(store: Store, settings: Settings | None = None, days: int = 30) -> d
     last_run = store.scalar("SELECT run_id FROM hunts ORDER BY started_at DESC LIMIT 1")
     per_run = store.scalar("SELECT COUNT(*) FROM hunts WHERE run_id = ? AND status = 'ok'", [last_run]) or 0
     proactive = store.scalar("""SELECT COUNT(DISTINCT f.threat_id) FROM findings f JOIN threats t ON t.threat_id = f.threat_id
-                                WHERE NOT f.is_test""") or 0
+                                WHERE NOT hidden(f.is_test)""") or 0
     ai = store.query("SELECT COALESCE(SUM(calls),0) calls, COALESCE(SUM(failures),0) failures FROM ai_usage")[0]
     dropped = store.scalar("""SELECT COUNT(*) FROM analysis WHERE ai_status = 'done'
                               AND dropped IS NOT NULL AND dropped::VARCHAR NOT IN ('{}', 'null')""") or 0

@@ -64,8 +64,8 @@ def score_threat(t: dict, cves: list[dict], exposure: list[dict], hits: int, exp
     possible = sorted({e["device_name"] for e in exposure if e["match_type"] in ("product", "watchlist")}) or early
     if exact:
         add(p["exposed_points"], f"{len(exact)} of our devices exposed: {', '.join(exact[:5])}")
-    elif early:   # version checked against NVD, but Defender hasn't confirmed it yet: still 'possible'
-        add(p["possible_exposure_points"], f"affected version installed, not in Defender yet: {', '.join(early[:5])}")
+    elif early:   # installed version is inside NVD's affected range: exposed, Defender just hasn't listed it yet
+        add(p["exposed_points"], f"affected version installed, not in Defender yet: {', '.join(early[:5])}")
     elif possible:
         add(p["possible_exposure_points"], f"possibly exposed (product match): {', '.join(possible[:5])}")
 
@@ -73,7 +73,7 @@ def score_threat(t: dict, cves: list[dict], exposure: list[dict], hits: int, exp
     if hits:
         score = max(score, int(p["hunt_hit_score"]))
         factors.append(f"hunt found activity on our devices ({hits} finding(s)) -> Critical")
-    elif not exact:
+    elif not exact and not early:
         cap = p["cap_possible_only"] if possible else p["cap_not_exposed"]
         if score > cap:
             factors.append("capped: not found on our devices, so 'monitor' rather than 'act now'")

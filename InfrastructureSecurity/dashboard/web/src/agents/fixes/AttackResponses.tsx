@@ -293,14 +293,14 @@ function IndicatorCard({ r, hit, focus, footer, actions }: { r: FixRow; hit?: Hi
   const ev = ind?.event ?? {}
   const test = !!hit?.is_test || ind?.tags === 'test'
   return (
-    <ExpandableCard defaultOpen={focus} highlight={focus} accent={test ? 'var(--ink-3)' : statusColor.critical} title={`${kind} ${short} seen on ${r.device_name}`}
+    <ExpandableCard defaultOpen={focus} highlight={focus} accent={statusColor.critical} title={`${kind} ${short} seen on ${r.device_name}`}
       subtitle={`${r.device_name}${hit?.first_hit ? ` · seen ${dateTime(utc(hit.first_hit))}` : ''}`}
-      eyebrow={<><span className="font-medium" style={{ color: test ? undefined : statusColor.critical }}>{test ? 'Lab test indicator' : 'Known-bad indicator'}</span><StatusPill r={r} /></>}
+      eyebrow={<><span className="font-medium" style={{ color: statusColor.critical }}>Known-bad indicator</span><StatusPill r={r} /></>}
       footer={footer} actions={actions}
       summary={
         <>
           <div className="flex items-center justify-between gap-2 text-[11px] font-medium">
-            <span className="truncate font-normal text-ink-3">{test ? 'Lab test indicator' : 'Indicator of compromise'} · {kind}</span>
+            <span className="truncate font-normal text-ink-3">Indicator of compromise · {kind}</span>
             <span className="shrink-0 rounded-md bg-well px-1.5 py-0.5 text-ink-2">{r.device_name}</span>
           </div>
           <div className="truncate font-semibold leading-snug" title={value}>{kind} <span className="font-mono text-sm">{short}</span></div>

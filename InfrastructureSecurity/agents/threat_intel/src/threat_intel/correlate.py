@@ -79,7 +79,8 @@ def _alerts(client: DefenderClient | None, days: int = 30) -> tuple[dict[str, li
 def run(store: Store, client: DefenderClient | None, run_id: str) -> dict:
     now = utcnow()
     devices = {d["device_id"]: d for d in store.query("SELECT * FROM devices")}
-    exposure = store.query("SELECT * FROM exposure WHERE match_type = 'cve'")
+    # 'early': the installed version is in NVD's affected range but Defender has not listed the CVE yet; still ours
+    exposure = store.query("SELECT * FROM exposure WHERE match_type IN ('cve', 'early')")
     users = _users(client, sorted({e["device_id"] for e in exposure}))
     alerts, alert_note = _alerts(client)
 

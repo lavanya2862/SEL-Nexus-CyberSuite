@@ -38,10 +38,12 @@ def relevant_new_cves(store: Store, days: int) -> int:
         if c["cve_id"] in on_devices or not _matches_installed(products, installed):
             continue
         names = ", ".join(sorted({f"{p['vendor']} {p['product']}" for p in products})[:5])
-        text = f"{c['cve_id']} (CVSS {c['cvss']}, {c['severity']}). Affects: {names}.\n{c['description'] or ''}"
+        # the title names the product we run (NVD lists vendors alphabetically, so PHP could read as "PAN-OS")
+        ours = ", ".join(dict.fromkeys(p["product"] for p in products if (norm_name(p["vendor"]), norm_name(p["product"])) in installed))
+        text = f"{c['cve_id']} (CVSS {c['cvss']}, {c['severity']}). Affects: {ours}; also listed for {names}.\n{c['description'] or ''}"
         tid = f"cve:{c['cve_id']}"
         new += store.add_threats([{"threat_id": tid, "source": "NVD", "kind": "cve",
-                                   "title": f"New {c['severity'] or ''} vulnerability {c['cve_id']} in {names or 'installed software'}",
+                                   "title": f"New {c['severity'] or ''} vulnerability {c['cve_id']} in {ours or 'installed software'}",
                                    "text": text, "url": f"https://nvd.nist.gov/vuln/detail/{c['cve_id']}",
                                    "published_at": c["published_at"], "content_hash": content_hash(text)}])
         store.link(tid, "cve", [c["cve_id"]])

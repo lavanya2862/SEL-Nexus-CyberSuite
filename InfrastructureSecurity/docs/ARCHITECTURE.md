@@ -299,6 +299,9 @@ Each chat keeps its agent's section current, under the same four headings: **Tod
 - Its pages show news-based threats only (31 Oct 2026): Applicable threats = vulnerabilities in installed software plus
   collected indicators seen on a device. The Attack Detection Agent's behaviour hits stay in the data for its own pages.
   Remediation has its own Indicator responses tab. Auto-fix (`ATTACK_AUTO_FIX`) is removed: a person approves every fix.
+- 3 Nov 2026: a "not in Defender yet" match (installed version inside NVD's affected range) is a device finding and
+  scores as exposed. The portal counts the planted lab indicators' hits like real ones (`THREAT_INTEL_COUNT_LAB_TESTS=0`
+  hides them; SQL uses the `hidden()` macro from `metrics.py`). Remediation briefs are written once per item.
 - Needs from outside: the "Indicators searched" card is still on the Attack Detection hunting page; it belongs on a
   Threat Intel page.
 - The fix engine still lives here (`fix/`, served by `site.py`). Moving it to `shared/remediation` is a shared change,

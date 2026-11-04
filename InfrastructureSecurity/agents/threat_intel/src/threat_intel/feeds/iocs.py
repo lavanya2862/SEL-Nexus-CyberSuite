@@ -250,7 +250,7 @@ def load_lab_test_iocs(ctx: FeedContext) -> int:
     text = ("LAB TEST ONLY. Harmless indicators we created ourselves to prove that the hunt finds activity "
             "end-to-end. Not a real threat. Indicators: " + ", ".join(f"{r['ioc_type']} {r['value']}" for r in rows))
     new = ctx.store.add_threats([{"threat_id": "test:lab-indicators", "source": "LAB TEST", "kind": "test",
-                                  "title": "TEST: lab test indicators (not a real threat)", "text": text, "url": "",
+                                  "title": "Planted indicators for the indicator sweep check", "text": text, "url": "",
                                   "published_at": utcnow(), "content_hash": content_hash(text), "is_test": True}])
     ctx.store.link("test:lab-indicators", "ioc", [f"{r['ioc_type']}|{r['value']}" for r in rows])
     ctx.store.link("test:lab-indicators", "technique", ["T1059.001", "T1027"])

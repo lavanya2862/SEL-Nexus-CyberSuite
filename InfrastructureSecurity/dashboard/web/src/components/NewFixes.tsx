@@ -33,6 +33,7 @@ function whatItDoes(r: FixRow) {
   if (r.action === 'respond') return 'Scans the device with Defender and removes what it finds'
   if (r.action === 'setting') return settingChange(r)
   if (r.action === 'remove') return 'Removes this version from the device'
+  if (r.action === 'remove_file') return 'Deletes every copy of this vulnerable file from the device'
   if (r.action === 'replace') return 'Replaces it with the current version'
   return 'Updates it to the latest version'
 }
@@ -291,7 +292,7 @@ export function FixCardSmall({ r, busy, onFix, onAutoFix, onSave, onUndo, detail
         <div className="flex items-center justify-between gap-2 text-[11px] font-medium">
           <span className="flex items-center gap-1.5" style={{ color: stage.color }}>
             {r.stage === 1 && !isSetting(r) && !isResponse(r) && <AlertTriangle className="size-3.5" />}{stage.label}
-            {app && <span className="font-normal text-ink-3">· {PRIORITY[app.urgency.level]} priority</span>}
+            {app && `${PRIORITY[app.urgency.level]} priority` !== stage.label && <span className="font-normal text-ink-3">· {PRIORITY[app.urgency.level]} priority</span>}
           </span>
           <span className="truncate rounded-md bg-well px-1.5 py-0.5 text-ink-2">{r.device_name}</span>
         </div>
